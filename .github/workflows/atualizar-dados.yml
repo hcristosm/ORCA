@@ -1,0 +1,48 @@
+name: Atualizar dados do ORCA
+
+on:
+  schedule:
+    # 09:00 UTC (06:00 em São Paulo) todo dia — CPRM/SGB e INMET raramente mudam
+    # mais rápido que isso, e o pacote anual do INMET só é atualizado a cada
+    # poucos dias.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      uf:
+        description: "UF a atualizar"
+        required: false
+        default: "SP"
+      ano:
+        description: "Ano dos dados históricos do INMET"
+        required: false
+        default: "2026"
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install -e .
+
+      - name: Rodar atualização
+        run: >
+          python scripts/atualizar_dados.py
+          --uf "${{ github.event.inputs.uf || 'SP' }}"
+          --ano "${{ github.event.inputs.ano || '2026' }}"
+
+      - name: Publicar dados como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dados-orca-${{ github.event.inputs.uf || 'SP' }}
+          path: |
+            data/*.gpkg
+            data/*.csv
+            data/ultima_atualizacao.txt
+          retention-days: 14

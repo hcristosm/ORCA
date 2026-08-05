@@ -1,0 +1,25 @@
+[project]
+name = "orca"
+version = "0.1.0"
+description = "Dashboard local que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (CEMADEN)"
+requires-python = ">=3.11"
+dependencies = [
+    "geopandas>=1.0",
+    "shapely>=2.0",
+    "requests>=2.31",
+    "typer>=0.12",
+    "streamlit>=1.35",
+    "streamlit-folium>=0.22",
+    "folium>=0.16",
+    "plotly>=5.22",
+    "duckdb>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "responses>=0.25",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
