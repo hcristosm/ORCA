@@ -1,7 +1,7 @@
 [project]
 name = "orca"
 version = "0.1.0"
-description = "Dashboard local que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (CEMADEN)"
+description = "Dashboard local que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (INMET)"
 requires-python = ">=3.11"
 dependencies = [
     "geopandas>=1.0",
@@ -12,7 +12,6 @@ dependencies = [
     "streamlit-folium>=0.22",
     "folium>=0.16",
     "plotly>=5.22",
-    "duckdb>=1.0",
 ]
 
 [project.optional-dependencies]
