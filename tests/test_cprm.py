@@ -9,8 +9,8 @@ from src.ingest.cprm import (
     CPRMFetchError,
     fetch_setores_risco,
     ingerir_uf,
-    salvar_geopackage,
 )
+from src.storage import salvar_setores
 
 
 def _feature(objectid: int, grau_risco: str = "Alto") -> dict:
@@ -127,7 +127,7 @@ def test_ingerir_uf_usa_cache_local_quando_fonte_remota_falha(tmp_path: Path):
         status=200,
     )
     gdf_original = fetch_setores_risco("SP")
-    salvar_geopackage(gdf_original, output)
+    salvar_setores(gdf_original, output)
 
     responses.reset()
     responses.add(responses.GET, FEATURE_LAYER_URL, status=500)

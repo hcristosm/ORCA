@@ -16,13 +16,17 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_folium import st_folium
 
+from src.config import (
+    DATA_DIR,
+    LIMIAR_ATENCAO_MM_PADRAO,
+    UFS_DISPONIVEIS,
+    caminho_chuva,
+    caminho_setores,
+)
 from src.ingest.cprm import ingerir_uf as ingerir_cprm
 from src.ingest.inmet import ingerir_uf as ingerir_inmet
 from src.processing.cruzamento import calcular_cruzamento, sinalizar_atencao
-
-DATA_DIR = _RAIZ_PROJETO / "data"
-
-UFS_DISPONIVEIS = ["SP"]
+from src.storage import chuva_existe, ler_chuva, ler_setores, setores_existem
 
 CORES_GRAU_RISCO = {
     "alto": "#ec835a",       # status "serious"
@@ -36,18 +40,18 @@ st.set_page_config(page_title="ORCA — Risco geológico x chuva", layout="wide"
 
 @st.cache_data(show_spinner=False)
 def _carregar_setores(uf: str) -> gpd.GeoDataFrame:
-    caminho = DATA_DIR / f"risco_{uf.lower()}.gpkg"
-    if not caminho.exists():
+    caminho = caminho_setores(uf, DATA_DIR)
+    if not setores_existem(caminho):
         return ingerir_cprm(uf, caminho)
-    return gpd.read_file(caminho, layer="setores_risco")
+    return ler_setores(caminho)
 
 
 @st.cache_data(show_spinner=False)
 def _carregar_chuva(uf: str, ano: int) -> pd.DataFrame:
-    caminho = DATA_DIR / f"chuva_{uf.lower()}_{ano}.csv"
-    if not caminho.exists():
+    caminho = caminho_chuva(uf, ano, DATA_DIR)
+    if not chuva_existe(caminho):
         return ingerir_inmet(uf, ano, DATA_DIR)
-    return pd.read_csv(caminho, parse_dates=["data_hora"])
+    return ler_chuva(caminho)
 
 
 def _cor_por_grau(grau: str | None) -> str:
@@ -119,15 +123,14 @@ def main() -> None:
 
     if st.sidebar.button("Baixar/atualizar dados agora"):
         with st.spinner("Baixando dados da CPRM/SGB e do INMET..."):
-            caminho_setores = DATA_DIR / f"risco_{uf.lower()}.gpkg"
-            ingerir_cprm(uf, caminho_setores)
+            ingerir_cprm(uf, caminho_setores(uf, DATA_DIR))
             ingerir_inmet(uf, ano, DATA_DIR)
         st.cache_data.clear()
         st.rerun()
 
-    caminho_setores = DATA_DIR / f"risco_{uf.lower()}.gpkg"
-    caminho_chuva = DATA_DIR / f"chuva_{uf.lower()}_{ano}.csv"
-    if not caminho_setores.exists() or not caminho_chuva.exists():
+    if not setores_existem(caminho_setores(uf, DATA_DIR)) or not chuva_existe(
+        caminho_chuva(uf, ano, DATA_DIR)
+    ):
         st.warning(
             "Ainda não há dados locais para essa UF/ano. Clique em "
             "'Baixar/atualizar dados agora' na barra lateral."
@@ -144,7 +147,7 @@ def main() -> None:
     janela = st.sidebar.radio("Janela de chuva acumulada", [24, 72], index=1, format_func=lambda h: f"{h}h")
     limiar_mm = st.sidebar.slider(
         f"Limiar de atenção — chuva acumulada em {janela}h (mm)",
-        min_value=0, max_value=300, value=100, step=5,
+        min_value=0, max_value=300, value=int(LIMIAR_ATENCAO_MM_PADRAO), step=5,
     )
     st.sidebar.caption(
         "100mm/72h é uma referência ilustrativa comum na literatura de risco de "

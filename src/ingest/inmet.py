@@ -33,7 +33,9 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-import typer
+
+from src.config import caminho_chuva, caminho_zip_inmet
+from src.storage import salvar_chuva
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +205,7 @@ def ingerir_uf(
     estações automáticas de uma UF, salvando o resultado em CSV.
     """
     uf_norm = uf.strip().upper()
-    zip_path = diretorio_dados / f"inmet_{ano}.zip"
+    zip_path = caminho_zip_inmet(ano, diretorio_dados)
     baixar_zip_ano(ano, zip_path, timeout=timeout, max_retries=max_retries)
 
     estacoes = fetch_estacoes(uf_norm, max_retries=max_retries)
@@ -226,28 +228,10 @@ def ingerir_uf(
         raise INMETFetchError(f"Nenhuma estação com dados encontrada para UF={uf_norm}")
 
     resultado = pd.concat(partes, ignore_index=True)
-    saida = diretorio_dados / f"chuva_{uf_norm.lower()}_{ano}.csv"
-    resultado.to_csv(saida, index=False)
+    saida = caminho_chuva(uf_norm, ano, diretorio_dados)
+    salvar_chuva(resultado, saida)
     logger.info(
         "Salvas %d leituras horárias de %d estações de %s em %s",
         len(resultado), len(partes), uf_norm, saida,
     )
     return resultado
-
-
-app = typer.Typer(add_completion=False)
-
-
-@app.command()
-def ingest(
-    uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
-    ano: int = typer.Option(..., "--ano", help="Ano dos dados históricos, ex.: 2026"),
-    diretorio: Path = typer.Option(Path("data"), "--diretorio", help="Diretório de dados local"),
-) -> None:
-    """Baixa dados pluviométricos horários do INMET para uma UF/ano."""
-    df = ingerir_uf(uf, ano, diretorio)
-    typer.echo(f"{len(df)} leituras horárias salvas em {diretorio}/chuva_{uf.lower()}_{ano}.csv")
-
-
-if __name__ == "__main__":
-    app()

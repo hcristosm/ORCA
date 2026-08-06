@@ -97,8 +97,12 @@ ORCA/
 ├── docs/
 │   └── screenshots/            # imagens usadas neste README
 ├── scripts/
-│   └── atualizar_dados.py      # roda a ingestão completa de uma vez (cron/CI)
+│   └── atualizar_dados.py      # atalho fino para `python -m src.cli atualizar` (cron/CI)
 ├── src/
+│   ├── cli.py                  # CLI unificada (ingest-cprm, ingest-inmet, atualizar)
+│   ├── config.py                # constantes e convenções de caminho compartilhadas
+│   ├── storage/
+│   │   └── __init__.py         # leitura/gravação de GeoPackage (setores) e CSV (chuva)
 │   ├── ingest/
 │   │   ├── cprm.py             # cliente ArcGIS REST da CPRM/SGB
 │   │   └── inmet.py            # cliente do pacote histórico do INMET
@@ -111,9 +115,10 @@ ORCA/
     └── atualizar-dados.yml     # atualização diária + publicação como artefato
 ```
 
-A camada `src/storage/` do plano original (SQLite/DuckDB) acabou não sendo
-necessária: GeoPackage (setores) e CSV (chuva) já são suficientes para o
-volume de dados de um estado, e mantêm o projeto sem dependência de banco.
+A camada `src/storage/` do plano original chegou a ficar de fora (SQLite/DuckDB
+pareciam desnecessários para o volume de dados de um estado); hoje ela existe como
+uma camada fina sobre GeoPackage (setores) e CSV (chuva), usada por `ingest` e pelo
+dashboard, sem introduzir dependência de banco.
 
 ## Instalação
 
@@ -132,7 +137,7 @@ pip install -e ".[dev]"
 ### 1. Baixar os setores de risco (CPRM/SGB)
 
 ```bash
-python -m src.ingest.cprm --uf SP
+python -m src.cli ingest-cprm --uf SP
 # -> data/risco_sp.gpkg
 ```
 
@@ -142,7 +147,7 @@ SP mas generaliza sem mudar código.
 ### 2. Baixar a chuva (INMET)
 
 ```bash
-python -m src.ingest.inmet --uf SP --ano 2026
+python -m src.cli ingest-inmet --uf SP --ano 2026
 # -> data/chuva_sp_2026.csv
 ```
 

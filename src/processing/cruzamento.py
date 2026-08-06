@@ -13,8 +13,10 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
 
+from src.config import JANELAS_CHUVA as JANELAS_PADRAO
+from src.config import LIMIAR_ATENCAO_MM_PADRAO
+
 CRS_METRICO = "EPSG:5880"  # SIRGAS 2000 / Brasil Polícônica — boa para distâncias em todo o país
-JANELAS_PADRAO = (24, 72)
 
 
 def _estacoes_para_pontos(chuva_df: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -95,7 +97,7 @@ def calcular_cruzamento(
 
 def sinalizar_atencao(
     setores_cruzados: gpd.GeoDataFrame,
-    limiar_mm: float = 100.0,
+    limiar_mm: float = LIMIAR_ATENCAO_MM_PADRAO,
     coluna_chuva: str = "chuva_72h",
 ) -> gpd.GeoDataFrame:
     """Marca setores cuja chuva acumulada na coluna dada ultrapassa o limiar.
