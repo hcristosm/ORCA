@@ -16,7 +16,9 @@ from pathlib import Path
 
 import geopandas as gpd
 import requests
-import typer
+
+from src.config import validar_uf as _validar_uf
+from src.storage import ler_setores, salvar_setores
 
 logger = logging.getLogger(__name__)
 
@@ -25,24 +27,11 @@ FEATURE_LAYER_URL = (
     "gestaoterritorial/risco/FeatureServer/0/query"
 )
 
-UFS_VALIDAS = {
-    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
-    "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
-    "SP", "SE", "TO",
-}
-
 PAGE_SIZE = 2000
 
 
 class CPRMFetchError(RuntimeError):
     """Erro ao buscar dados da camada de risco da CPRM/SGB."""
-
-
-def _validar_uf(uf: str) -> str:
-    uf_norm = uf.strip().upper()
-    if uf_norm not in UFS_VALIDAS:
-        raise ValueError(f"UF inválida: {uf!r}. Use uma sigla de 2 letras, ex.: SP.")
-    return uf_norm
 
 
 def _query_pagina(
@@ -121,11 +110,6 @@ def fetch_setores_risco(
     return gdf
 
 
-def salvar_geopackage(gdf: gpd.GeoDataFrame, caminho: Path, camada: str = "setores_risco") -> None:
-    caminho.parent.mkdir(parents=True, exist_ok=True)
-    gdf.to_file(caminho, layer=camada, driver="GPKG")
-
-
 def ingerir_uf(
     uf: str,
     output: Path,
@@ -142,7 +126,7 @@ def ingerir_uf(
         gdf = fetch_setores_risco(
             uf, timeout=timeout, max_retries=max_retries, backoff_factor=backoff_factor
         )
-        salvar_geopackage(gdf, output)
+        salvar_setores(gdf, output)
         logger.info("Salvos %d setores de risco de %s em %s", len(gdf), uf, output)
         return gdf
     except CPRMFetchError:
@@ -150,27 +134,5 @@ def ingerir_uf(
             logger.warning(
                 "Fonte remota da CPRM/SGB indisponível; usando cache local em %s", output
             )
-            return gpd.read_file(output, layer="setores_risco")
+            return ler_setores(output)
         raise
-
-
-app = typer.Typer(add_completion=False)
-
-
-@app.command()
-def ingest(
-    uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
-    output: Path = typer.Option(
-        None, "--output", help="Caminho do GeoPackage de saída (padrão: data/risco_<uf>.gpkg)"
-    ),
-    timeout: float = typer.Option(30.0, help="Timeout por requisição, em segundos"),
-    max_retries: int = typer.Option(3, help="Número máximo de tentativas por página"),
-) -> None:
-    """Baixa os setores de risco geológico da CPRM/SGB para uma UF."""
-    out = output or Path("data") / f"risco_{uf.lower()}.gpkg"
-    gdf = ingerir_uf(uf, out, timeout=timeout, max_retries=max_retries)
-    typer.echo(f"{len(gdf)} setores de risco salvos em {out}")
-
-
-if __name__ == "__main__":
-    app()
