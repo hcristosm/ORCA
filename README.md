@@ -46,6 +46,7 @@ aparecem lado a lado.
   - [4. Atualização automática](#4-atualização-automática)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Testes e CI](#testes-e-ci)
+- [Investigação: fontes de chuva em tempo real](#investigação-fontes-de-chuva-em-tempo-real)
 - [Roadmap](#roadmap)
 - [Licença](#licença)
 
@@ -239,8 +240,45 @@ Toda chamada de rede é mockada, então a suíte roda sem internet.
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda essa suíte a cada push e
 a cada pull request, separado do cron diário de atualização de dados.
 
+## Investigação: fontes de chuva em tempo real
+
+A defasagem do pacote histórico do INMET (dias, não minutos) limita a
+utilidade do ORCA num evento de chuva em andamento. Em 07/08/2026 investiguei,
+com requisições reais, se havia alguma fonte pública de chuva atualizada
+continuamente para substituir ou complementar o INMET.
+
+**ANA (Agência Nacional de Águas), rede telemétrica.** O web service
+`https://telemetriaws1.ana.gov.br/ServiceANA.asmx` é público, sem captcha e
+sem autenticação. `ListaEstacoesTelemetricas` retorna 5.194 estações em todo
+o país (bem mais que as 40 do INMET só em SP), e
+`DadosHidrometeorologicos?codEstacao=...&dataInicio=...&dataFim=...` devolve
+chuva, nível de rio e vazão em intervalos de 15 minutos. Testado ao vivo: a
+estação 58040000 (São Luís do Paraitinga/SP) tinha leitura de poucos minutos
+atrás no momento do teste, contra dias de defasagem do INMET.
+
+A ressalva é que a cobertura real é bem menor que a lista sugere. Nem toda
+estação listada como "Ativo" transmite dado recente por esse endpoint: de uma
+amostra de 25 outras estações de SP (origem RHN, status Ativo), nenhuma tinha
+leitura nos últimos dois dias. A rede parece combinar estações com telemetria
+de verdade e estações que só reportam manualmente ou em ciclos mais longos, e
+não há como distinguir as duas coisas pela lista de estações sozinha. Um
+levantamento (varrer os códigos de SP e medir quantos têm dado vivo, e qual a
+distância média resultante até os setores de risco) é pré-requisito antes de
+integrar essa fonte.
+
+**CEMADEN.** O endpoint de dados recentes das PCDs
+(`sws.cemaden.gov.br/PED/rest/pcds/dados_recentes`), mapeado numa investigação
+anterior deste projeto, agora retorna 404. Não encontrei substituto
+equivalente sem engenharia reversa mais profunda do mapa interativo deles.
+
+Essa investigação está registrada aqui para não se perder; a integração em si
+ainda não foi feita (ver [Roadmap](#roadmap)).
+
 ## Roadmap
 
+- Levantar quais estações da rede telemétrica da ANA têm dado vivo de chuva
+  em SP e, se a cobertura compensar, integrar como fonte complementar ao
+  INMET (ver [Investigação: fontes de chuva em tempo real](#investigação-fontes-de-chuva-em-tempo-real)).
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
   reescrever o pipeline de ingestão.
 - Cobrir mais UFs além de SP.
