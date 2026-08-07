@@ -54,6 +54,37 @@ def _carregar_chuva(uf: str, ano: int) -> pd.DataFrame:
     return ler_chuva(caminho)
 
 
+def _mtimes_dados(uf: str, ano: int) -> tuple[float, float]:
+    """Timestamps de modificação dos arquivos locais de setores e chuva (0.0 se ausentes).
+
+    Usado para detectar que outro processo (cron diário, `orca atualizar` manual)
+    atualizou os dados em disco enquanto o dashboard está aberto.
+    """
+    caminho_s = caminho_setores(uf, DATA_DIR)
+    caminho_c = caminho_chuva(uf, ano, DATA_DIR)
+    mtime_s = caminho_s.stat().st_mtime if caminho_s.exists() else 0.0
+    mtime_c = caminho_c.stat().st_mtime if caminho_c.exists() else 0.0
+    return mtime_s, mtime_c
+
+
+def _info_ultima_atualizacao() -> str | None:
+    marcador = DATA_DIR / "ultima_atualizacao.txt"
+    if not marcador.exists():
+        return None
+    return marcador.read_text().strip()
+
+
+def _verificar_dados_atualizados(uf: str, ano: int) -> None:
+    """Corpo do fragmento de verificação automática: recarrega a página se os
+    arquivos locais mudaram desde a última checagem nesta sessão."""
+    atual = _mtimes_dados(uf, ano)
+    anterior = st.session_state.get("_mtimes_dados")
+    st.session_state["_mtimes_dados"] = atual
+    if anterior is not None and anterior != atual:
+        st.cache_data.clear()
+        st.rerun()
+
+
 def _cor_por_grau(grau: str | None) -> str:
     if grau is None:
         return COR_PADRAO
@@ -127,6 +158,23 @@ def main() -> None:
             ingerir_inmet(uf, ano, DATA_DIR)
         st.cache_data.clear()
         st.rerun()
+
+    info_atualizacao = _info_ultima_atualizacao()
+    if info_atualizacao:
+        st.sidebar.caption(f"Última atualização automática (cron):\n\n```\n{info_atualizacao}\n```")
+
+    auto_atualizar = st.sidebar.checkbox(
+        "Verificar novos dados automaticamente",
+        value=False,
+        help=(
+            "Não baixa dados novos das fontes — apenas detecta, em segundo plano, "
+            "se outro processo (o cron diário ou um `orca atualizar` manual) "
+            "já atualizou os arquivos em data/ e recarrega a página."
+        ),
+    )
+    if auto_atualizar:
+        intervalo_min = st.sidebar.slider("Verificar a cada (min)", 1, 30, 5)
+        st.fragment(run_every=intervalo_min * 60)(_verificar_dados_atualizados)(uf, ano)
 
     if not setores_existem(caminho_setores(uf, DATA_DIR)) or not chuva_existe(
         caminho_chuva(uf, ano, DATA_DIR)
