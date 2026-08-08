@@ -274,11 +274,31 @@ equivalente sem engenharia reversa mais profunda do mapa interativo deles.
 Essa investigação está registrada aqui para não se perder; a integração em si
 ainda não foi feita (ver [Roadmap](#roadmap)).
 
+**Atualização (08/08/2026): levantamento de cobertura da ANA em SP.** Rodei
+[`scripts/investigar_ana.py`](scripts/investigar_ana.py), que varre todas as
+estações telemétricas da ANA cadastradas em SP e testa, uma a uma, se cada
+uma tem leitura de chuva nas últimas 48h (com retry/backoff — o serviço
+devolve HTTP 429 com facilidade sob concorrência, e a primeira tentativa sem
+isso gerou um falso "quase nada tem dado vivo"). Resultado real: das **437
+estações listadas para SP, 271 (62%) têm dado vivo**, com distância mediana
+de **18,6km** até o setor de risco mais próximo (média 27,5km, puxada por
+alguns outliers a até 190km). Isso é uma cobertura bem mais densa que as 40
+estações do INMET em SP (26km de distância média). A ressalva: as estações
+com dado vivo são majoritariamente hidrelétricas/fluviométricas (nomes como
+"UHE ... BARRAMENTO/JUSANTE"), não uma rede de pluviômetros dedicada — o
+campo `Chuva` existe e responde, mas vale checar se a série é
+consistente/confiável antes de integrar como fonte de verdade. Com isso, o
+pré-requisito do roadmap está atendido e a integração como fonte
+complementar ao INMET vale a pena tentar.
+
 ## Roadmap
 
-- Levantar quais estações da rede telemétrica da ANA têm dado vivo de chuva
-  em SP e, se a cobertura compensar, integrar como fonte complementar ao
-  INMET (ver [Investigação: fontes de chuva em tempo real](#investigação-fontes-de-chuva-em-tempo-real)).
+- ~~Levantar quais estações da rede telemétrica da ANA têm dado vivo de chuva
+  em SP~~ — feito em 08/08/2026: 62% de cobertura, distância mediana de
+  18,6km até o setor de risco mais próximo (ver
+  [Investigação: fontes de chuva em tempo real](#investigação-fontes-de-chuva-em-tempo-real)).
+  Próximo passo: implementar `src/ingest/ana.py` e integrar como fonte
+  complementar ao INMET no cruzamento (`src/processing/cruzamento.py`).
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
   reescrever o pipeline de ingestão.
 - Cobrir mais UFs além de SP.
