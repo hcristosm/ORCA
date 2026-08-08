@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORCA — open source risk and catastrophe aggregator</title>
+<link rel="stylesheet" href="_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/colors.css">
+<link rel="stylesheet" href="_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/typography.css">
+<link rel="stylesheet" href="_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/shape.css">
+<link rel="stylesheet" href="_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/styles.css">
+<script src="_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/_ds_bundle.js"></script>
+<style>
+  body { margin:0; background:var(--surface-page); color:var(--text-body); font-family:var(--font-ui); -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  a { color:var(--ink-2); text-decoration:none; }
+  a:hover { color:var(--accent); }
+  [data-reveal]{ opacity:0; transform:translateY(14px); transition:opacity 420ms ease, transform 420ms ease; }
+  [data-reveal].in{ opacity:1; transform:none; }
+  @media (prefers-reduced-motion:reduce){ [data-reveal]{ opacity:1; transform:none; transition:none; } }
+</style>
+</helmet>
+
+<div style="overflow-x:hidden">
+
+  <div style="position:fixed;top:0;left:0;height:2px;width:0;background:var(--accent);z-index:80" ref="{{ progressRef }}"></div>
+
+  <header style="position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);padding:var(--space-3) var(--space-12);background:var(--surface-page);border-bottom:var(--border-hairline) solid var(--line-1)">
+    <div style="display:flex;align-items:baseline;gap:var(--space-3)">
+      <span style="font-family:var(--font-ui);font-weight:var(--weight-bold);letter-spacing:var(--tracking-tight);font-size:var(--text-h3)">ORCA</span>
+      <span style="font-style:italic;font-size:var(--text-caption);color:var(--text-caption)">open source risk and catastrophe aggregator</span>
+    </div>
+    <nav style="display:flex;align-items:center;gap:var(--space-6);font-size:var(--text-label)">
+      <a href="#problema">O problema</a>
+      <a href="#pipeline">Como funciona</a>
+      <a href="#explorar">Explorar</a>
+      <a href="https://github.com/hcristosm/ORCA" style="color:var(--accent)">GitHub</a>
+    </nav>
+  </header>
+
+  <section style="min-height:calc(100svh - 57px);display:flex;flex-direction:column;justify-content:center;padding:var(--space-12);border-bottom:var(--border-hairline) solid var(--line-1)">
+    <div style="width:100%;max-width:var(--content-max);margin:0 auto">
+      <div data-reveal style="transition-delay:60ms">
+        <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-6)">
+          <span style="width:11px;height:11px;background:var(--risk-very-high)"></span>
+          <span style="width:11px;height:11px;background:var(--risk-high)"></span>
+          <span style="width:11px;height:11px;background:var(--rain-500)"></span>
+          <span style="font-size:var(--text-caption);color:var(--text-caption)">CPRM/SGB · INMET · dashboard local</span>
+        </div>
+        <h1 style="margin:0;font-size:clamp(2.5rem,6vw,4.5rem);line-height:var(--leading-tight);letter-spacing:var(--tracking-tight);font-weight:var(--weight-bold);color:var(--text-title);max-width:17ch;text-wrap:pretty">Setores de risco geológico x chuva recente.</h1>
+      </div>
+      <p data-reveal style="transition-delay:140ms;margin:var(--space-6) 0 0;max-width:64ch;font-size:var(--text-body);line-height:var(--leading-loose);color:var(--text-body)">O ORCA baixa a setorização de risco publicada pela CPRM/SGB, cruza cada setor com a chuva horária mais recente disponível no INMET e sinaliza, num mapa interativo, quais setores estão com chuva acumulada acima de um limiar configurável. Roda local, sem backend e sem custo.</p>
+      <div data-reveal style="transition-delay:220ms;display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-8)">
+        <a href="https://github.com/hcristosm/ORCA">
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.Button" variant="primary" hint-size="auto,38px">Ver no GitHub</x-import>
+        </a>
+        <a href="#explorar">
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.Button" hint-size="auto,38px">Explorar dados</x-import>
+        </a>
+      </div>
+
+      <div data-reveal style="transition-delay:300ms;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--space-6);margin-top:var(--space-16);border-top:var(--border-hairline) solid var(--line-1);padding-top:var(--space-6)">
+        <sc-for list="{{ metricas }}" as="m" hint-placeholder-count="4">
+          <div>
+            <div style="font-family:var(--font-mono);font-size:var(--text-display);line-height:var(--leading-tight);font-weight:var(--weight-semibold);color:var(--text-title)">{{ m.valor }}</div>
+            <div style="font-size:var(--text-caption);color:var(--text-caption);margin-top:var(--space-2)">{{ m.rotulo }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="max-width:var(--content-max);width:100%;margin:var(--space-12) auto 0;font-size:var(--text-caption);color:var(--text-caption)">Role para ver o pipeline ↓</div>
+  </section>
+
+  <section id="problema" style="padding:var(--space-16) var(--space-12);border-bottom:var(--border-hairline) solid var(--line-1)">
+    <div style="max-width:var(--content-max);margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-12)">
+      <div data-reveal>
+        <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" hint-size="100%,32px">O problema</x-import>
+        <p style="margin:var(--space-4) 0 0;font-size:var(--text-body);line-height:var(--leading-loose);max-width:44ch;text-wrap:pretty">Quem monitora encosta precisa de duas coisas ao mesmo tempo: onde estão os setores de risco alto e muito alto, e quanto choveu ali nas últimas horas. A primeira metade está num ArcGIS REST da CPRM/SGB; a segunda, em CSVs de estação do INMET. Cruzar as duas à mão, durante um evento de chuva, é lento na hora errada.</p>
+      </div>
+      <div data-reveal style="transition-delay:120ms;display:flex;flex-direction:column;gap:var(--space-4)">
+        <x-import component-from-global-scope="ORCADesignSystem_bf9362.Callout" tone="warning" hint-size="100%,120px">O plano original usava o CEMADEN como fonte de chuva. O download mensal exige captcha, e as camadas acessíveis sem ele são espelhos estáticos com leituras de 2019 e 2017 — grão grosseiro demais. O ORCA usa o pacote histórico anual do INMET, que responde sem captcha e sem WAF.</x-import>
+        <x-import component-from-global-scope="ORCADesignSystem_bf9362.Caption" hint-size="100%,60px">Fontes: setores de risco da CPRM/SGB (ArcGIS REST) e chuva horária do INMET (pacote histórico anual, sem captcha). Dados públicos podem estar defasados — ver limitações no README.</x-import>
+      </div>
+    </div>
+  </section>
+
+  <section id="pipeline" style="padding:var(--space-16) var(--space-12);border-bottom:var(--border-hairline) solid var(--line-1);background:var(--surface-sidebar)">
+    <div style="max-width:var(--content-max);margin:0 auto">
+      <div data-reveal>
+        <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" hint-size="100%,32px">Como o ORCA funciona</x-import>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--space-6);margin-top:var(--space-8)">
+        <sc-for list="{{ etapas }}" as="e" hint-placeholder-count="4">
+          <div data-reveal style="{{ e.delay }};background:var(--surface-card);border:var(--border-hairline) solid var(--border-card);border-radius:var(--radius-lg);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)">
+            <span style="font-family:var(--font-mono);font-size:var(--text-caption);color:var(--text-caption)">{{ e.n }}</span>
+            <span style="font-size:var(--text-h3);font-weight:var(--weight-semibold);color:var(--text-title)">{{ e.titulo }}</span>
+            <span style="font-size:var(--text-label);line-height:var(--leading-normal);color:var(--text-muted);flex:1">{{ e.desc }}</span>
+            <x-import component-from-global-scope="ORCADesignSystem_bf9362.CodeBlock" hint-size="100%,40px">{{ e.cmd }}</x-import>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section id="explorar" style="padding:var(--space-16) var(--space-12);border-bottom:var(--border-hairline) solid var(--line-1)">
+    <div style="max-width:var(--content-max);margin:0 auto">
+      <div data-reveal style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-8)">
+        <div>
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" hint-size="100%,32px">O que o painel agrega</x-import>
+          <p style="margin:var(--space-2) 0 0;font-size:var(--text-body);color:var(--text-muted);max-width:52ch">Os mesmos filtros da barra lateral do dashboard, com linhas de exemplo. O app real roda sobre os dados públicos baixados na hora.</p>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:var(--text-caption);color:var(--text-caption)">{{ referencia }}</div>
+      </div>
+
+      <div data-reveal style="display:flex;flex-wrap:wrap;border:var(--border-hairline) solid var(--border-card);border-radius:var(--radius-lg);overflow:hidden;background:var(--surface-card)">
+        <aside style="flex:1 1 var(--sidebar-width);max-width:100%;background:var(--surface-sidebar);border-right:var(--border-hairline) solid var(--line-1);padding:var(--space-6);display:flex;flex-direction:column;gap:var(--space-6)">
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" level="3" hint-size="100%,26px">Filtros</x-import>
+
+          <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+            <span style="font-size:var(--text-label);color:var(--text-muted)">Fonte de dados</span>
+            <x-import component-from-global-scope="ORCADesignSystem_bf9362.Checkbox" label="CPRM/SGB — setores de risco" checked="{{ cprm }}" on-change="{{ toggleCprm }}" hint-size="100%,22px"></x-import>
+            <x-import component-from-global-scope="ORCADesignSystem_bf9362.Checkbox" label="INMET — chuva horária" checked="{{ inmet }}" on-change="{{ toggleInmet }}" hint-size="100%,22px"></x-import>
+          </div>
+
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.RadioGroup" label="Tipo de informação" options="{{ tipoOptions }}" value="{{ tipo }}" on-change="{{ setTipo }}" hint-size="100%,90px"></x-import>
+
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.MultiSelect" label="Município" options="{{ municipios }}" value="{{ municSel }}" on-change="{{ setMunic }}" placeholder="Todos os municípios" hint-size="100%,64px"></x-import>
+
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.RadioGroup" label="Janela de chuva acumulada" options="{{ janelaOptions }}" value="{{ janela }}" on-change="{{ setJanela }}" direction="row" hint-size="100%,50px"></x-import>
+
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.Slider" label="{{ limiarLabel }}" value="{{ limiar }}" on-change="{{ setLimiar }}" min="0" max="300" step="5" unit="mm" help="Referência ilustrativa, não um limiar oficial." hint-size="100%,80px"></x-import>
+
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.Caption" hint-size="100%,60px">100mm/72h é uma referência ilustrativa comum na literatura de risco de deslizamento — não é um limiar oficial calibrado para estes setores. Ajuste livremente.</x-import>
+        </aside>
+
+        <div style="flex:999 1 560px;min-width:0;padding:var(--space-6);display:flex;flex-direction:column;gap:var(--space-6)">
+          <sc-if value="{{ semFonte }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="ORCADesignSystem_bf9362.Callout" tone="warning" hint-size="100%,60px">Nenhuma fonte selecionada. Ative CPRM/SGB, INMET ou as duas para ver o cruzamento.</x-import>
+          </sc-if>
+
+          <sc-if value="{{ temFonte }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:var(--space-6)">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-6)">
+                <sc-for list="{{ cards }}" as="c" hint-placeholder-count="4">
+                  <div>
+                    <div style="font-size:var(--text-caption);color:var(--text-caption);min-height:34px;line-height:var(--leading-snug)">{{ c.rotulo }}</div>
+                    <div style="font-family:var(--font-mono);font-size:var(--text-h2);font-weight:var(--weight-semibold);margin-top:var(--space-1);color:{{ c.cor }}">{{ c.valor }}</div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-wrap:wrap;gap:var(--space-6);align-items:flex-start">
+                <sc-if value="{{ cprm }}" hint-placeholder-val="{{ true }}">
+                  <div style="flex:2 1 340px;min-width:0;display:flex;flex-direction:column;gap:var(--space-3)">
+                    <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" level="3" count="{{ totalSetores }}" hint-size="100%,26px">Mapa de setores de risco</x-import>
+                    <div style="position:relative;height:var(--map-height);max-height:46vh;border:var(--border-hairline) solid var(--border-card);border-radius:var(--radius-lg);background:var(--paper-3);display:flex;align-items:center;justify-content:center;overflow:hidden">
+                      <span style="font-family:var(--font-mono);font-size:var(--text-caption);color:var(--text-muted);padding:0 var(--space-6);text-align:center">mapa Folium — CartoDB positron<br>polígonos coloridos por grau de risco</span>
+                      <div style="position:absolute;bottom:30px;left:30px;z-index:10">
+                        <x-import component-from-global-scope="ORCADesignSystem_bf9362.MapLegend" hint-size="auto,90px"></x-import>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:var(--space-3)">
+                  <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" level="3" hint-size="100%,26px">{{ tituloTabela }}</x-import>
+                  <sc-if value="{{ temLinhas }}" hint-placeholder-val="{{ true }}">
+                    <x-import component-from-global-scope="ORCADesignSystem_bf9362.DataTable" columns="{{ colunas }}" rows="{{ linhas }}" max-height="420" hint-size="100%,300px"></x-import>
+                  </sc-if>
+                  <sc-if value="{{ semLinhas }}" hint-placeholder-val="{{ false }}">
+                    <x-import component-from-global-scope="ORCADesignSystem_bf9362.Callout" tone="info" hint-size="100%,60px">{{ mensagemVazia }}</x-import>
+                  </sc-if>
+                </div>
+              </div>
+
+              <sc-if value="{{ inmet }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:var(--space-3)">
+                  <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" level="3" hint-size="100%,26px">Série temporal de chuva por estação</x-import>
+                  <x-import component-from-global-scope="ORCADesignSystem_bf9362.Caption" hint-size="100%,20px">{{ estacaoSerie }}</x-import>
+                  <x-import component-from-global-scope="ORCADesignSystem_bf9362.RainBarChart" data="{{ serie }}" height="240" hint-size="100%,240px"></x-import>
+                </div>
+              </sc-if>
+
+              <x-import component-from-global-scope="ORCADesignSystem_bf9362.CodeBlock" hint-size="100%,40px">{{ comando }}</x-import>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:var(--space-16) var(--space-12);border-bottom:var(--border-hairline) solid var(--line-1);background:var(--surface-sidebar)">
+    <div style="max-width:var(--content-max);margin:0 auto" data-reveal>
+      <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" hint-size="100%,32px">Tecnologias</x-import>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-6)">
+        <sc-for list="{{ stack }}" as="s" hint-placeholder-count="8">
+          <div style="display:flex;align-items:baseline;gap:var(--space-2);background:var(--surface-card);border:var(--border-hairline) solid var(--border-card);border-radius:var(--radius-lg);padding:var(--space-2) var(--space-4)">
+            <span style="font-family:var(--font-mono);font-size:var(--text-label);color:var(--text-body)">{{ s.nome }}</span>
+            <span style="font-size:var(--text-caption);color:var(--text-caption)">{{ s.papel }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin:var(--space-6) 0 0;font-size:var(--text-label);color:var(--text-muted);max-width:70ch;line-height:var(--leading-loose)">22 testes com pytest, toda chamada de rede mockada. CI a cada push e pull request; cron diário às 09:00 UTC publica os dados atualizados como artefato do GitHub Actions.</p>
+    </div>
+  </section>
+
+  <section style="padding:var(--space-16) var(--space-12);border-bottom:var(--border-hairline) solid var(--line-1)">
+    <div style="max-width:var(--content-max);margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-12)">
+      <div data-reveal>
+        <x-import component-from-global-scope="ORCADesignSystem_bf9362.SectionHeading" hint-size="100%,32px">Sobre o projeto</x-import>
+        <p style="margin:var(--space-4) 0 0;font-size:var(--text-body);line-height:var(--leading-loose);max-width:46ch;text-wrap:pretty">Projeto de portfólio de um geólogo que mapeou áreas de risco pelo Ministério das Cidades (PMRR de Itaquaquecetuba/SP) e hoje trabalha com visão computacional para monitoramento de encostas. O ORCA trata dado público de geociências como pipeline de software: ingestão reprodutível, testes e CI.</p>
+      </div>
+      <div data-reveal style="transition-delay:120ms;display:flex;flex-direction:column;gap:var(--space-4)">
+        <sc-for list="{{ limitacoes }}" as="l" hint-placeholder-count="3">
+          <div style="display:flex;gap:var(--space-4);border-top:var(--border-hairline) solid var(--line-1);padding-top:var(--space-4)">
+            <span style="font-family:var(--font-mono);font-size:var(--text-caption);color:var(--text-caption);min-width:96px">{{ l.chave }}</span>
+            <span style="font-size:var(--text-label);line-height:var(--leading-normal);color:var(--text-body)">{{ l.valor }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <footer style="padding:var(--space-16) var(--space-12) var(--space-8)">
+    <div style="max-width:var(--content-max);margin:0 auto" data-reveal>
+      <h2 style="margin:0;font-size:var(--text-display);line-height:var(--leading-tight);letter-spacing:var(--tracking-tight);font-weight:var(--weight-bold);color:var(--text-title);max-width:20ch">Clone, rode com uma UF e veja seus próprios setores.</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-6)">
+        <a href="https://github.com/hcristosm/ORCA">
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.Button" variant="primary" hint-size="auto,38px">github.com/hcristosm/ORCA</x-import>
+        </a>
+        <a href="https://github.com/hcristosm">
+          <x-import component-from-global-scope="ORCADesignSystem_bf9362.Button" hint-size="auto,38px">Outros projetos do autor</x-import>
+        </a>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--space-4);margin-top:var(--space-16);padding-top:var(--space-4);border-top:var(--border-hairline) solid var(--line-1);font-size:var(--text-caption);color:var(--text-caption)">
+        <span>ORCA — <span style="font-style:italic">open source risk and catastrophe aggregator</span></span>
+        <span>Dados públicos: CPRM/SGB e INMET. Consulte os termos de uso de cada órgão.</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900}}">
+const SETORES = [
+  { munic: "Itaquaquecetuba", setor: "SP_ITAQUA_SR_14_CPRM", grau: "muito alto", estacao: "SÃO PAULO — MIRANTE (A701)", dist: 27.4, c24: 61.2, c72: 138.4 },
+  { munic: "Itaquaquecetuba", setor: "SP_ITAQUA_SR_21_CPRM", grau: "alto", estacao: "SÃO PAULO — MIRANTE (A701)", dist: 29.1, c24: 61.2, c72: 138.4 },
+  { munic: "São Paulo", setor: "SP_SAOPAULO_SR_102_CPRM", grau: "muito alto", estacao: "SÃO PAULO — MIRANTE (A701)", dist: 8.2, c24: 55.4, c72: 121.0 },
+  { munic: "São Paulo", setor: "SP_SAOPAULO_SR_147_CPRM", grau: "alto", estacao: "SÃO PAULO — MIRANTE (A701)", dist: 12.7, c24: 55.4, c72: 121.0 },
+  { munic: "São Paulo", setor: "SP_SAOPAULO_SR_208_CPRM", grau: "alto", estacao: "BARUERI (A755)", dist: 19.6, c24: 43.1, c72: 96.2 },
+  { munic: "Guarulhos", setor: "SP_GUARULHOS_SR_36_CPRM", grau: "alto", estacao: "SÃO PAULO — MIRANTE (A701)", dist: 21.8, c24: 55.4, c72: 121.0 },
+  { munic: "Guarulhos", setor: "SP_GUARULHOS_SR_41_CPRM", grau: "muito alto", estacao: "SÃO PAULO — MIRANTE (A701)", dist: 24.3, c24: 55.4, c72: 121.0 },
+  { munic: "Cubatão", setor: "SP_CUBATAO_SR_07_CPRM", grau: "muito alto", estacao: "SANTOS (A767)", dist: 11.5, c24: 88.6, c72: 204.2 },
+  { munic: "Cubatão", setor: "SP_CUBATAO_SR_12_CPRM", grau: "muito alto", estacao: "SANTOS (A767)", dist: 13.9, c24: 88.6, c72: 204.2 },
+  { munic: "Santos", setor: "SP_SANTOS_SR_03_CPRM", grau: "alto", estacao: "SANTOS (A767)", dist: 4.1, c24: 88.6, c72: 204.2 },
+  { munic: "São Bernardo do Campo", setor: "SP_SBC_SR_58_CPRM", grau: "alto", estacao: "SÃO PAULO — MIRANTE (A701)", dist: 18.4, c24: 55.4, c72: 121.0 },
+  { munic: "Franco da Rocha", setor: "SP_FRANCOROCHA_SR_19_CPRM", grau: "alto", estacao: "BARUERI (A755)", dist: 31.2, c24: 43.1, c72: 96.2 },
+  { munic: "Campos do Jordão", setor: "SP_CJORDAO_SR_25_CPRM", grau: "muito alto", estacao: "CAMPOS DO JORDÃO (A711)", dist: 6.8, c24: 34.2, c72: 79.4 },
+  { munic: "Campos do Jordão", setor: "SP_CJORDAO_SR_31_CPRM", grau: "alto", estacao: "CAMPOS DO JORDÃO (A711)", dist: 9.3, c24: 34.2, c72: 79.4 },
+];
+
+const SERIES = {
+  "SÃO PAULO — MIRANTE (A701)": [0,0,1.2,3.4,6.8,9.1,4.2,0.6,0,0,0,2.1,7.4,11.2,8.6,3.1,0.4,0,0,1.8,5.6,9.8,12.4,6.2],
+  "BARUERI (A755)": [0,0,0,2.1,4.4,6.2,3.1,0,0,0,0,1.4,5.2,8.1,6.4,2.2,0,0,0,1.1,3.8,7.2,9.1,4.4],
+  "SANTOS (A767)": [1.4,3.2,7.8,12.4,16.2,14.1,8.6,4.2,1.1,0,0.8,4.6,11.2,18.4,15.6,9.2,3.4,0.6,0,2.8,8.4,14.6,19.2,11.4],
+  "CAMPOS DO JORDÃO (A711)": [0,0,0,0,1.8,3.2,2.4,0,0,0,0,0,2.8,5.4,4.1,1.2,0,0,0,0,2.2,6.1,7.8,3.4],
+};
+
+const MUNICIPIOS = Array.from(new Set(SETORES.map(s => s.munic)));
+const CORES = { "alto": "var(--risk-high)", "muito alto": "var(--risk-very-high)" };
+
+class Component extends DCLogic {
+  state = { cprm: true, inmet: true, tipo: "risco", municSel: [], janela: 72, limiar: 100 };
+
+  componentDidMount() {
+    this._scan = () => {
+      const h = window.innerHeight || 800;
+      document.querySelectorAll("[data-reveal]:not(.in)").forEach(el => {
+        if (el.getBoundingClientRect().top < h * 0.92) el.classList.add("in");
+      });
+    };
+    this._onScroll = () => {
+      this._scan();
+      const el = this.progressRef && this.progressRef.current;
+      if (!el) return;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      el.style.width = (max > 0 ? (window.scrollY / max) * 100 : 0) + "%";
+    };
+    this._scan();
+    this._timer = setInterval(this._scan, 400);
+    window.addEventListener("scroll", this._onScroll, { passive: true });
+    window.addEventListener("resize", this._scan, { passive: true });
+  }
+
+  componentWillUnmount() {
+    clearInterval(this._timer);
+    window.removeEventListener("scroll", this._onScroll);
+    window.removeEventListener("resize", this._scan);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const DS = window.ORCADesignSystem_bf9362 || {};
+    const campo = s.janela === 24 ? "c24" : "c72";
+    const temFonte = s.cprm || s.inmet;
+
+    const base = SETORES.filter(r => s.municSel.length === 0 || s.municSel.includes(r.munic));
+    const emAtencao = base.filter(r => r[campo] >= s.limiar);
+    let linhasRaw = base;
+    if (s.tipo === "alertas") linhasRaw = emAtencao.slice().sort((a, b) => b[campo] - a[campo]);
+    if (s.tipo === "chuva") {
+      const vistos = new Set();
+      linhasRaw = base.filter(r => (vistos.has(r.estacao) ? false : (vistos.add(r.estacao), true)));
+    }
+
+    const estacaoSerie = (linhasRaw[0] || base[0] || SETORES[0]).estacao;
+    const dados = SERIES[estacaoSerie] || SERIES["SÃO PAULO — MIRANTE (A701)"];
+    const maxChuva = base.length ? Math.max(...base.map(r => r[campo])) : 0;
+    const media = base.length ? base.reduce((a, r) => a + r.dist, 0) / base.length : 0;
+
+    const cards = s.tipo === "chuva" ? [
+      { rotulo: "Estações INMET no recorte", valor: String(new Set(base.map(r => r.estacao)).size), cor: "var(--text-title)" },
+      { rotulo: "Chuva máxima " + s.janela + "h (mm)", valor: maxChuva.toFixed(1), cor: "var(--rain-500)" },
+      { rotulo: "Estação a (km) — média", valor: media.toFixed(2), cor: "var(--text-title)" },
+      { rotulo: "Acima do limiar", valor: String(emAtencao.length), cor: emAtencao.length ? "var(--risk-very-high)" : "var(--text-title)" },
+    ] : s.tipo === "alertas" ? [
+      { rotulo: "Setores em atenção", valor: String(emAtencao.length), cor: emAtencao.length ? "var(--risk-very-high)" : "var(--text-title)" },
+      { rotulo: "Limiar configurado", valor: s.limiar + "mm/" + s.janela + "h", cor: "var(--text-title)" },
+      { rotulo: "Municípios afetados", valor: String(new Set(emAtencao.map(r => r.munic)).size), cor: "var(--text-title)" },
+      { rotulo: "Chuva máxima " + s.janela + "h (mm)", valor: maxChuva.toFixed(1), cor: "var(--rain-500)" },
+    ] : [
+      { rotulo: "Setores no recorte", valor: String(base.length), cor: "var(--text-title)" },
+      { rotulo: "Grau alto", valor: String(base.filter(r => r.grau === "alto").length), cor: "var(--risk-high)" },
+      { rotulo: "Grau muito alto", valor: String(base.filter(r => r.grau === "muito alto").length), cor: "var(--risk-very-high)" },
+      { rotulo: "Em atenção (≥ " + s.limiar + "mm)", valor: String(emAtencao.length), cor: emAtencao.length ? "var(--risk-very-high)" : "var(--text-title)" },
+    ];
+
+    const colunas = [
+      { key: "munic", label: "Município" },
+      { key: "setor", label: "Setor", mono: true },
+      { key: "grau", label: "Grau de risco", render: r => DS.RiskBadge
+          ? React.createElement(DS.RiskBadge, { grau: r.grau, attention: r.atencao })
+          : r.grau },
+      { key: "dist", label: "Estação a (km)", align: "right", mono: true },
+      { key: "chuva", label: "Chuva " + s.janela + "h (mm)", align: "right", mono: true,
+        render: r => React.createElement("span", { style: { color: r.atencao ? "var(--risk-very-high)" : "var(--text-body)" } }, r.chuva) },
+    ];
+
+    const linhas = linhasRaw.map(r => ({
+      munic: r.munic, setor: r.setor, grau: r.grau,
+      atencao: s.inmet && r[campo] >= s.limiar,
+      dist: s.inmet ? r.dist.toFixed(2) : "—",
+      chuva: s.inmet ? r[campo].toFixed(1) : "—",
+    }));
+
+    const fontesTxt = s.cprm && s.inmet ? "CPRM/SGB e INMET" : s.cprm ? "CPRM/SGB" : "INMET";
+
+    return {
+      progressRef: (this.progressRef = this.progressRef || React.createRef()),
+      metricas: [
+        { valor: "904", rotulo: "setores de risco mapeados em SP" },
+        { valor: "40", rotulo: "estações automáticas do INMET em SP" },
+        { valor: "26km", rotulo: "distância média setor — estação" },
+        { valor: "100mm", rotulo: "limiar de atenção padrão em 72h" },
+      ],
+      etapas: [
+        { n: "01", titulo: "Ingestão CPRM/SGB", desc: "Polígonos de setorização de risco via ArcGIS REST, com paginação, retry com backoff e fallback para cache local.", cmd: "python -m src.cli ingest-cprm --uf SP", delay: "transition-delay:0ms" },
+        { n: "02", titulo: "Ingestão INMET", desc: "Pacote histórico anual público (~55MB) com o CSV de cada estação automática, cacheado em disco.", cmd: "python -m src.cli ingest-inmet --uf SP", delay: "transition-delay:90ms" },
+        { n: "03", titulo: "Cruzamento", desc: "Centroide de cada setor até a estação mais próxima (SIRGAS 2000 policônica) e chuva acumulada em 24h e 72h.", cmd: "sjoin_nearest → chuva_24h/72h", delay: "transition-delay:180ms" },
+        { n: "04", titulo: "Dashboard", desc: "Mapa Folium colorido por grau de risco, painel de setores em atenção e série temporal por estação.", cmd: "streamlit run src/dashboard/app.py", delay: "transition-delay:270ms" },
+      ],
+      cprm: s.cprm, inmet: s.inmet, semFonte: !temFonte, temFonte,
+      toggleCprm: v => this.setState({ cprm: v }),
+      toggleInmet: v => this.setState({ inmet: v }),
+      tipo: s.tipo,
+      tipoOptions: [
+        { value: "risco", label: "Risco geológico" },
+        { value: "chuva", label: "Volume de chuva" },
+        { value: "alertas", label: "Setores em atenção" },
+      ],
+      setTipo: v => this.setState({ tipo: v }),
+      municipios: MUNICIPIOS,
+      municSel: s.municSel,
+      setMunic: v => this.setState({ municSel: v }),
+      janela: s.janela,
+      janelaOptions: [{ value: 24, label: "24h" }, { value: 72, label: "72h" }],
+      setJanela: v => this.setState({ janela: v }),
+      limiar: s.limiar,
+      limiarLabel: "Limiar de atenção — chuva acumulada em " + s.janela + "h (mm)",
+      setLimiar: v => this.setState({ limiar: v }),
+      referencia: "referência INMET: 2026-08-05 12:00 (UTC)",
+      cards,
+      colunas,
+      linhas,
+      temLinhas: temFonte && linhas.length > 0,
+      semLinhas: temFonte && linhas.length === 0,
+      mensagemVazia: "Nenhum setor ultrapassa " + s.limiar + "mm em " + s.janela + "h neste recorte.",
+      totalSetores: base.length,
+      tituloTabela: s.tipo === "alertas" ? "Setores em atenção" : s.tipo === "chuva" ? "Chuva por estação" : "Setores no recorte",
+      estacaoSerie: "Estação: " + estacaoSerie,
+      serie: dados.map((v, i) => ({ label: String((i - 23 + 24) % 24).padStart(2, "0") + ":00", value: v })),
+      comando: s.cprm && s.inmet
+        ? "python -m src.cli atualizar --uf SP --ano 2026 && streamlit run src/dashboard/app.py"
+        : s.cprm ? "python -m src.cli ingest-cprm --uf SP"
+        : s.inmet ? "python -m src.cli ingest-inmet --uf SP --ano 2026"
+        : "# selecione ao menos uma fonte",
+      fontesTxt,
+      stack: [
+        { nome: "Python 3.11+", papel: "runtime" },
+        { nome: "Streamlit", papel: "dashboard" },
+        { nome: "GeoPandas", papel: "cruzamento espacial" },
+        { nome: "Folium", papel: "mapa" },
+        { nome: "Plotly", papel: "série temporal" },
+        { nome: "GeoPackage + CSV", papel: "storage" },
+        { nome: "CLI", papel: "ingest-cprm · ingest-inmet · atualizar" },
+        { nome: "pytest + GitHub Actions", papel: "22 testes, CI e cron diário" },
+      ],
+      limitacoes: [
+        { chave: "defasagem", valor: "O pacote histórico do INMET tem dias de atraso; o painel sempre mostra a data de referência da leitura." },
+        { chave: "densidade", valor: "SP tem 40 estações automáticas para 904 setores; chuva convectiva muito localizada pode não ser capturada." },
+        { chave: "escopo", valor: "O MVP cobre SP, mas ambos os clientes aceitam --uf e a arquitetura generaliza para qualquer UF." },
+        { chave: "roadmap", valor: "Rede telemétrica da ANA como fonte quase em tempo real — levantamento de cobertura em SP já feito (62%, 18,6km de distância mediana)." },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

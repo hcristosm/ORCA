@@ -1,0 +1,11 @@
+/* ORCA ships no font binaries — it is a Streamlit app and inherits Streamlit's
+   default type stack: Source Sans 3 for UI/text, Source Code Pro for data/code.
+   Both are open source and are served here from Google Fonts. Material Symbols
+   Rounded is the icon font Streamlit itself renders (chevrons, steppers, the
+   sidebar collapse chevrons in docs/screenshots) — the ORCA repo contains no
+   icon assets of its own. Swap these for self-hosted woff2 if the brand ever
+   ships files. */
+@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..900;1,300..900&family=Source+Code+Pro:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..500,0..1,0&display=block");
+:root{--font-icon:"Material Symbols Rounded";}
+.material-symbols-rounded{font-family:"Material Symbols Rounded";font-weight:400;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:"liga";-webkit-font-smoothing:antialiased}
