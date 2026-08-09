@@ -36,7 +36,6 @@ aparecem lado a lado.
 ## Sumário
 
 - [Fontes de dados](#fontes-de-dados)
-- [O que mudou em relação ao plano original](#o-que-mudou-em-relação-ao-plano-original)
 - [Arquitetura](#arquitetura)
 - [Instalação](#instalação)
 - [Uso](#uso)
@@ -46,7 +45,7 @@ aparecem lado a lado.
   - [4. Atualização automática](#4-atualização-automática)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Testes e CI](#testes-e-ci)
-- [Investigação: fontes de chuva em tempo real](#investigação-fontes-de-chuva-em-tempo-real)
+- [Decisões e investigações](#decisões-e-investigações)
 - [Roadmap](#roadmap)
 - [Licença](#licença)
 
@@ -64,60 +63,22 @@ A CPRM foi renomeada para **SGB**. Os domínios do enunciado original
 respondem parcialmente, mas a camada de setorização de risco hoje mora em
 `geoportal.sgb.gov.br`, sob o certificado TLS de `geoportal.sgb.gov.br`.
 
-## O que mudou em relação ao plano original
-
-O plano inicial previa usar o **CEMADEN** como fonte de chuva. A investigação,
-feita com requisições reais e não por suposição, mostrou dois problemas
-intransponíveis sem contornar proteções que não pareceu certo contornar:
-
-1. **O download mensal do CEMADEN exige captcha**
-   (`mapainterativo.cemaden.gov.br/download/download_form.php`), o que não é
-   automatizável de forma honesta.
-2. **As únicas camadas do CEMADEN acessíveis sem captcha são espelhos estáticos
-   e antigos**: a camada `Cemaden` do próprio geoportal da SGB tem leituras de
-   **setembro de 2019**; a camada `precipitacao_bacia_24` do GeoServer oficial
-   do CEMADEN (`gsc.cemaden.gov.br`) tem timestamps de **junho de 2017** e é
-   agregada por bacia hidrográfica inteira (grão grosseiro demais).
-
-A alternativa avaliada em seguida, a API dinâmica do INMET
-(`apitempo.inmet.gov.br/estacao/...`), também não é utilizável por um cliente
-não navegador: está atrás de um WAF (cookies `TS...`, padrão de F5 Bot
-Defense) que devolve **HTTP 204 vazio** em vez de um erro claro para qualquer
-requisição sem uma sessão de navegador legítima.
-
-A solução que sobrou, e que efetivamente funciona sem captcha, sem WAF e sem
-navegador automatizado, é o **pacote de dados históricos anuais do INMET**: um
-ZIP público por ano com o CSV de cada estação automática do país, atualizado
-com poucos dias de defasagem. É o que o ORCA usa hoje. Essa substituição
-(CEMADEN → INMET) está documentada também no topo de
-[`src/ingest/inmet.py`](src/ingest/inmet.py).
-
 ## Arquitetura
 
+```mermaid
+flowchart LR
+    CPRM[("CPRM/SGB<br/>ArcGIS REST")] --> ING1["src/ingest/cprm.py"]
+    INMET[("INMET<br/>ZIP anual")] --> ING2["src/ingest/inmet.py"]
+    ING1 --> STORE["src/storage/<br/>GeoPackage + CSV"]
+    ING2 --> STORE
+    STORE --> PROC["src/processing/cruzamento.py<br/>setor mais próximo + chuva 24h/72h"]
+    PROC --> DASH["src/dashboard/app.py<br/>Streamlit"]
 ```
-ORCA/
-├── data/                       # dados baixados (gitignored, exceto samples/)
-├── docs/
-│   └── screenshots/            # imagens usadas neste README
-├── scripts/
-│   └── atualizar_dados.py      # atalho fino para `python -m src.cli atualizar` (cron/CI)
-├── src/
-│   ├── cli.py                  # CLI unificada (ingest-cprm, ingest-inmet, atualizar)
-│   ├── config.py                # constantes e convenções de caminho compartilhadas
-│   ├── storage/
-│   │   └── __init__.py         # leitura/gravação de GeoPackage (setores) e CSV (chuva)
-│   ├── ingest/
-│   │   ├── cprm.py             # cliente ArcGIS REST da CPRM/SGB
-│   │   └── inmet.py            # cliente do pacote histórico do INMET
-│   ├── processing/
-│   │   └── cruzamento.py       # setor → estação mais próxima → chuva 24h/72h
-│   └── dashboard/
-│       └── app.py              # aplicação Streamlit
-├── tests/                      # pytest, com HTTP mockado (sem depender de rede)
-└── .github/workflows/
-    ├── ci.yml                  # roda a suíte de testes em todo push/PR
-    └── atualizar-dados.yml     # atualização diária + publicação como artefato
-```
+
+`src/cli.py` expõe os comandos de ingestão (`ingest-cprm`, `ingest-inmet`,
+`atualizar`) usados manualmente ou pelo cron diário
+([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml)). `tests/`
+cobre cada módulo com HTTP mockado, sem depender de rede.
 
 A camada `src/storage/` do plano original chegou a ficar de fora (SQLite/DuckDB
 pareciam desnecessários para o volume de dados de um estado). Hoje ela existe
@@ -155,8 +116,8 @@ python -m src.cli ingest-inmet --uf SP --ano 2026
 # -> data/chuva_sp_2026.csv
 ```
 
-O primeiro download baixa o ZIP anual completo do Brasil (~55MB) e o mantém em
-cache local (`data/inmet_<ano>.zip`). Downloads seguintes para outras UFs do
+O primeiro download baixa o ZIP anual completo do Brasil (~55MB) e mantém em
+cache local (`data/inmet_<ano>.zip`); downloads seguintes para outras UFs do
 mesmo ano reaproveitam o cache.
 
 ### 3. Rodando o dashboard
@@ -165,21 +126,17 @@ mesmo ano reaproveitam o cache.
 streamlit run src/dashboard/app.py
 ```
 
-Se os dados ainda não existirem localmente, a própria barra lateral tem um
-botão **"Baixar/atualizar dados agora"**.
+Se os dados ainda não existirem localmente, a barra lateral tem um botão
+**"Baixar/atualizar dados agora"**. O dashboard mostra o mapa de setores
+coloridos por grau de risco, um painel de setores em atenção (chuva acumulada
+acima do limiar escolhido) e a série temporal de chuva por estação. Filtros de
+UF, município, janela de acumulado (24h/72h) e limiar de atenção ficam na
+barra lateral.
 
-O dashboard mostra o mapa de setores coloridos por grau de risco, um painel
-com os setores em atenção (chuva acumulada acima do limiar escolhido) e a
-série temporal de chuva por estação. Filtros de UF, município, janela de
-acumulado (24h ou 72h) e limiar de atenção ficam todos na barra lateral.
-
-A barra lateral também tem um checkbox **"Verificar novos dados
-automaticamente"**: quando ativado, o dashboard passa a checar em segundo
-plano, num intervalo configurável de 1 a 30 minutos, se os arquivos locais
-foram atualizados por outro processo (o cron diário ou um `orca atualizar`
-manual) e recarrega sozinho quando isso acontece. Ele não baixa dados novos
-por conta própria, só evita que você precise dar F5 depois de rodar uma
-atualização em paralelo.
+Um checkbox **"Verificar novos dados automaticamente"** faz o dashboard checar
+em segundo plano, num intervalo configurável de 1 a 30 minutos, se os arquivos
+locais foram atualizados por outro processo (cron diário ou `orca atualizar`
+manual) e recarregar sozinho — sem baixar dados novos por conta própria.
 
 <p align="center">
   <img src="docs/screenshots/dashboard-atencao.png" alt="Painel de setores em atenção com chuva acima do limiar configurado" width="100%">
@@ -196,11 +153,11 @@ python scripts/atualizar_dados.py --uf SP --ano 2026
 ```
 
 Roda as duas ingestões em sequência, tolera a falha de uma fonte sem derrubar
-a outra e grava `data/ultima_atualizacao.txt` com o resultado (esse arquivo
-também aparece na barra lateral do dashboard). É o mesmo script que o workflow
+a outra e grava `data/ultima_atualizacao.txt` (também exibido na barra
+lateral do dashboard). É o mesmo script que
 [`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml) roda todo dia
-(cron `0 9 * * *`, mais um `workflow_dispatch` manual), publicando os dados
-atualizados como artefato do GitHub Actions.
+(cron `0 9 * * *`, mais `workflow_dispatch` manual), publicando os dados como
+artefato do GitHub Actions.
 
 ## Limitações conhecidas
 
@@ -230,75 +187,44 @@ pytest
 ```
 
 22 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
-retry com backoff e fallback para cache local; parsing do CSV do INMET
-(inclusive valores ausentes), leitura de estação dentro do ZIP anual; a lógica
-de cruzamento espacial (estação mais próxima) e temporal (chuva acumulada
-24h/72h, incluindo os casos sem dados na janela); e as funções auxiliares do
-dashboard (mapeamento de cor por grau de risco, construção do mapa Folium).
-Toda chamada de rede é mockada, então a suíte roda sem internet.
+retry com backoff e fallback para cache local; parsing do CSV do INMET e
+leitura de estação dentro do ZIP anual; a lógica de cruzamento espacial
+(estação mais próxima) e temporal (chuva acumulada 24h/72h); e as funções
+auxiliares do dashboard. Toda chamada de rede é mockada, então a suíte roda
+sem internet.
 
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda essa suíte a cada push e
-a cada pull request, separado do cron diário de atualização de dados.
+pull request, separado do cron diário de atualização de dados.
 
-## Investigação: fontes de chuva em tempo real
+## Decisões e investigações
 
-A defasagem do pacote histórico do INMET (dias, não minutos) limita a
-utilidade do ORCA num evento de chuva em andamento. Em 07/08/2026 investiguei,
-com requisições reais, se havia alguma fonte pública de chuva atualizada
-continuamente para substituir ou complementar o INMET.
+Duas decisões técnicas importantes já foram investigadas com requisições
+reais, não por suposição — histórico completo em
+[`docs/investigacoes.md`](docs/investigacoes.md).
 
-**ANA (Agência Nacional de Águas), rede telemétrica.** O web service
-`https://telemetriaws1.ana.gov.br/ServiceANA.asmx` é público, sem captcha e
-sem autenticação. `ListaEstacoesTelemetricas` retorna 5.194 estações em todo
-o país (bem mais que as 40 do INMET só em SP), e
-`DadosHidrometeorologicos?codEstacao=...&dataInicio=...&dataFim=...` devolve
-chuva, nível de rio e vazão em intervalos de 15 minutos. Testado ao vivo: a
-estação 58040000 (São Luís do Paraitinga/SP) tinha leitura de poucos minutos
-atrás no momento do teste, contra dias de defasagem do INMET.
+**CEMADEN → INMET.** O plano original previa usar o CEMADEN como fonte de
+chuva, mas o download exige captcha e as únicas camadas sem captcha são
+espelhos estáticos de 2017/2019. A alternativa (API dinâmica do INMET) está
+atrás de um WAF que bloqueia clientes não navegador. A solução viável foi o
+pacote histórico anual do INMET, usado hoje pelo ORCA. →
+[detalhes completos](docs/investigacoes.md#cemaden--inmet-por-que-a-fonte-de-chuva-mudou)
 
-A ressalva é que a cobertura real é bem menor que a lista sugere. Nem toda
-estação listada como "Ativo" transmite dado recente por esse endpoint: de uma
-amostra de 25 outras estações de SP (origem RHN, status Ativo), nenhuma tinha
-leitura nos últimos dois dias. A rede parece combinar estações com telemetria
-de verdade e estações que só reportam manualmente ou em ciclos mais longos, e
-não há como distinguir as duas coisas pela lista de estações sozinha. Um
-levantamento (varrer os códigos de SP e medir quantos têm dado vivo, e qual a
-distância média resultante até os setores de risco) é pré-requisito antes de
-integrar essa fonte.
-
-**CEMADEN.** O endpoint de dados recentes das PCDs
-(`sws.cemaden.gov.br/PED/rest/pcds/dados_recentes`), mapeado numa investigação
-anterior deste projeto, agora retorna 404. Não encontrei substituto
-equivalente sem engenharia reversa mais profunda do mapa interativo deles.
-
-Essa investigação está registrada aqui para não se perder; a integração em si
-ainda não foi feita (ver [Roadmap](#roadmap)).
-
-**Atualização (08/08/2026): levantamento de cobertura da ANA em SP.** Rodei
-[`scripts/investigar_ana.py`](scripts/investigar_ana.py), que varre todas as
-estações telemétricas da ANA cadastradas em SP e testa, uma a uma, se cada
-uma tem leitura de chuva nas últimas 48h (com retry/backoff — o serviço
-devolve HTTP 429 com facilidade sob concorrência, e a primeira tentativa sem
-isso gerou um falso "quase nada tem dado vivo"). Resultado real: das **437
-estações listadas para SP, 271 (62%) têm dado vivo**, com distância mediana
-de **18,6km** até o setor de risco mais próximo (média 27,5km, puxada por
-alguns outliers a até 190km). Isso é uma cobertura bem mais densa que as 40
-estações do INMET em SP (26km de distância média). A ressalva: as estações
-com dado vivo são majoritariamente hidrelétricas/fluviométricas (nomes como
-"UHE ... BARRAMENTO/JUSANTE"), não uma rede de pluviômetros dedicada — o
-campo `Chuva` existe e responde, mas vale checar se a série é
-consistente/confiável antes de integrar como fonte de verdade. Com isso, o
-pré-requisito do roadmap está atendido e a integração como fonte
-complementar ao INMET vale a pena tentar.
+**Investigação da ANA.** A rede telemétrica da ANA foi avaliada como fonte
+complementar de chuva em tempo real: das 437 estações listadas para SP, 271
+(62%) têm dado vivo, com distância mediana de 18,6km até o setor de risco
+mais próximo — cobertura mais densa que o INMET. Ressalva: as estações com
+dado vivo são majoritariamente hidrelétricas/fluviométricas, não pluviômetros
+dedicados. →
+[detalhes completos](docs/investigacoes.md#investigação-fontes-de-chuva-em-tempo-real)
 
 ## Roadmap
 
 - ~~Levantar quais estações da rede telemétrica da ANA têm dado vivo de chuva
   em SP~~ — feito em 08/08/2026: 62% de cobertura, distância mediana de
   18,6km até o setor de risco mais próximo (ver
-  [Investigação: fontes de chuva em tempo real](#investigação-fontes-de-chuva-em-tempo-real)).
-  Próximo passo: implementar `src/ingest/ana.py` e integrar como fonte
-  complementar ao INMET no cruzamento (`src/processing/cruzamento.py`).
+  [Decisões e investigações](#decisões-e-investigações)). Próximo passo:
+  implementar `src/ingest/ana.py` e integrar como fonte complementar ao
+  INMET no cruzamento (`src/processing/cruzamento.py`).
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
   reescrever o pipeline de ingestão.
 - Cobrir mais UFs além de SP.
