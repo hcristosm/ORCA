@@ -201,7 +201,7 @@ def ingerir_uf(
 
     try:
         estacoes = fetch_estacoes(uf_norm, timeout=timeout)
-    except requests.RequestException as exc:
+    except (requests.RequestException, ET.ParseError) as exc:
         if saida.exists():
             logger.warning(
                 "Fonte remota da ANA indisponível; usando cache local em %s", saida
