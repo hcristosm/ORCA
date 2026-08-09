@@ -60,26 +60,100 @@ def encontrar_estacao_mais_proxima(
     return resultado
 
 
+def encontrar_estacao_mais_proxima_combinada(
+    setores: gpd.GeoDataFrame,
+    chuva_inmet: pd.DataFrame,
+    chuva_ana: pd.DataFrame | None,
+    limiar_empate_m: float = 500.0,
+) -> gpd.GeoDataFrame:
+    """Para cada setor, acha a estação mais próxima entre INMET e ANA combinadas.
+
+    Regra de prioridade (ver
+    docs/superpowers/specs/2026-08-09-ingestao-ana-design.md): a distância
+    manda — a estação mais próxima do centróide do setor vence, seja ela
+    INMET ou ANA. O desempate por recência de leitura só entra em jogo
+    quando as duas fontes têm uma estação a uma distância praticamente igual
+    (diferença menor que `limiar_empate_m`, padrão 500m); nesse caso a
+    estação com leitura mais recente vence. Na prática isso quase sempre
+    favorece a ANA (granularidade de 15min) sobre o INMET (defasagem de
+    dias) nesses empates — mas a regra não é hardcoded para nenhuma fonte
+    específica, só para a leitura mais recente.
+    """
+    if chuva_ana is None or chuva_ana.empty:
+        resultado = encontrar_estacao_mais_proxima(setores, chuva_inmet)
+        resultado["fonte_estacao"] = "inmet"
+        return resultado
+
+    inmet_pareado = encontrar_estacao_mais_proxima(setores, chuva_inmet)
+    ana_pareado = encontrar_estacao_mais_proxima(setores, chuva_ana)
+
+    ultima_leitura_inmet = chuva_inmet.groupby("codigo_estacao")["data_hora"].max()
+    ultima_leitura_ana = chuva_ana.groupby("codigo_estacao")["data_hora"].max()
+    epoca = pd.Timestamp.min.tz_localize("UTC")
+
+    codigos, nomes, distancias, fontes = [], [], [], []
+    for i in range(len(setores)):
+        dist_inmet = inmet_pareado["distancia_km"].iloc[i]
+        dist_ana = ana_pareado["distancia_km"].iloc[i]
+
+        if pd.isna(dist_ana):
+            vencedor, fonte = inmet_pareado, "inmet"
+        elif pd.isna(dist_inmet):
+            vencedor, fonte = ana_pareado, "ana"
+        elif abs(dist_inmet - dist_ana) * 1000 <= limiar_empate_m:
+            cod_inmet = inmet_pareado["codigo_estacao"].iloc[i]
+            cod_ana = ana_pareado["codigo_estacao"].iloc[i]
+            leitura_inmet = ultima_leitura_inmet.get(cod_inmet, epoca)
+            leitura_ana = ultima_leitura_ana.get(cod_ana, epoca)
+            if leitura_ana >= leitura_inmet:
+                vencedor, fonte = ana_pareado, "ana"
+            else:
+                vencedor, fonte = inmet_pareado, "inmet"
+        elif dist_inmet < dist_ana:
+            vencedor, fonte = inmet_pareado, "inmet"
+        else:
+            vencedor, fonte = ana_pareado, "ana"
+
+        codigos.append(vencedor["codigo_estacao"].iloc[i])
+        nomes.append(vencedor["nome_estacao"].iloc[i])
+        distancias.append(vencedor["distancia_km"].iloc[i])
+        fontes.append(fonte)
+
+    resultado = setores.copy()
+    resultado["codigo_estacao"] = codigos
+    resultado["nome_estacao"] = nomes
+    resultado["distancia_km"] = distancias
+    resultado["fonte_estacao"] = fontes
+    return resultado
+
+
 def calcular_cruzamento(
     setores: gpd.GeoDataFrame,
     chuva_df: pd.DataFrame,
+    chuva_ana: pd.DataFrame | None = None,
     referencia: pd.Timestamp | None = None,
     janelas: tuple[int, ...] = JANELAS_PADRAO,
 ) -> gpd.GeoDataFrame:
     """Cruza setores de risco com chuva: acha a estação mais próxima de cada setor
-    e calcula a chuva acumulada nas janelas de tempo pedidas (em horas), terminando
-    na leitura mais recente disponível na série (`referencia`).
+    (combinando INMET e, se fornecida, a ANA como fonte complementar — ver
+    `encontrar_estacao_mais_proxima_combinada`) e calcula a chuva acumulada nas
+    janelas de tempo pedidas (em horas), terminando na leitura mais recente
+    disponível na série (`referencia`).
     """
     if chuva_df.empty:
         raise ValueError("chuva_df está vazio; nada para cruzar.")
 
     ref = referencia or chuva_df["data_hora"].max()
 
-    resultado = encontrar_estacao_mais_proxima(setores, chuva_df)
+    resultado = encontrar_estacao_mais_proxima_combinada(setores, chuva_df, chuva_ana)
 
+    chuva_combinada = (
+        chuva_df if chuva_ana is None or chuva_ana.empty
+        else pd.concat([chuva_df, chuva_ana], ignore_index=True)
+    )
     series_por_estacao = {
         codigo: grupo[["data_hora", "chuva_mm"]]
-        for codigo, grupo in chuva_df.groupby("codigo_estacao")
+        for codigo, grupo in chuva_combinada.groupby("codigo_estacao")
     }
 
     for horas in janelas:
