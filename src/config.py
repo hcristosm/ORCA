@@ -36,5 +36,9 @@ def caminho_chuva(uf: str, ano: int, data_dir: Path = DATA_DIR) -> Path:
     return data_dir / f"chuva_{uf.lower()}_{ano}.csv"
 
 
+def caminho_chuva_ana(uf: str, data_dir: Path = DATA_DIR) -> Path:
+    return data_dir / f"chuva_ana_{uf.lower()}.csv"
+
+
 def caminho_zip_inmet(ano: int, data_dir: Path = DATA_DIR) -> Path:
     return data_dir / f"inmet_{ano}.zip"
