@@ -6,6 +6,7 @@ from shapely.geometry import Polygon
 from src.processing.cruzamento import (
     calcular_cruzamento,
     encontrar_estacao_mais_proxima,
+    encontrar_estacao_mais_proxima_combinada,
     sinalizar_atencao,
 )
 
@@ -100,3 +101,84 @@ def test_sinalizar_atencao_marca_setores_acima_do_limiar(setores, chuva_df):
 
     assert sinalizado.loc[sinalizado["num_setor"] == "S1", "em_atencao"].iloc[0]
     assert not sinalizado.loc[sinalizado["num_setor"] == "S2", "em_atencao"].iloc[0]
+
+
+def test_combinada_ana_mais_proxima_vence(setores):
+    chuva_inmet = _serie_horaria("A701", -23.55, -46.65, "INMET LONGE DE S1", {0: 1.0}, "2026-07-31 00:00")
+    chuva_ana = _serie_horaria("ANA01", -23.5005, -46.6005, "ANA PERTO DE S1", {0: 5.0}, "2026-07-31 00:00")
+
+    resultado = encontrar_estacao_mais_proxima_combinada(setores, chuva_inmet, chuva_ana)
+
+    s1 = resultado[resultado["num_setor"] == "S1"].iloc[0]
+    assert s1["fonte_estacao"] == "ana"
+    assert s1["codigo_estacao"] == "ANA01"
+
+
+def test_combinada_inmet_mais_proxima_vence(setores):
+    chuva_inmet = _serie_horaria("A701", -23.5005, -46.6005, "INMET PERTO DE S1", {0: 1.0}, "2026-07-31 00:00")
+    chuva_ana = _serie_horaria("ANA01", -23.55, -46.65, "ANA LONGE DE S1", {0: 5.0}, "2026-07-31 00:00")
+
+    resultado = encontrar_estacao_mais_proxima_combinada(setores, chuva_inmet, chuva_ana)
+
+    s1 = resultado[resultado["num_setor"] == "S1"].iloc[0]
+    assert s1["fonte_estacao"] == "inmet"
+    assert s1["codigo_estacao"] == "A701"
+
+
+def test_combinada_desempate_por_recencia_favorece_leitura_mais_nova(setores):
+    mesma_lat, mesma_lon = -23.5005, -46.6005
+    chuva_inmet = _serie_horaria(
+        "A701", mesma_lat, mesma_lon, "INMET EMPATADO MAIS ANTIGO", {0: 1.0}, "2026-07-25 00:00"
+    )
+    chuva_ana = _serie_horaria(
+        "ANA01", mesma_lat, mesma_lon, "ANA EMPATADO MAIS NOVO", {0: 1.0}, "2026-07-31 00:00"
+    )
+
+    resultado = encontrar_estacao_mais_proxima_combinada(setores, chuva_inmet, chuva_ana)
+
+    s1 = resultado[resultado["num_setor"] == "S1"].iloc[0]
+    assert s1["fonte_estacao"] == "ana"
+
+
+def test_combinada_desempate_por_recencia_pode_favorecer_inmet(setores):
+    mesma_lat, mesma_lon = -23.5005, -46.6005
+    chuva_inmet = _serie_horaria(
+        "A701", mesma_lat, mesma_lon, "INMET EMPATADO MAIS NOVO", {0: 1.0}, "2026-07-31 00:00"
+    )
+    chuva_ana = _serie_horaria(
+        "ANA01", mesma_lat, mesma_lon, "ANA EMPATADO MAIS ANTIGO", {0: 1.0}, "2026-07-25 00:00"
+    )
+
+    resultado = encontrar_estacao_mais_proxima_combinada(setores, chuva_inmet, chuva_ana)
+
+    s1 = resultado[resultado["num_setor"] == "S1"].iloc[0]
+    assert s1["fonte_estacao"] == "inmet"
+
+
+def test_calcular_cruzamento_sem_chuva_ana_mantem_comportamento_atual(setores, chuva_df):
+    referencia = pd.Timestamp("2026-07-31 07:00", tz="UTC")
+
+    resultado = calcular_cruzamento(setores, chuva_df, referencia=referencia, janelas=(24, 72))
+
+    assert (resultado["fonte_estacao"] == "inmet").all()
+    s1 = resultado[resultado["num_setor"] == "S1"].iloc[0]
+    assert s1["chuva_24h"] == pytest.approx(24.0)
+
+
+def test_calcular_cruzamento_usa_chuva_da_ana_quando_ela_vence(setores):
+    referencia = pd.Timestamp("2026-07-31 07:00", tz="UTC")
+    chuva_inmet = _serie_horaria(
+        "A701", -23.55, -46.65, "INMET LONGE", {i: 1.0 for i in range(80)}, "2026-07-28 00:00"
+    )
+    chuva_ana = _serie_horaria(
+        "ANA01", -23.5005, -46.6005, "ANA PERTO", {i: 2.0 for i in range(80)}, "2026-07-28 00:00"
+    )
+
+    resultado = calcular_cruzamento(
+        setores, chuva_inmet, chuva_ana=chuva_ana, referencia=referencia, janelas=(24,)
+    )
+
+    s1 = resultado[resultado["num_setor"] == "S1"].iloc[0]
+    assert s1["fonte_estacao"] == "ana"
+    assert s1["codigo_estacao"] == "ANA01"
+    assert s1["chuva_24h"] == pytest.approx(48.0)
