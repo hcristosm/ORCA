@@ -59,6 +59,24 @@ def test_fetch_estacoes_filtra_por_sufixo_de_uf():
 
 
 @responses.activate
+def test_fetch_estacoes_retry_recupera_apos_falha_transitoria():
+    responses.add(responses.GET, LISTA_ESTACOES_URL, status=500)
+    responses.add(responses.GET, LISTA_ESTACOES_URL, body=XML_ESTACOES_SP_E_RJ, status=200)
+
+    estacoes = fetch_estacoes("SP", max_retries=2, backoff_factor=0.01)
+
+    assert len(estacoes) == 1
+
+
+@responses.activate
+def test_fetch_estacoes_falha_persistente_levanta_erro():
+    responses.add(responses.GET, LISTA_ESTACOES_URL, status=500)
+
+    with pytest.raises(ANAFetchError):
+        fetch_estacoes("SP", max_retries=2, backoff_factor=0.01)
+
+
+@responses.activate
 def test_fetch_serie_estacao_parseia_leituras_ordenadas_por_data():
     xml = _xml_dados([("2026-08-09 10:15:00", "1.2"), ("2026-08-09 10:00:00", "0,6")])
     responses.add(responses.GET, DADOS_URL, body=xml, status=200)
@@ -177,3 +195,48 @@ def test_ingerir_uf_levanta_erro_se_nenhuma_estacao_tem_dado_vivo(tmp_path: Path
 
     with pytest.raises(ANAFetchError):
         ingerir_uf("SP", tmp_path, janela_horas=48, max_workers=1)
+
+
+@responses.activate
+def test_ingerir_uf_muitas_falhas_de_serie_levanta_erro_distinto_de_sem_dado_vivo(tmp_path: Path):
+    xml_estacoes = """<?xml version="1.0" encoding="utf-8"?>
+<DataTable>
+  <Table>
+    <CodEstacao>FALHA01</CodEstacao>
+    <NomeEstacao>ESTACAO A</NomeEstacao>
+    <Municipio-UF>CIDADE A-SP</Municipio-UF>
+    <Latitude>-23.35</Latitude>
+    <Longitude>-45.25</Longitude>
+    <StatusEstacao>Ativo</StatusEstacao>
+  </Table>
+  <Table>
+    <CodEstacao>FALHA02</CodEstacao>
+    <NomeEstacao>ESTACAO B</NomeEstacao>
+    <Municipio-UF>CIDADE B-SP</Municipio-UF>
+    <Latitude>-23.40</Latitude>
+    <Longitude>-45.30</Longitude>
+    <StatusEstacao>Ativo</StatusEstacao>
+  </Table>
+</DataTable>
+""".encode("utf-8")
+    responses.add(responses.GET, LISTA_ESTACOES_URL, body=xml_estacoes, status=200)
+    responses.add(responses.GET, DADOS_URL, status=500)
+
+    with pytest.raises(ANAFetchError, match="instabilidade do serviço"):
+        ingerir_uf("SP", tmp_path, janela_horas=48, max_workers=1, max_retries=1, backoff_factor=0.01)
+
+
+@responses.activate
+def test_ingerir_uf_respeita_orcamento_de_tempo(tmp_path: Path):
+    import time as time_module
+
+    xml_estacoes = XML_ESTACOES_SP_E_RJ  # reaproveita a estação SP já definida no topo do arquivo
+    responses.add(responses.GET, LISTA_ESTACOES_URL, body=xml_estacoes, status=200)
+    responses.add(responses.GET, DADOS_URL, body=_xml_dados([]), status=200)
+
+    inicio = time_module.monotonic()
+    with pytest.raises(ANAFetchError):
+        ingerir_uf("SP", tmp_path, janela_horas=48, max_workers=1, orcamento_tempo_s=0.0)
+    duracao = time_module.monotonic() - inicio
+
+    assert duracao < 5.0

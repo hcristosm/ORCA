@@ -66,7 +66,7 @@ def atualizar(
     uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
     ano: int = typer.Option(..., "--ano", help="Ano dos dados históricos do INMET"),
 ) -> None:
-    """Atualiza os dados locais de setores de risco (CPRM/SGB) e chuva (INMET).
+    """Atualiza os dados locais de setores de risco (CPRM/SGB) e chuva (INMET e, como fonte complementar, ANA).
 
     Pensado para ser chamado manualmente, via cron, ou por uma GitHub Action
     (ver .github/workflows/atualizar-dados.yml).
@@ -98,17 +98,24 @@ def atualizar(
         typer.echo(f"  FALHA na ANA: {exc}", err=True)
         falhas.append("ana")
 
+    falhas_criticas = [f for f in falhas if f != "ana"]
+
     marcador = DATA_DIR / "ultima_atualizacao.txt"
     marcador.write_text(
         f"uf={uf_norm}\nano={ano}\natualizado_em={datetime.now(timezone.utc).isoformat()}\n"
         f"falhas={','.join(falhas) if falhas else 'nenhuma'}\n"
     )
 
-    if falhas:
-        typer.echo(f"Atualização concluída com falhas em: {', '.join(falhas)}", err=True)
+    if falhas_criticas:
+        typer.echo(f"Atualização concluída com falhas em: {', '.join(falhas_criticas)}", err=True)
         raise typer.Exit(code=1)
 
-    typer.echo("Atualização concluída com sucesso.")
+    if falhas:
+        typer.echo(
+            f"Atualização concluída com sucesso (fonte complementar com falha: {', '.join(falhas)})."
+        )
+    else:
+        typer.echo("Atualização concluída com sucesso.")
 
 
 if __name__ == "__main__":

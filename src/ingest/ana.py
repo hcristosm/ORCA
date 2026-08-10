@@ -67,14 +67,38 @@ def fetch_estacoes(
     uf: str,
     timeout: float = 60.0,
     session: requests.Session | None = None,
+    max_retries: int = 3,
+    backoff_factor: float = 1.5,
 ) -> list[EstacaoANA]:
-    """Lista as estações telemétricas da ANA cadastradas numa UF."""
+    """Lista as estações telemétricas da ANA cadastradas numa UF.
+
+    Faz retry com backoff em erro de rede/HTTP (o serviço retorna 429 com
+    facilidade sob concorrência — ver módulo docstring), levantando
+    ANAFetchError se todas as tentativas falharem.
+    """
     sess = session or requests.Session()
-    resp = sess.get(
-        LISTA_ESTACOES_URL, params={"statusEstacoes": "", "origem": ""}, timeout=timeout
-    )
-    resp.raise_for_status()
-    root = ET.fromstring(resp.content)
+
+    root = None
+    for tentativa in range(1, max_retries + 1):
+        try:
+            resp = sess.get(
+                LISTA_ESTACOES_URL, params={"statusEstacoes": "", "origem": ""}, timeout=timeout
+            )
+            resp.raise_for_status()
+            root = ET.fromstring(resp.content)
+            break
+        except (requests.RequestException, ET.ParseError) as exc:
+            espera = backoff_factor * (2 ** (tentativa - 1))
+            if tentativa < max_retries:
+                logger.debug(
+                    "Falha ao listar estações da ANA para %s (tentativa %d/%d): %s. Aguardando %.1fs.",
+                    uf, tentativa, max_retries, exc, espera,
+                )
+                time.sleep(espera)
+            else:
+                raise ANAFetchError(
+                    f"Não foi possível listar estações da ANA para {uf} após {max_retries} tentativas"
+                ) from exc
 
     sufixo = f"-{uf.upper()}"
     estacoes = []
@@ -186,6 +210,7 @@ def ingerir_uf(
     timeout: float = 20.0,
     max_retries: int = 5,
     backoff_factor: float = 1.5,
+    orcamento_tempo_s: float = 900.0,
 ) -> pd.DataFrame:
     """Busca a chuva das estações telemétricas da ANA com dado vivo numa UF e
     salva em CSV.
@@ -195,13 +220,19 @@ def ingerir_uf(
     de saída igual ao do INMET (`data_hora, chuva_mm, codigo_estacao,
     nome_estacao, uf, latitude, longitude`), permitindo `pd.concat` direto
     entre as duas fontes sem adaptador.
+
+    `orcamento_tempo_s` (padrão 15min) limita o tempo total gasto consultando
+    séries de estações: numa degradação generalizada do serviço da ANA, isso
+    evita que a ingestão trave por horas e atrase as outras fontes no cron
+    diário. Ao estourar o orçamento, a ingestão segue com o que já coletou até
+    aquele ponto em vez de esperar todas as estações.
     """
     uf_norm = uf.strip().upper()
     saida = caminho_chuva_ana(uf_norm, diretorio_dados)
 
     try:
-        estacoes = fetch_estacoes(uf_norm, timeout=timeout)
-    except (requests.RequestException, ET.ParseError) as exc:
+        estacoes = fetch_estacoes(uf_norm, timeout=timeout, max_retries=max_retries, backoff_factor=backoff_factor)
+    except ANAFetchError as exc:
         if saida.exists():
             logger.warning(
                 "Fonte remota da ANA indisponível; usando cache local em %s", saida
@@ -214,6 +245,8 @@ def ingerir_uf(
     session.mount("https://", adapter)
 
     partes = []
+    falhas_series = 0
+    inicio = time.monotonic()
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futuros = {
             pool.submit(
@@ -223,8 +256,20 @@ def ingerir_uf(
             for e in estacoes
         }
         for futuro in as_completed(futuros):
+            if time.monotonic() - inicio > orcamento_tempo_s:
+                logger.warning(
+                    "Orçamento de tempo (%.0fs) excedido ao consultar séries da ANA; "
+                    "interrompendo com %d estações já processadas de %d.",
+                    orcamento_tempo_s, len(partes) + falhas_series, len(estacoes),
+                )
+                for f in futuros:
+                    f.cancel()
+                break
             estacao = futuros[futuro]
             serie = futuro.result()
+            if serie.empty:
+                falhas_series += 1
+                continue
             if not _tem_dado_recente(serie, janela_horas):
                 continue
             serie = serie.copy()
@@ -236,6 +281,21 @@ def ingerir_uf(
             partes.append(serie)
 
     if not partes:
+        total = len(estacoes)
+        if total and falhas_series / total >= 0.5:
+            if saida.exists():
+                logger.warning(
+                    "Muitas falhas ao consultar séries da ANA (%d/%d estações sem "
+                    "resposta válida, possível instabilidade do serviço); usando "
+                    "cache local em %s",
+                    falhas_series, total, saida,
+                )
+                return ler_chuva(saida)
+            raise ANAFetchError(
+                f"Falha ao consultar dados da ANA para UF={uf_norm}: {falhas_series}/{total} "
+                "estações sem resposta válida — possível instabilidade do serviço, não "
+                "necessariamente falta de dado vivo."
+            )
         raise ANAFetchError(f"Nenhuma estação da ANA com dado vivo encontrada para UF={uf_norm}")
 
     resultado = pd.concat(partes, ignore_index=True)
