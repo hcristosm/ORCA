@@ -194,10 +194,13 @@
     series = await seriesResp.json();
     const meta = await metaResp.json();
 
+    const detalheFonte = meta.fonte === "openmeteo"
+      ? "Fonte: Open-Meteo (consulta direta por setor)"
+      : `${meta.total_estacoes_inmet} estações INMET, ${meta.total_estacoes_ana} estações ANA`;
     document.getElementById("selo").innerHTML =
       `<b>Referência da chuva:</b> ${formatarData(meta.referencia)} · ` +
       `<b>Dados gerados em:</b> ${formatarData(meta.gerado_em)} · ` +
-      `${meta.total_estacoes_inmet} estações INMET, ${meta.total_estacoes_ana} estações ANA`;
+      detalheFonte;
 
     popularMunicipios();
     popularEstacoes();
@@ -309,10 +312,14 @@
         const p = feature.properties;
         const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
         const chuva = typeof p[campo] === "number" ? p[campo].toFixed(1) : "—";
+        const linhaFonte = p.fonte_estacao === "openmeteo"
+          ? `Fonte: ${(p.fonte_estacao || "—").toUpperCase()}<br>`
+          : `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
+            `(${(p.fonte_estacao || "—").toUpperCase()})<br>`;
         layer.bindTooltip(
           `<b>${p.munic}</b><br>Setor: ${p.num_setor}<br>Grau: ${p.grau_risco}<br>` +
-          `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
-          `(${(p.fonte_estacao || "—").toUpperCase()})<br>Chuva ${estado.janela}h: ${chuva}mm`
+          linhaFonte +
+          `Chuva ${estado.janela}h: ${chuva}mm`
         );
       },
     }).addTo(mapa);
