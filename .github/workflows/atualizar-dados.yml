@@ -17,6 +17,9 @@ on:
         required: false
         default: "2026"
 
+permissions:
+  contents: write
+
 jobs:
   atualizar:
     runs-on: ubuntu-latest
@@ -46,3 +49,11 @@ jobs:
             data/*.csv
             data/ultima_atualizacao.txt
           retention-days: 14
+
+      - name: Comitar dados exportados do dashboard estático
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/dashboard/data
+          git diff --cached --quiet || git commit -m "chore(dashboard): atualizar dados exportados [skip ci]"
+          git push

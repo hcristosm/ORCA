@@ -6,6 +6,7 @@ from pathlib import Path
 
 RAIZ_PROJETO = Path(__file__).resolve().parent.parent
 DATA_DIR = RAIZ_PROJETO / "data"
+DASHBOARD_DATA_DIR = RAIZ_PROJETO / "docs" / "dashboard" / "data"
 
 UFS_VALIDAS = {
     "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
