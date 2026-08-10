@@ -16,6 +16,7 @@ import typer
 from src.config import DATA_DIR, caminho_setores
 from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
 from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
+from src.ingest.ana import ANAFetchError, ingerir_uf as ingerir_ana
 
 app = typer.Typer(add_completion=False)
 
@@ -46,6 +47,20 @@ def ingest_inmet(
     typer.echo(f"{len(df)} leituras horárias salvas em {diretorio}/chuva_{uf.lower()}_{ano}.csv")
 
 
+@app.command("ingest-ana")
+def ingest_ana(
+    uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
+    diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
+    janela_horas: int = typer.Option(
+        48, help="Janela de recência (h) para considerar uma estação com dado vivo"
+    ),
+    max_workers: int = typer.Option(5, help="Requisições em paralelo"),
+) -> None:
+    """Baixa chuva das estações telemétricas da ANA com dado vivo para uma UF."""
+    df = ingerir_ana(uf, diretorio, janela_horas=janela_horas, max_workers=max_workers)
+    typer.echo(f"{len(df)} leituras da ANA salvas em {diretorio}/chuva_ana_{uf.lower()}.csv")
+
+
 @app.command()
 def atualizar(
     uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
@@ -74,6 +89,14 @@ def atualizar(
     except (INMETFetchError, ValueError) as exc:
         typer.echo(f"  FALHA no INMET: {exc}", err=True)
         falhas.append("inmet")
+
+    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Atualizando chuva da ANA ({uf_norm})...")
+    try:
+        chuva_ana = ingerir_ana(uf_norm, DATA_DIR)
+        typer.echo(f"  {len(chuva_ana)} leituras da ANA salvas.")
+    except (ANAFetchError, ValueError) as exc:
+        typer.echo(f"  FALHA na ANA: {exc}", err=True)
+        falhas.append("ana")
 
     marcador = DATA_DIR / "ultima_atualizacao.txt"
     marcador.write_text(
