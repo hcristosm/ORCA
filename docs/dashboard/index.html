@@ -140,6 +140,18 @@
         </table>
         <div class="vazio" id="tabelaVazia" hidden>Nenhum setor ultrapassa o limiar configurado.</div>
       </div>
+
+      <div id="blocoAlertaPrevisto" hidden style="margin-top: var(--space-6)">
+        <h2>Alerta previsto (próximos 3 dias)</h2>
+        <div class="tabela-scroll">
+          <table>
+            <thead>
+              <tr><th>Município</th><th>Setor</th><th>Grau</th><th>Quando</th></tr>
+            </thead>
+            <tbody id="tabelaPrevistoCorpo"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
     <div>
       <div class="grafico-cabecalho">
@@ -175,6 +187,7 @@
   const estado = { janela: 72, limiar: 100, municipio: "" };
   let setoresGeoJSON = null;
   let series = {};
+  let previsao = null;
   let camadaSetores = null;
   let mapa = null;
   let grafico = null;
@@ -193,6 +206,13 @@
     setoresGeoJSON = await setoresResp.json();
     series = await seriesResp.json();
     const meta = await metaResp.json();
+
+    try {
+      const previsaoResp = await fetch(`data/previsao_${UF}.json`);
+      previsao = previsaoResp.ok ? await previsaoResp.json() : null;
+    } catch (e) {
+      previsao = null;
+    }
 
     const detalheFonte = meta.fonte === "openmeteo"
       ? "Fonte: Open-Meteo (consulta direta por setor)"
@@ -253,7 +273,8 @@
         '<b>Grau de risco</b><br>' +
         '<span class="amostra" style="background:' + CORES_GRAU["alto"] + '"></span>Alto<br>' +
         '<span class="amostra" style="background:' + CORES_GRAU["muito alto"] + '"></span>Muito alto<br>' +
-        '<span style="border:2px solid ' + COR_ATENCAO + ';padding:0 4px">Em atenção</span>';
+        '<span style="border:2px solid ' + COR_ATENCAO + ';padding:0 4px">Em atenção</span><br>' +
+        '<span style="border:2px dashed ' + COR_ATENCAO + ';padding:0 4px">Alerta previsto</span>';
       return div;
     };
     legenda.addTo(mapa);
@@ -266,16 +287,39 @@
     ).map(f => ({ f, chuva: f.properties[campo] }));
   }
 
+  function primeiroPontoQueCruza(trajetoria, limiar) {
+    if (!trajetoria) return null;
+    for (const [iso, mm] of trajetoria) {
+      if (typeof mm === "number" && mm >= limiar) return iso;
+    }
+    return null;
+  }
+
+  function calcularAlertaPrevisto(filtrados, emAtencao) {
+    if (!previsao) return [];
+    const jaEmAtencao = new Set(emAtencao.map(r => r.f.properties.num_setor));
+    const previsto = [];
+    for (const r of filtrados) {
+      const numSetor = r.f.properties.num_setor;
+      if (jaEmAtencao.has(numSetor)) continue;
+      const quando = primeiroPontoQueCruza(previsao[numSetor], estado.limiar);
+      if (quando) previsto.push({ f: r.f, quando });
+    }
+    previsto.sort((a, b) => a.quando.localeCompare(b.quando));
+    return previsto;
+  }
+
   function renderizarTudo() {
     const filtrados = setoresFiltrados();
     const emAtencao = filtrados.filter(r => typeof r.chuva === "number" && r.chuva >= estado.limiar);
+    const alertaPrevisto = calcularAlertaPrevisto(filtrados, emAtencao);
 
-    renderizarCards(filtrados, emAtencao);
-    renderizarMapa(filtrados, emAtencao);
-    renderizarTabela(emAtencao);
+    renderizarCards(filtrados, emAtencao, alertaPrevisto);
+    renderizarMapa(filtrados, emAtencao, alertaPrevisto);
+    renderizarTabela(emAtencao, alertaPrevisto);
   }
 
-  function renderizarCards(filtrados, emAtencao) {
+  function renderizarCards(filtrados, emAtencao, alertaPrevisto) {
     const grauAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "alto").length;
     const grauMuitoAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "muito alto").length;
     const cards = [
@@ -284,6 +328,9 @@
       { rotulo: "Grau muito alto", valor: grauMuitoAlto },
       { rotulo: `Em atenção (≥ ${estado.limiar}mm)`, valor: emAtencao.length },
     ];
+    if (previsao) {
+      cards.push({ rotulo: "Alerta previsto (72h)", valor: alertaPrevisto.length });
+    }
     document.getElementById("cards").innerHTML = cards.map(c =>
       `<div class="card"><div class="rotulo">${c.rotulo}</div><div class="valor">${c.valor}</div></div>`
     ).join("");
@@ -293,19 +340,24 @@
     return CORES_GRAU[(grau || "").toLowerCase()] || COR_PADRAO;
   }
 
-  function renderizarMapa(filtrados, emAtencao) {
+  function renderizarMapa(filtrados, emAtencao, alertaPrevisto) {
     const codigosAtencao = new Set(emAtencao.map(r => r.f.properties.num_setor));
+    const codigosPrevisto = new Set(alertaPrevisto.map(r => r.f.properties.num_setor));
+    const quandoPorSetor = new Map(alertaPrevisto.map(r => [r.f.properties.num_setor, r.quando]));
     const colecao = { type: "FeatureCollection", features: filtrados.map(r => r.f) };
 
     if (camadaSetores) mapa.removeLayer(camadaSetores);
     camadaSetores = L.geoJSON(colecao, {
       style: feature => {
-        const emAtencaoAgora = codigosAtencao.has(feature.properties.num_setor);
+        const numSetor = feature.properties.num_setor;
+        const emAtencaoAgora = codigosAtencao.has(numSetor);
+        const previstoAgora = codigosPrevisto.has(numSetor);
         const cor = corPorGrau(feature.properties.grau_risco);
         return {
           fillColor: cor, fillOpacity: 0.75,
           color: emAtencaoAgora ? COR_ATENCAO : cor,
-          weight: emAtencaoAgora ? 3 : 1,
+          weight: emAtencaoAgora || previstoAgora ? 3 : 1,
+          dashArray: previstoAgora && !emAtencaoAgora ? "6 4" : null,
         };
       },
       onEachFeature: (feature, layer) => {
@@ -316,10 +368,13 @@
           ? `Fonte: ${(p.fonte_estacao || "—").toUpperCase()}<br>`
           : `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
             `(${(p.fonte_estacao || "—").toUpperCase()})<br>`;
+        const quando = quandoPorSetor.get(p.num_setor);
+        const linhaPrevisao = quando ? `<br><b>Alerta previsto:</b> ${formatarData(quando)}` : "";
         layer.bindTooltip(
           `<b>${p.munic}</b><br>Setor: ${p.num_setor}<br>Grau: ${p.grau_risco}<br>` +
           linhaFonte +
-          `Chuva ${estado.janela}h: ${chuva}mm`
+          `Chuva ${estado.janela}h: ${chuva}mm` +
+          linhaPrevisao
         );
       },
     }).addTo(mapa);
@@ -327,7 +382,7 @@
     if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [20, 20] });
   }
 
-  function renderizarTabela(emAtencao) {
+  function renderizarTabela(emAtencao, alertaPrevisto) {
     const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
     const ordenado = emAtencao.slice().sort((a, b) => (b.chuva || 0) - (a.chuva || 0));
     const corpo = document.getElementById("tabelaCorpo");
@@ -336,13 +391,25 @@
     if (!ordenado.length) {
       corpo.innerHTML = "";
       vazio.hidden = false;
+    } else {
+      vazio.hidden = true;
+      corpo.innerHTML = ordenado.map(r => {
+        const p = r.f.properties;
+        return `<tr><td>${p.munic}</td><td>${p.num_setor}</td><td>${p.grau_risco}</td>` +
+          `<td>${(p[campo] || 0).toFixed(1)}</td><td>${(p.fonte_estacao || "—").toUpperCase()}</td></tr>`;
+      }).join("");
+    }
+
+    const blocoPrevisto = document.getElementById("blocoAlertaPrevisto");
+    if (!previsao || !alertaPrevisto.length) {
+      blocoPrevisto.hidden = true;
       return;
     }
-    vazio.hidden = true;
-    corpo.innerHTML = ordenado.map(r => {
+    blocoPrevisto.hidden = false;
+    document.getElementById("tabelaPrevistoCorpo").innerHTML = alertaPrevisto.map(r => {
       const p = r.f.properties;
       return `<tr><td>${p.munic}</td><td>${p.num_setor}</td><td>${p.grau_risco}</td>` +
-        `<td>${(p[campo] || 0).toFixed(1)}</td><td>${(p.fonte_estacao || "—").toUpperCase()}</td></tr>`;
+        `<td>${formatarData(r.quando)}</td></tr>`;
     }).join("");
   }
 
