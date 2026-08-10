@@ -164,7 +164,9 @@ def baixar_zip_ano_condicional(
     """
     sess = session or requests.Session()
     url = ZIP_URL_TEMPLATE.format(ano=ano)
-    headers_extra = {"If-None-Match": etag_anterior} if etag_anterior else None
+    headers_extra = (
+        {"If-None-Match": etag_anterior} if etag_anterior and destino.exists() else None
+    )
 
     try:
         resp = _get_com_retry(
@@ -253,7 +255,11 @@ def ler_serie_estacao(zip_path: Path, uf: str, codigo: str) -> pd.DataFrame:
 def _carregar_manifesto(caminho: Path) -> dict:
     if not caminho.exists():
         return {"etag_zip": None, "estacoes": {}}
-    return json.loads(caminho.read_text())
+    try:
+        return json.loads(caminho.read_text())
+    except json.JSONDecodeError:
+        logger.warning("Manifesto corrompido em %s; tratando como inexistente.", caminho)
+        return {"etag_zip": None, "estacoes": {}}
 
 
 def _salvar_manifesto(caminho: Path, manifesto: dict) -> None:
@@ -293,7 +299,17 @@ def ingerir_uf(
     estacoes = fetch_estacoes(uf_norm, max_retries=max_retries)
 
     saida = caminho_chuva(uf_norm, ano, diretorio_dados)
-    existente = ler_chuva(saida) if saida.exists() else None
+    existente = None
+    if saida.exists():
+        try:
+            existente = ler_chuva(saida)
+            if existente.empty:
+                existente = None
+        except pd.errors.EmptyDataError:
+            logger.warning(
+                "CSV acumulado em %s está vazio ou corrompido; tratando como inexistente.", saida
+            )
+            existente = None
     manifesto_estacoes = manifesto.get("estacoes", {})
 
     partes = []
@@ -321,7 +337,11 @@ def ingerir_uf(
             and entrada_anterior.get("crc32") == crc_atual
             and serie_existente_estacao is not None
         ):
-            serie_final = serie_existente_estacao
+            serie_final = serie_existente_estacao.copy()
+            serie_final["nome_estacao"] = estacao.nome
+            serie_final["uf"] = estacao.uf
+            serie_final["latitude"] = estacao.latitude
+            serie_final["longitude"] = estacao.longitude
         else:
             serie_nova = ler_serie_estacao(zip_path, uf_norm, estacao.codigo).reset_index()
             serie_nova["codigo_estacao"] = estacao.codigo
@@ -343,6 +363,13 @@ def ingerir_uf(
                     .sort_values("data_hora")
                     .reset_index(drop=True)
                 )
+
+        if serie_final.empty:
+            logger.warning(
+                "Estação %s/%s sem leituras válidas nesta execução; ignorando.",
+                uf_norm, estacao.codigo,
+            )
+            continue
 
         partes.append(serie_final)
         novo_manifesto_estacoes[estacao.codigo] = {
