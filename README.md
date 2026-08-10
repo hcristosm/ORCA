@@ -11,6 +11,7 @@
 
 **Setores de risco geológico da CPRM/SGB cruzados com chuva recente do INMET, da ANA e da Open-Meteo, num dashboard estático.**
 
+[![Release](https://img.shields.io/github/v/release/hcristosm/ORCA)](https://github.com/hcristosm/ORCA/releases/latest)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](#instalação)
 [![Dashboard](https://img.shields.io/badge/dashboard-est%C3%A1tico-1a1a19)](#3-abrir-o-dashboard)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
