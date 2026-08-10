@@ -98,12 +98,13 @@ def fetch_precipitacao_batch(
         "forecast_days": 1,
     }
 
-    resp = None
+    resposta_ok = None
     last_exc: Exception | None = None
     for tentativa in range(1, max_retries + 1):
         try:
             resp = sess.post(FORECAST_URL, json=corpo, timeout=timeout)
             resp.raise_for_status()
+            resposta_ok = resp
             break
         except requests.RequestException as exc:
             last_exc = exc
@@ -115,12 +116,12 @@ def fetch_precipitacao_batch(
             if tentativa < max_retries:
                 time.sleep(espera)
 
-    if resp is None:
+    if resposta_ok is None:
         raise OpenMeteoFetchError(
             f"Não foi possível consultar a Open-Meteo após {max_retries} tentativas"
         ) from last_exc
 
-    dados = resp.json()
+    dados = resposta_ok.json()
     series = []
     for item in dados:
         horario = item.get("hourly", {})
