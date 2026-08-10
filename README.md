@@ -7,7 +7,7 @@
 </picture>
 
 # ORCA
-*open source risk and catastrophe aggregator*
+*Open Risk and Catastrophe Aggregator*
 
 **Setores de risco geológico da CPRM/SGB cruzados com chuva recente do INMET, da ANA e da Open-Meteo, num dashboard estático.**
 
