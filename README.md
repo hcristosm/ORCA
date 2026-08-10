@@ -158,6 +158,7 @@ step e sem processo Python rodando pra servir a interface. Ele lê arquivos
 python -m src.cli exportar-dashboard --uf SP
 # fonte padrão: Open-Meteo, consulta direta por setor (sem estação)
 # -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json
+# (com --fonte openmeteo, também gera previsao_sp.json — trajetória de alerta previsto)
 
 python -m http.server 8000 --directory docs
 # depois abra http://localhost:8000/dashboard/

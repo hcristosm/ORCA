@@ -213,6 +213,19 @@ def test_trajetoria_chuva_72h_encontra_cruzamento_futuro():
     assert trajetoria[-1][1] > 100
 
 
+def test_trajetoria_chuva_72h_retorna_none_alem_do_horizonte_de_dados():
+    agora = pd.Timestamp("2026-08-10 00:00", tz="UTC")
+    horas = pd.date_range(agora, agora + pd.Timedelta(hours=30), freq="h", tz="UTC")
+    serie = pd.DataFrame({"data_hora": horas, "chuva_mm": [1.0] * len(horas)})
+
+    trajetoria = _trajetoria_chuva_72h(serie, agora, passo_horas=3, horizonte_horas=72)
+
+    pontos_alem = [v for t, v in trajetoria if pd.Timestamp(t) > agora + pd.Timedelta(hours=30)]
+    assert all(v is None for v in pontos_alem)
+    pontos_dentro = [v for t, v in trajetoria if pd.Timestamp(t) <= agora + pd.Timedelta(hours=30)]
+    assert all(v is not None for v in pontos_dentro)
+
+
 def test_calcular_chuva_openmeteo_retorna_previsao_por_setor(tmp_path: Path, setores):
     import responses
     from src.ingest.openmeteo import FORECAST_URL
