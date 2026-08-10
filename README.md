@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo/orca-logo.png" alt="Logo do ORCA: uma orca saltando sobre uma onda, com uma montanha, um ícone de alerta e uma gota de chuva" width="180">
+
 # ORCA
 *open source risk and catastrophe aggregator*
 
