@@ -17,6 +17,17 @@ ou seja, não é "tempo real" no sentido estrito, mas é a chuva real mais recen
 disponível publicamente sem intervenção manual. Essa defasagem é documentada
 no README como limitação conhecida.
 
+A cada execução, buscar o ano inteiro do zero seria caro sem necessidade: um
+`HEAD` real no ZIP confirmou que o servidor suporta `Range`/`ETag`, mas cada
+estação tem um único arquivo cobrindo o ano inteiro — não há como pedir só
+"os últimos N dias" de uma estação ao servidor. A otimização é inteiramente
+local (ver docs/superpowers/specs/2026-08-09-ingestao-inmet-incremental-design.md):
+o ZIP é baixado com GET condicional (pula a transferência se não mudou desde
+a última execução) e, por estação, o CRC32 da entrada no ZIP é comparado a
+um manifesto local (`data/inmet_manifest_<uf>_<ano>.json`) — sem mudança,
+pula o reprocessamento; com mudança, mescla só os últimos 7 dias (janela de
+retificação) no CSV acumulado em vez de reparsear o ano inteiro.
+
 O registro de estações (`/estacoes/T`) é servido sem proteção de bot e é usado
 para obter latitude/longitude de cada estação automática.
 """
@@ -250,6 +261,9 @@ def _salvar_manifesto(caminho: Path, manifesto: dict) -> None:
     caminho.write_text(json.dumps(manifesto, indent=2, ensure_ascii=False))
 
 
+JANELA_RETIFICACAO = pd.Timedelta(days=7)
+
+
 def ingerir_uf(
     uf: str,
     ano: int,
@@ -257,35 +271,96 @@ def ingerir_uf(
     timeout: float = 120.0,
     max_retries: int = 3,
 ) -> pd.DataFrame:
-    """Baixa o ZIP anual do INMET e monta uma série horária de chuva para todas as
-    estações automáticas de uma UF, salvando o resultado em CSV.
+    """Baixa (incrementalmente) o ZIP anual do INMET e monta uma série horária de
+    chuva para todas as estações automáticas de uma UF, salvando o resultado em CSV.
+
+    Ver docstring do módulo para a estratégia incremental (GET condicional do
+    ZIP + CRC32 por estação + manifesto). Dentro da janela de retificação de
+    `JANELA_RETIFICACAO` (7 dias) a partir da última leitura já salva de uma
+    estação, o valor mais recente baixado prevalece em caso de retificação
+    (mesmo `data_hora`, `chuva_mm` diferente); fora dessa janela, os dados já
+    salvos são tratados como estáveis.
     """
     uf_norm = uf.strip().upper()
     zip_path = caminho_zip_inmet(ano, diretorio_dados)
-    baixar_zip_ano(ano, zip_path, timeout=timeout, max_retries=max_retries)
+    manifesto_path = caminho_manifesto_inmet(uf_norm, ano, diretorio_dados)
+    manifesto = _carregar_manifesto(manifesto_path)
+
+    zip_path, etag_novo = baixar_zip_ano_condicional(
+        ano, zip_path, manifesto.get("etag_zip"), timeout=timeout, max_retries=max_retries
+    )
 
     estacoes = fetch_estacoes(uf_norm, max_retries=max_retries)
 
+    saida = caminho_chuva(uf_norm, ano, diretorio_dados)
+    existente = ler_chuva(saida) if saida.exists() else None
+    manifesto_estacoes = manifesto.get("estacoes", {})
+
     partes = []
+    novo_manifesto_estacoes = {}
     for estacao in estacoes:
-        try:
-            serie = ler_serie_estacao(zip_path, uf_norm, estacao.codigo)
-        except INMETFetchError:
+        serie_existente_estacao = None
+        if existente is not None:
+            candidata = existente[existente["codigo_estacao"] == estacao.codigo]
+            if not candidata.empty:
+                serie_existente_estacao = candidata
+
+        crc_atual = _crc32_estacao(zip_path, uf_norm, estacao.codigo)
+        if crc_atual is None:
             logger.warning("Sem dados no ZIP para a estação %s/%s", uf_norm, estacao.codigo)
+            if serie_existente_estacao is not None:
+                partes.append(serie_existente_estacao)
+                entrada_anterior = manifesto_estacoes.get(estacao.codigo)
+                if entrada_anterior:
+                    novo_manifesto_estacoes[estacao.codigo] = entrada_anterior
             continue
-        serie["codigo_estacao"] = estacao.codigo
-        serie["nome_estacao"] = estacao.nome
-        serie["uf"] = estacao.uf
-        serie["latitude"] = estacao.latitude
-        serie["longitude"] = estacao.longitude
-        partes.append(serie.reset_index())
+
+        entrada_anterior = manifesto_estacoes.get(estacao.codigo)
+        if (
+            entrada_anterior is not None
+            and entrada_anterior.get("crc32") == crc_atual
+            and serie_existente_estacao is not None
+        ):
+            serie_final = serie_existente_estacao
+        else:
+            serie_nova = ler_serie_estacao(zip_path, uf_norm, estacao.codigo).reset_index()
+            serie_nova["codigo_estacao"] = estacao.codigo
+            serie_nova["nome_estacao"] = estacao.nome
+            serie_nova["uf"] = estacao.uf
+            serie_nova["latitude"] = estacao.latitude
+            serie_nova["longitude"] = estacao.longitude
+
+            if serie_existente_estacao is None:
+                serie_final = serie_nova
+            else:
+                ultima_existente = serie_existente_estacao["data_hora"].max()
+                cutoff = ultima_existente - JANELA_RETIFICACAO
+                antigas_estaveis = serie_existente_estacao[serie_existente_estacao["data_hora"] < cutoff]
+                recentes_novas = serie_nova[serie_nova["data_hora"] >= cutoff]
+                serie_final = (
+                    pd.concat([antigas_estaveis, recentes_novas], ignore_index=True)
+                    .drop_duplicates(subset="data_hora", keep="last")
+                    .sort_values("data_hora")
+                    .reset_index(drop=True)
+                )
+
+        partes.append(serie_final)
+        novo_manifesto_estacoes[estacao.codigo] = {
+            "crc32": crc_atual,
+            "ultima_data_hora": serie_final["data_hora"].max().isoformat(),
+        }
 
     if not partes:
         raise INMETFetchError(f"Nenhuma estação com dados encontrada para UF={uf_norm}")
 
-    resultado = pd.concat(partes, ignore_index=True)
-    saida = caminho_chuva(uf_norm, ano, diretorio_dados)
+    resultado = (
+        pd.concat(partes, ignore_index=True)
+        .sort_values(["codigo_estacao", "data_hora"])
+        .reset_index(drop=True)
+    )
     salvar_chuva(resultado, saida)
+    _salvar_manifesto(manifesto_path, {"etag_zip": etag_novo, "estacoes": novo_manifesto_estacoes})
+
     logger.info(
         "Salvas %d leituras horárias de %d estações de %s em %s",
         len(resultado), len(partes), uf_norm, saida,
