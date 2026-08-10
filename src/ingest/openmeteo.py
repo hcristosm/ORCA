@@ -52,6 +52,7 @@ class OpenMeteoFetchError(RuntimeError):
 def _post_lote(
     pontos: list[tuple[float, float]],
     dias_historico: int,
+    dias_previsao: int,
     timeout: float,
     max_retries: int,
     backoff_factor: float,
@@ -63,7 +64,7 @@ def _post_lote(
         "longitude": [lon for _, lon in pontos],
         "hourly": ["precipitation"],
         "past_days": dias_historico,
-        "forecast_days": 1,
+        "forecast_days": dias_previsao,
     }
 
     resposta_ok = None
@@ -103,6 +104,7 @@ def _post_lote(
 def fetch_precipitacao_batch(
     pontos: list[tuple[float, float]],
     dias_historico: int = 30,
+    dias_previsao: int = 1,
     timeout: float = 60.0,
     max_retries: int = 5,
     backoff_factor: float = 2.0,
@@ -114,9 +116,10 @@ def fetch_precipitacao_batch(
 
     Retorna uma lista de DataFrames (`data_hora, chuva_mm`), um por ponto, na
     mesma ordem de `pontos`. `dias_historico` controla quantos dias para trás
-    são pedidos (a API aceita até 92); `forecast_days=1` garante que a hora
-    mais recente disponível entra na resposta — filtrar por "não é futuro" é
-    responsabilidade de quem consome o DataFrame, não deste cliente.
+    são pedidos e `dias_previsao` quantos dias de previsão para frente (a
+    API aceita até 92 e 16 respectivamente) — filtrar por "é passado" ou
+    "é futuro" é responsabilidade de quem consome o DataFrame, não deste
+    cliente.
 
     Internamente, `pontos` é dividido em lotes de `tamanho_lote` (padrão 100,
     ver docstring do módulo sobre o limite prático da API), com uma pausa de
@@ -130,7 +133,7 @@ def fetch_precipitacao_batch(
     for inicio in range(0, len(pontos), tamanho_lote):
         lote = pontos[inicio:inicio + tamanho_lote]
         dados.extend(
-            _post_lote(lote, dias_historico, timeout, max_retries, backoff_factor, sess)
+            _post_lote(lote, dias_historico, dias_previsao, timeout, max_retries, backoff_factor, sess)
         )
         if inicio + tamanho_lote < len(pontos):
             time.sleep(pausa_entre_lotes)

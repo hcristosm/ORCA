@@ -62,3 +62,16 @@ def test_fetch_precipitacao_batch_divide_em_lotes_e_preserva_ordem():
 
     assert len(responses.calls) == 2
     assert [s["chuva_mm"].iloc[0] for s in series] == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+@responses.activate
+def test_fetch_precipitacao_batch_usa_dias_previsao_no_corpo():
+    import json as json_module
+
+    resposta = _resposta(["2026-08-10T00:00"], [[1.0]])
+    responses.add(responses.POST, FORECAST_URL, json=resposta, status=200)
+
+    fetch_precipitacao_batch([(-23.5, -46.6)], dias_previsao=3)
+
+    corpo_enviado = json_module.loads(responses.calls[0].request.body)
+    assert corpo_enviado["forecast_days"] == 3
