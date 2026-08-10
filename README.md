@@ -3,10 +3,10 @@
 # ORCA
 *open source risk and catastrophe aggregator*
 
-**Setores de risco geológico da CPRM/SGB cruzados com chuva recente do INMET, num dashboard local.**
+**Setores de risco geológico da CPRM/SGB cruzados com chuva recente do INMET e da ANA, num dashboard estático.**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](#instalação)
-[![Streamlit](https://img.shields.io/badge/dashboard-streamlit-ff4b4b)](#rodando-o-dashboard)
+[![Dashboard](https://img.shields.io/badge/dashboard-est%C3%A1tico-1a1a19)](#3-abrir-o-dashboard)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Licença](https://img.shields.io/badge/uso-portfólio-lightgrey)](#licença)
 
@@ -27,9 +27,10 @@ visão computacional para monitoramento de encostas, eu queria uma ferramenta
 local, sem backend, sem custo, que juntasse duas fontes públicas que raramente
 aparecem lado a lado.
 
-<p align="center">
-  <img src="docs/screenshots/dashboard-mapa.png" alt="Mapa de setores de risco geológico coloridos por grau de risco, com filtros na barra lateral" width="100%">
-</p>
+> As capturas de tela do dashboard anterior (Streamlit) foram removidas deste
+> README por não refletirem mais a interface atual; novas capturas do site
+> estático entram assim que ele estiver publicado no GitHub Pages (ver
+> [Roadmap](#roadmap)).
 
 ---
 
@@ -41,7 +42,7 @@ aparecem lado a lado.
 - [Uso](#uso)
   - [1. Baixar os setores de risco (CPRM/SGB)](#1-baixar-os-setores-de-risco-cprmsgb)
   - [2. Baixar a chuva (INMET)](#2-baixar-a-chuva-inmet)
-  - [3. Rodar o dashboard](#3-rodando-o-dashboard)
+  - [3. Abrir o dashboard](#3-abrir-o-dashboard)
   - [4. Atualização automática](#4-atualização-automática)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Testes e CI](#testes-e-ci)
@@ -75,18 +76,27 @@ flowchart LR
     ING2 --> STORE
     ING3 --> STORE
     STORE --> PROC["src/processing/cruzamento.py<br/>estação mais próxima (INMET+ANA) + chuva 24h/72h"]
-    PROC --> DASH["src/dashboard/app.py<br/>Streamlit"]
+    PROC --> EXPORT["src/export/dashboard_data.py<br/>GeoJSON + JSON estáticos"]
+    EXPORT --> DASH["docs/dashboard/<br/>HTML/JS estático (Leaflet + Chart.js)"]
 ```
 
-`src/cli.py` expõe os comandos de ingestão (`ingest-cprm`, `ingest-inmet`,
-`atualizar`) usados manualmente ou pelo cron diário
-([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml)). `tests/`
-cobre cada módulo com HTTP mockado, sem depender de rede.
+`src/cli.py` expõe os comandos de ingestão e exportação (`ingest-cprm`,
+`ingest-inmet`, `ingest-ana`, `exportar-dashboard`, `atualizar`) usados
+manualmente ou pelo cron diário
+([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml)), que também
+comita os dados exportados de volta no repositório para o GitHub Pages
+publicar. `tests/` cobre cada módulo com HTTP mockado, sem depender de rede.
 
 A camada `src/storage/` do plano original chegou a ficar de fora (SQLite/DuckDB
 pareciam desnecessários para o volume de dados de um estado). Hoje ela existe
 como uma camada fina sobre GeoPackage (setores) e CSV (chuva), usada por
-`ingest` e pelo dashboard, sem introduzir dependência de banco.
+`ingest`, `processing` e pela exportação estática, sem introduzir dependência
+de banco.
+
+O dashboard já foi um app Streamlit (`src/dashboard/app.py`); foi substituído
+por um site estático (`docs/dashboard/`) para resolver estética, layout e
+distribuição sem processo Python rodando — ver
+[Decisões e investigações](#decisões-e-investigações).
 
 ## Instalação
 
@@ -123,31 +133,35 @@ O primeiro download baixa o ZIP anual completo do Brasil (~55MB) e mantém em
 cache local (`data/inmet_<ano>.zip`); downloads seguintes para outras UFs do
 mesmo ano reaproveitam o cache.
 
-### 3. Rodando o dashboard
+### 3. Abrir o dashboard
+
+O dashboard é um site estático — HTML/CSS/JS puro, sem framework, sem build
+step e sem processo Python rodando pra servir a interface. Ele lê arquivos
+`docs/dashboard/data/*.geojson`/`*.json` gerados pela exportação abaixo.
 
 ```bash
-streamlit run src/dashboard/app.py
+python -m src.cli exportar-dashboard --uf SP
+# -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json
+
+python -m http.server 8000 --directory docs
+# depois abra http://localhost:8000/dashboard/
 ```
 
-Se os dados ainda não existirem localmente, a barra lateral tem um botão
-**"Baixar/atualizar dados agora"**. O dashboard mostra o mapa de setores
-coloridos por grau de risco, um painel de setores em atenção (chuva acumulada
-acima do limiar escolhido) e a série temporal de chuva por estação. Filtros de
-UF, município, janela de acumulado (24h/72h) e limiar de atenção ficam na
-barra lateral.
+(Servir por HTTP local é necessário porque o `fetch()` do navegador não lê
+`file://` para os arquivos de dados; não precisa de nada além da biblioteca
+padrão do Python.) Em produção, o mesmo `docs/dashboard/` é publicado pelo
+GitHub Pages, com os dados atualizados diariamente pelo cron (ver abaixo).
 
-Um checkbox **"Verificar novos dados automaticamente"** faz o dashboard checar
-em segundo plano, num intervalo configurável de 1 a 30 minutos, se os arquivos
-locais foram atualizados por outro processo (cron diário ou `orca atualizar`
-manual) e recarregar sozinho — sem baixar dados novos por conta própria.
+O mapa (Leaflet) mostra os setores coloridos por grau de risco; os filtros de
+município, janela de acumulado (24h/72h) e limiar de atenção ficam numa barra
+fixa no topo e recalculam tudo no navegador, sem nova requisição. Abaixo do
+mapa: cards de contagem, a tabela de setores em atenção e o gráfico (Chart.js)
+de série temporal de chuva por estação, com indicação de qual fonte (INMET ou
+ANA) está sendo usada em cada setor. Um selo no topo mostra a data de geração
+dos dados e a data de referência da chuva.
 
-<p align="center">
-  <img src="docs/screenshots/dashboard-atencao.png" alt="Painel de setores em atenção com chuva acima do limiar configurado" width="100%">
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/dashboard-serie-temporal.png" alt="Gráfico de série temporal de chuva horária de uma estação do INMET" width="100%">
-</p>
+Sem seletor de UF/Ano por enquanto — os dados de hoje cobrem só SP, e a
+ingestão incremental do INMET já mantém tudo atualizado continuamente.
 
 ### 4. Atualização automática
 
@@ -155,12 +169,13 @@ manual) e recarregar sozinho — sem baixar dados novos por conta própria.
 python scripts/atualizar_dados.py --uf SP --ano 2026
 ```
 
-Roda as duas ingestões em sequência, tolera a falha de uma fonte sem derrubar
-a outra e grava `data/ultima_atualizacao.txt` (também exibido na barra
-lateral do dashboard). É o mesmo script que
+Roda as ingestões (CPRM/SGB, INMET, ANA) e a exportação dos dados do
+dashboard em sequência, tolera a falha de uma fonte sem derrubar as outras e
+grava `data/ultima_atualizacao.txt`. É o mesmo script que
 [`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml) roda todo dia
-(cron `0 9 * * *`, mais `workflow_dispatch` manual), publicando os dados como
-artefato do GitHub Actions.
+(cron `0 9 * * *`, mais `workflow_dispatch` manual): publica os dados como
+artefato do GitHub Actions **e** comita `docs/dashboard/data/*` de volta no
+repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
 
 ## Limitações conhecidas
 
@@ -192,6 +207,11 @@ artefato do GitHub Actions.
   cobrir o Brasil inteiro de uma vez não fazia parte do escopo desta fase.
 - **Sem autenticação/multiusuário.** É uma ferramenta local de portfólio, não
   um serviço multiusuário.
+- **O dashboard estático não atualiza sob demanda.** Diferente do antigo botão
+  "Baixar/atualizar dados agora" do Streamlit, o site estático só mostra os
+  dados da última exportação — que roda uma vez por dia pelo cron. Pra ver
+  dados mais recentes na hora, rode `exportar-dashboard` localmente (ver
+  [Uso](#3-abrir-o-dashboard)).
 
 ## Testes e CI
 
@@ -199,7 +219,7 @@ artefato do GitHub Actions.
 pytest
 ```
 
-50 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
+Testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
 retry com backoff e fallback para cache local; parsing do CSV do INMET,
 leitura de estação dentro do ZIP anual, GET condicional do ZIP (ETag/304) e
 a ingestão incremental por CRC32 (estação sem mudança pulada, estação
@@ -207,8 +227,11 @@ mudada mesclada, retificação dentro da janela de 7 dias); parsing do
 XML/SOAP da ANA, retry em HTTP 429 e o filtro de estações sem dado recente;
 a lógica de cruzamento espacial (estação mais próxima, incluindo o
 pareamento combinado INMET+ANA com desempate por recência) e temporal
-(chuva acumulada 24h/72h); e as funções auxiliares do dashboard. Toda
-chamada de rede é mockada, então a suíte roda sem internet.
+(chuva acumulada 24h/72h); e a exportação dos dados do dashboard (GeoJSON de
+setores, recorte de 30 dias na série temporal, metadados). Toda chamada de
+rede é mockada, então a suíte roda sem internet. O dashboard em si (HTML/JS
+estático) não tem testes automatizados — sem framework de teste de frontend
+no projeto, a validação é manual.
 
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda essa suíte a cada push e
 pull request, separado do cron diário de atualização de dados.
@@ -238,6 +261,15 @@ manda, com desempate por recência de leitura quando as duas fontes têm uma
 estação a menos de 500m de diferença de distância. →
 [detalhes completos](docs/investigacoes.md#investigação-fontes-de-chuva-em-tempo-real)
 
+**Streamlit → dashboard estático.** O dashboard começou como um app
+Streamlit. Ele resolvia o problema funcional, mas tinha estética genérica
+(chrome padrão do Streamlit), layout pouco customizável e não dava pra
+distribuir como site — precisava de um processo Python rodando. A solução foi
+pré-computar o cruzamento (`src/export/dashboard_data.py`) como
+GeoJSON/JSON estáticos e servir um dashboard em HTML/CSS/JS puro
+(`docs/dashboard/`), publicado no GitHub Pages e atualizado pelo cron diário.
+→ [detalhes completos](docs/investigacoes.md#streamlit--dashboard-estático)
+
 ## Roadmap
 
 - ~~Levantar quais estações da rede telemétrica da ANA têm dado vivo de chuva
@@ -245,9 +277,12 @@ estação a menos de 500m de diferença de distância. →
   08/08/2026, integração (`src/ingest/ana.py` + cruzamento combinado)
   implementada em 09/08/2026 (ver
   [Decisões e investigações](#decisões-e-investigações)).
+- Novas capturas de tela do dashboard estático para este README, depois da
+  primeira publicação no GitHub Pages.
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
   reescrever o pipeline de ingestão.
-- Cobrir mais UFs além de SP.
+- Cobrir mais UFs além de SP (inclui trazer de volta um seletor de UF no
+  dashboard estático, hoje fixo em SP).
 
 ## Licença
 
