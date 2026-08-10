@@ -1,6 +1,6 @@
 [project]
 name = "orca"
-version = "0.1.0"
+version = "0.2.0"
 description = "Dashboard estático que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (INMET/ANA)"
 requires-python = ">=3.11"
 dependencies = [

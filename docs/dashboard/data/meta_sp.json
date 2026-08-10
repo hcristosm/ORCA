@@ -1,8 +1,8 @@
 {
-  "fonte": "inmet",
-  "gerado_em": "2026-08-10T15:45:56.105254+00:00",
-  "referencia": "2026-08-09T22:30:00+00:00",
+  "fonte": "openmeteo",
+  "gerado_em": "2026-08-10T19:36:27.186954+00:00",
+  "referencia": "2026-08-10T19:00:00+00:00",
   "total_setores": 904,
-  "total_estacoes_inmet": 40,
-  "total_estacoes_ana": 198
+  "total_municipios": 102,
+  "horizonte_previsao_horas": 72
 }
