@@ -1,16 +1,26 @@
 <div align="center">
 
-<img src="docs/logo/orca-logo.png" alt="Logo do ORCA: uma orca saltando sobre uma onda, com uma montanha, um ícone de alerta e uma gota de chuva" width="320">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/orca-logo-escuro.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/logo/orca-logo-claro.png">
+  <img src="docs/logo/orca-logo-claro.png" alt="Logo do ORCA: uma orca saltando sobre uma onda, com uma montanha, um ícone de alerta e uma gota de chuva" width="320">
+</picture>
 
 # ORCA
 *open source risk and catastrophe aggregator*
 
-**Setores de risco geológico da CPRM/SGB cruzados com chuva recente do INMET e da ANA, num dashboard estático.**
+**Setores de risco geológico da CPRM/SGB cruzados com chuva recente do INMET, da ANA e da Open-Meteo, num dashboard estático.**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](#instalação)
 [![Dashboard](https://img.shields.io/badge/dashboard-est%C3%A1tico-1a1a19)](#3-abrir-o-dashboard)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Licença](https://img.shields.io/badge/uso-portfólio-lightgrey)](#licença)
+
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![Pandas](https://img.shields.io/badge/Pandas-150458?logo=pandas&logoColor=white)
+![Leaflet](https://img.shields.io/badge/Leaflet-199900?logo=leaflet&logoColor=white)
+![Chart.js](https://img.shields.io/badge/Chart.js-FF6384?logo=chartdotjs&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
 
 </div>
 
@@ -58,10 +68,10 @@ aparecem lado a lado.
 
 | Fonte | O que fornece | Endpoint confirmado em 05/08/2026 |
 |---|---|---|
-| **CPRM/SGB** | Polígonos de setorização de risco geológico (grau de risco, tipologia, nº de moradias/pessoas afetadas) | `https://geoportal.sgb.gov.br/server/rest/services/gestaoterritorial/risco/FeatureServer/0` (ArcGIS REST, GeoJSON) |
-| **INMET** | Chuva horária por estação meteorológica automática | `https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` (CSV, pacote público anual) |
-| **ANA** | Chuva em intervalos de 15min por estação telemétrica (fonte complementar ao INMET; nem toda estação tem dado vivo — ver [Decisões e investigações](#decisões-e-investigações)) | `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP/XML, sem captcha/autenticação) |
-| **Open-Meteo** | Chuva horária por coordenada (consulta direta no centro de cada setor, sem estação) — **fonte padrão do dashboard exportado** | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
+| [**CPRM/SGB**](https://www.sgb.gov.br/) | Polígonos de setorização de risco geológico (grau de risco, tipologia, nº de moradias/pessoas afetadas) | `https://geoportal.sgb.gov.br/server/rest/services/gestaoterritorial/risco/FeatureServer/0` (ArcGIS REST, GeoJSON) |
+| [**INMET**](https://portal.inmet.gov.br/) | Chuva horária por estação meteorológica automática | `https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` (CSV, pacote público anual) |
+| [**ANA**](https://www.gov.br/ana/pt-br) | Chuva em intervalos de 15min por estação telemétrica (fonte complementar ao INMET; nem toda estação tem dado vivo — ver [Decisões e investigações](#decisões-e-investigações)) | `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP/XML, sem captcha/autenticação) |
+| [**Open-Meteo**](https://open-meteo.com/) | Chuva horária por coordenada (consulta direta no centro de cada setor, sem estação) — **fonte padrão do dashboard exportado** | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
 
 A CPRM foi renomeada para **SGB**. Os domínios do enunciado original
 (`geoportal.cprm.gov.br`, `sace.cprm.gov.br`, `arcgisserver.cprm.gov.br`) ainda
@@ -322,5 +332,8 @@ continua disponível via `--fonte inmet`. →
 
 ## Licença
 
-Projeto de portfólio pessoal. Os dados públicos usados pertencem à CPRM/SGB e
-ao INMET; consulte os termos de uso de cada órgão antes de redistribuir.
+Projeto de portfólio pessoal. Os dados públicos usados pertencem aos seus
+respectivos órgãos/serviços — [CPRM/SGB](https://www.sgb.gov.br/),
+[INMET](https://portal.inmet.gov.br/), [ANA](https://www.gov.br/ana/pt-br) e
+[Open-Meteo](https://open-meteo.com/) — consulte os termos de uso de cada um
+antes de redistribuir.
