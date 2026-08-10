@@ -35,6 +35,13 @@ JANELA_SERIE_DIAS = 30
 # usa JANELA_SERIE_DIAS.
 DIAS_HISTORICO_CRUZAMENTO = 4
 
+# Horizonte da previsão de "alerta previsto": até 3 dias (72h) à frente,
+# amostrado de 3 em 3 horas — depois desse prazo a previsão de chuva fica
+# pouco confiável pra esse tipo de sinalização antecipada.
+DIAS_PREVISAO_ALERTA = 3
+PASSO_PREVISAO_HORAS = 3
+HORIZONTE_PREVISAO_HORAS = 72
+
 PROPRIEDADES_SETOR = [
     "num_setor", "munic", "grau_risco", "distancia_km",
     "chuva_24h", "chuva_72h", "fonte_estacao", "codigo_estacao", "nome_estacao",
@@ -80,24 +87,60 @@ def _recortar_series(chuva_df: pd.DataFrame, referencia: pd.Timestamp) -> dict:
     return series
 
 
+def _trajetoria_chuva_72h(
+    serie: pd.DataFrame,
+    agora: pd.Timestamp,
+    passo_horas: int = PASSO_PREVISAO_HORAS,
+    horizonte_horas: int = HORIZONTE_PREVISAO_HORAS,
+) -> list:
+    """Acumulado de 72h em cada ponto futuro, combinando chuva já caída + prevista.
+
+    Reaproveita `_chuva_acumulada` (mesma função usada pro acumulado
+    observado) chamada em cada ponto futuro `t` — ela soma `chuva_mm` na
+    janela `(t - 72h, t]` independente de os pontos serem passados ou
+    futuros, já que a série da Open-Meteo já vem contínua (observado +
+    previsto misturados na mesma sequência de `data_hora`).
+
+    Retorna `[[timestamp_iso, mm_acumulado_previsto], ...]`, do ponto
+    `agora` até `agora + horizonte_horas` em passos de `passo_horas`
+    (25 pontos com os valores padrão: 0h, 3h, ..., 72h).
+    """
+    pontos = []
+    passo = pd.Timedelta(hours=passo_horas)
+    limite = agora + pd.Timedelta(hours=horizonte_horas)
+    t = agora
+    while t <= limite:
+        valor = _chuva_acumulada(serie, t, 72)
+        pontos.append([t.isoformat(), None if pd.isna(valor) else round(float(valor), 2)])
+        t += passo
+    return pontos
+
+
 def _calcular_chuva_openmeteo(
     setores: gpd.GeoDataFrame,
     janelas: tuple[int, ...] = (24, 72),
     dias_historico: int = DIAS_HISTORICO_CRUZAMENTO,
+    dias_previsao: int = DIAS_PREVISAO_ALERTA,
     agora: pd.Timestamp | None = None,
-) -> gpd.GeoDataFrame:
+) -> tuple[gpd.GeoDataFrame, dict]:
     """Consulta a Open-Meteo direto no centroide de cada setor e calcula a chuva acumulada.
 
     Sem estação: `distancia_km` é sempre 0.0; `codigo_estacao`/`nome_estacao`
     identificam a fonte, não uma estação real. `agora` é parametrizável para
     tornar testes determinísticos — em produção usa o instante atual.
+
+    Retorna `(resultado, previsao)`: `resultado` é o GeoDataFrame de sempre
+    (chuva observada em `janelas`); `previsao` é
+    `{num_setor: [[iso, mm], ...]}` — a trajetória do acumulado de 72h nas
+    próximas horas (ver `_trajetoria_chuva_72h`), calculada a partir da
+    mesma série já buscada — sem uma segunda consulta à API.
     """
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
 
     centroides_4326 = setores.to_crs(CRS_METRICO).geometry.centroid.to_crs("EPSG:4326")
     pontos = [(pt.y, pt.x) for pt in centroides_4326]
 
-    series = fetch_precipitacao_batch(pontos, dias_historico=dias_historico)
+    series = fetch_precipitacao_batch(pontos, dias_historico=dias_historico, dias_previsao=dias_previsao)
 
     validas = pd.concat(
         [s[(s["data_hora"] <= agora) & s["chuva_mm"].notna()] for s in series],
@@ -116,8 +159,13 @@ def _calcular_chuva_openmeteo(
             _chuva_acumulada(serie, referencia, horas) for serie in series
         ]
 
+    previsao = {
+        num_setor: _trajetoria_chuva_72h(serie, agora)
+        for num_setor, serie in zip(setores["num_setor"], series)
+    }
+
     resultado.attrs["referencia"] = referencia
-    return resultado
+    return resultado, previsao
 
 
 def _series_openmeteo_por_municipio(
@@ -192,9 +240,11 @@ def exportar_dashboard(
     setores = ler_setores(caminho_setores_path)
     saida_dir.mkdir(parents=True, exist_ok=True)
 
+    previsao = None
+
     if fonte == "openmeteo":
         try:
-            cruzado = _calcular_chuva_openmeteo(setores, janelas=(24, 72))
+            cruzado, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72))
             series = _series_openmeteo_por_municipio(setores)
         except OpenMeteoFetchError as exc:
             raise ExportacaoDashboardError(f"Falha ao consultar a Open-Meteo: {exc}") from exc
@@ -206,6 +256,7 @@ def exportar_dashboard(
             "referencia": referencia.isoformat(),
             "total_setores": int(len(cruzado)),
             "total_municipios": len(series),
+            "horizonte_previsao_horas": HORIZONTE_PREVISAO_HORAS,
         }
     else:
         caminho_chuva_path = caminho_chuva(uf_norm, ano, diretorio_dados)
@@ -240,6 +291,10 @@ def exportar_dashboard(
     (saida_dir / f"series_{uf_norm.lower()}.json").write_text(
         json.dumps(series, ensure_ascii=False, indent=2)
     )
+    if previsao is not None:
+        (saida_dir / f"previsao_{uf_norm.lower()}.json").write_text(
+            json.dumps(previsao, ensure_ascii=False, indent=2)
+        )
     (saida_dir / f"meta_{uf_norm.lower()}.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2)
     )

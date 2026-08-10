@@ -10,6 +10,7 @@ from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores
 from src.export.dashboard_data import (
     ExportacaoDashboardError,
     _calcular_chuva_openmeteo,
+    _trajetoria_chuva_72h,
     exportar_dashboard,
 )
 from src.storage import salvar_chuva, salvar_setores
@@ -143,7 +144,7 @@ def test_calcular_chuva_openmeteo_consulta_centroide_e_acumula(tmp_path: Path, s
 
     with responses.RequestsMock() as rsps:
         rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
-        resultado = _calcular_chuva_openmeteo(setores, janelas=(24, 72), agora=agora)
+        resultado, _ = _calcular_chuva_openmeteo(setores, janelas=(24, 72), agora=agora)
 
     assert set(resultado["fonte_estacao"]) == {"openmeteo"}
     assert set(resultado["distancia_km"]) == {0.0}
@@ -193,3 +194,81 @@ def test_exportar_dashboard_fonte_invalida_levanta_erro(tmp_path: Path, setores)
     salvar_setores(setores, caminho_setores("SP", tmp_path))
     with pytest.raises(ValueError):
         exportar_dashboard("SP", 2026, tmp_path, tmp_path / "export", fonte="xyz")
+
+
+def test_trajetoria_chuva_72h_encontra_cruzamento_futuro():
+    agora = pd.Timestamp("2026-08-10 00:00", tz="UTC")
+    horas_passado = pd.date_range(agora - pd.Timedelta(hours=71), agora, freq="h", tz="UTC")
+    horas_futuro = pd.date_range(agora + pd.Timedelta(hours=1), agora + pd.Timedelta(hours=72), freq="h", tz="UTC")
+    serie = pd.DataFrame({
+        "data_hora": list(horas_passado) + list(horas_futuro),
+        "chuva_mm": [0.0] * len(horas_passado) + [5.0] * len(horas_futuro),
+    })
+
+    trajetoria = _trajetoria_chuva_72h(serie, agora, passo_horas=3, horizonte_horas=72)
+
+    assert len(trajetoria) == 25
+    assert trajetoria[0][0] == agora.isoformat()
+    assert trajetoria[0][1] == pytest.approx(0.0)
+    assert trajetoria[-1][1] > 100
+
+
+def test_calcular_chuva_openmeteo_retorna_previsao_por_setor(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+
+    agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
+    horas = pd.date_range("2026-08-08 00:00", periods=61, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+    resposta = [
+        {"latitude": -23.50, "longitude": -46.60, "hourly": {"time": horas_iso, "precipitation": [1.0] * 61}},
+        {"latitude": -24.00, "longitude": -47.00, "hourly": {"time": horas_iso, "precipitation": [0.0] * 61}},
+    ]
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
+        _, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72), agora=agora)
+
+    assert set(previsao.keys()) == {"S1", "S2"}
+    assert previsao["S1"][0][0] == agora.isoformat()
+    assert len(previsao["S1"]) == 25
+
+
+def test_exportar_dashboard_fonte_openmeteo_gera_previsao(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+
+    agora = pd.Timestamp.now(tz="UTC").floor("h")
+    horas = pd.date_range(agora - pd.Timedelta(hours=47), periods=48, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+
+    def _resposta_para(n_pontos: int) -> list[dict]:
+        return [
+            {"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas_iso, "precipitation": [1.0] * 48}}
+            for _ in range(n_pontos)
+        ]
+
+    saida = tmp_path / "export"
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_para(2), status=200)  # setores
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_para(2), status=200)  # municípios
+        meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="openmeteo")
+
+    assert "horizonte_previsao_horas" in meta
+    previsao_path = saida / "previsao_sp.json"
+    assert previsao_path.exists()
+    previsao = json.loads(previsao_path.read_text())
+    assert set(previsao.keys()) == {"S1", "S2"}
+
+
+def test_exportar_dashboard_fonte_inmet_nao_gera_previsao(tmp_path: Path, setores):
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    chuva = _serie_horaria("A701", -23.501, -46.601, "PERTO DE S1", {0: 1.0}, "2026-08-01 00:00")
+    salvar_chuva(chuva, caminho_chuva("SP", 2026, tmp_path))
+
+    saida = tmp_path / "export"
+    exportar_dashboard("SP", 2026, tmp_path, saida, fonte="inmet")
+
+    assert not (saida / "previsao_sp.json").exists()
