@@ -1,5 +1,6 @@
 {
-  "gerado_em": "2026-08-10T15:07:55.016503+00:00",
+  "fonte": "inmet",
+  "gerado_em": "2026-08-10T15:45:56.105254+00:00",
   "referencia": "2026-08-09T22:30:00+00:00",
   "total_setores": 904,
   "total_estacoes_inmet": 40,

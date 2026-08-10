@@ -61,6 +61,7 @@ aparecem lado a lado.
 | **CPRM/SGB** | Polígonos de setorização de risco geológico (grau de risco, tipologia, nº de moradias/pessoas afetadas) | `https://geoportal.sgb.gov.br/server/rest/services/gestaoterritorial/risco/FeatureServer/0` (ArcGIS REST, GeoJSON) |
 | **INMET** | Chuva horária por estação meteorológica automática | `https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` (CSV, pacote público anual) |
 | **ANA** | Chuva em intervalos de 15min por estação telemétrica (fonte complementar ao INMET; nem toda estação tem dado vivo — ver [Decisões e investigações](#decisões-e-investigações)) | `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP/XML, sem captcha/autenticação) |
+| **Open-Meteo** | Chuva horária por coordenada (consulta direta no centro de cada setor, sem estação) — **fonte padrão do dashboard exportado** | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
 
 A CPRM foi renomeada para **SGB**. Os domínios do enunciado original
 (`geoportal.cprm.gov.br`, `sace.cprm.gov.br`, `arcgisserver.cprm.gov.br`) ainda
@@ -74,11 +75,13 @@ flowchart LR
     CPRM[("CPRM/SGB<br/>ArcGIS REST")] --> ING1["src/ingest/cprm.py"]
     INMET[("INMET<br/>ZIP anual")] --> ING2["src/ingest/inmet.py"]
     ANA[("ANA<br/>rede telemétrica")] --> ING3["src/ingest/ana.py"]
+    OM[("Open-Meteo<br/>por coordenada")] --> ING4["src/ingest/openmeteo.py"]
     ING1 --> STORE["src/storage/<br/>GeoPackage + CSV"]
     ING2 --> STORE
     ING3 --> STORE
     STORE --> PROC["src/processing/cruzamento.py<br/>estação mais próxima (INMET+ANA) + chuva 24h/72h"]
-    PROC --> EXPORT["src/export/dashboard_data.py<br/>GeoJSON + JSON estáticos"]
+    PROC --> EXPORT["src/export/dashboard_data.py<br/>fonte openmeteo (padrão) ou inmet"]
+    ING4 --> EXPORT
     EXPORT --> DASH["docs/dashboard/<br/>HTML/JS estático (Leaflet + Chart.js)"]
 ```
 
@@ -143,6 +146,7 @@ step e sem processo Python rodando pra servir a interface. Ele lê arquivos
 
 ```bash
 python -m src.cli exportar-dashboard --uf SP
+# fonte padrão: Open-Meteo, consulta direta por setor (sem estação)
 # -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json
 
 python -m http.server 8000 --directory docs
@@ -154,16 +158,21 @@ python -m http.server 8000 --directory docs
 padrão do Python.) Em produção, o mesmo `docs/dashboard/` é publicado pelo
 GitHub Pages, com os dados atualizados diariamente pelo cron (ver abaixo).
 
+Por padrão a exportação usa a **Open-Meteo** (`--fonte openmeteo`): chuva
+consultada direto no centro de cada setor, sem depender de estação nem de
+`ingest-inmet`/`ingest-ana` terem rodado — só precisa dos setores (CPRM). Pra
+usar o cruzamento por estação mais próxima (INMET+ANA) como antes, passe
+`--fonte inmet` (precisa de `ingest-inmet` já ter rodado para a UF/ano).
+
 O mapa (Leaflet) mostra os setores coloridos por grau de risco; os filtros de
 município, janela de acumulado (24h/72h) e limiar de atenção ficam numa barra
 fixa no topo e recalculam tudo no navegador, sem nova requisição. Abaixo do
 mapa: cards de contagem, a tabela de setores em atenção e o gráfico (Chart.js)
-de série temporal de chuva por estação, com indicação de qual fonte (INMET ou
-ANA) está sendo usada em cada setor. Um selo no topo mostra a data de geração
-dos dados e a data de referência da chuva.
+de série temporal — por município com a fonte Open-Meteo, por estação
+(INMET/ANA) com `--fonte inmet`. Um selo no topo mostra a data de geração dos
+dados, a referência da chuva e qual fonte foi usada.
 
-Sem seletor de UF/Ano por enquanto — os dados de hoje cobrem só SP, e a
-ingestão incremental do INMET já mantém tudo atualizado continuamente.
+Sem seletor de UF/Ano por enquanto — os dados de hoje cobrem só SP.
 
 ### 4. Atualização automática
 
@@ -214,6 +223,18 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
   dados da última exportação — que roda uma vez por dia pelo cron. Pra ver
   dados mais recentes na hora, rode `exportar-dashboard` localmente (ver
   [Uso](#3-abrir-o-dashboard)).
+- **A Open-Meteo tem rate limit sensível ao volume de coordenadas × dias
+  pedidos, não só à frequência de chamadas.** Testado com requisições reais
+  em 10/08/2026: um único `POST` com as ~900 coordenadas de SP funcionou
+  isoladamente, mas repetir esse volume (ou pedir 30 dias de histórico de
+  uma vez para todos os setores) gera `HTTP 429` de forma consistente — a
+  API despacha "tente de novo em um minuto", e às vezes leva mais que isso
+  pra liberar de fato. `src/ingest/openmeteo.py` já divide as consultas em
+  lotes de 50 pontos com pausa entre eles, usa uma janela de histórico
+  menor (4 dias) para o cruzamento por setor, e espera 60s especificamente
+  em `429` — mas uma sessão de testes intensa (como o desenvolvimento desta
+  função) pode esgotar a cota do dia/hora e fazer a exportação real falhar
+  temporariamente. O cron roda uma vez por dia, bem dentro do uso normal.
 
 ## Testes e CI
 
@@ -221,17 +242,18 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
 pytest
 ```
 
-56 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
+64 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
 retry com backoff e fallback para cache local; parsing do CSV do INMET,
 leitura de estação dentro do ZIP anual, GET condicional do ZIP (ETag/304) e
 a ingestão incremental por CRC32 (estação sem mudança pulada, estação
 mudada mesclada, retificação dentro da janela de 7 dias); parsing do
 XML/SOAP da ANA, retry em HTTP 429 e o filtro de estações sem dado recente;
-a lógica de cruzamento espacial (estação mais próxima, incluindo o
-pareamento combinado INMET+ANA com desempate por recência) e temporal
-(chuva acumulada 24h/72h); e a exportação dos dados do dashboard (GeoJSON de
-setores, recorte de 30 dias na série temporal, metadados). Toda chamada de
-rede é mockada, então a suíte roda sem internet. O dashboard em si (HTML/JS
+parsing em lote da Open-Meteo, divisão em lotes e retry; a lógica de
+cruzamento espacial (estação mais próxima, incluindo o pareamento combinado
+INMET+ANA com desempate por recência) e temporal (chuva acumulada 24h/72h);
+e a exportação dos dados do dashboard nas duas fontes (GeoJSON de setores,
+recorte de 30 dias na série temporal, metadados). Toda chamada de rede é
+mockada, então a suíte roda sem internet. O dashboard em si (HTML/JS
 estático) não tem testes automatizados — sem framework de teste de frontend
 no projeto, a validação é manual.
 
@@ -271,6 +293,18 @@ pré-computar o cruzamento (`src/export/dashboard_data.py`) como
 GeoJSON/JSON estáticos e servir um dashboard em HTML/CSS/JS puro
 (`docs/dashboard/`), publicado no GitHub Pages e atualizado pelo cron diário.
 → [detalhes completos](docs/investigacoes.md#streamlit--dashboard-estático)
+
+**Open-Meteo como fonte padrão do dashboard.** O INMET tem dias de
+defasagem; a proposta foi testar uma fonte de chuva quase em tempo real. A
+Open-Meteo (`https://api.open-meteo.com/v1/forecast`) responde chuva
+horária por coordenada, sem conceito de estação — dá pra consultar
+diretamente o centro de cada setor de risco. Testado com requisições reais:
+funciona bem, mas tem rate limit sensível ao volume (coordenadas × dias de
+histórico pedidos), não só à frequência — `src/ingest/openmeteo.py` divide
+em lotes pequenos e trata `HTTP 429` especificamente. Vira a fonte padrão
+da exportação (`--fonte openmeteo`); o cruzamento por estação (INMET/ANA)
+continua disponível via `--fonte inmet`. →
+[detalhes completos](docs/investigacoes.md#open-meteo-como-fonte-padrão-do-dashboard)
 
 ## Roadmap
 

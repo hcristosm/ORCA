@@ -125,3 +125,45 @@ volta no repositório pro GitHub Pages publicar. O dashboard Streamlit foi
 removido por completo (não manteve como alternativa local), pra não manter
 duas UIs divergindo. O design completo está em
 [`docs/superpowers/specs/2026-08-09-dashboard-estatico-design.md`](superpowers/specs/2026-08-09-dashboard-estatico-design.md).
+
+## Open-Meteo como fonte padrão do dashboard
+
+O INMET tem alguns dias de defasagem (ver a primeira seção deste documento).
+Em 10/08/2026 testei a [Open-Meteo](https://open-meteo.com/)
+(`https://api.open-meteo.com/v1/forecast`) como alternativa: diferente do
+INMET (ZIP anual por estação) e da ANA (rede telemétrica com estações),
+a Open-Meteo responde chuva horária **por coordenada** — não tem o conceito
+de estação, então dá pra consultar diretamente o centro de cada setor de
+risco, sem precisar de "estação mais próxima".
+
+**Descobertas com requisições reais:**
+
+- `GET` com muitas coordenadas na query string esbarra em `HTTP 414 URI Too
+  Long` bem antes de chegar a algumas centenas de pontos. `POST` com
+  `latitude`/`longitude` como arrays no corpo é obrigatório para lotes
+  grandes.
+- O parâmetro `timezone` não pode ser enviado como string simples nesse
+  modo (a API exige um array, um valor por coordenada); omiti-lo faz a API
+  responder em GMT, equivalente a UTC para os fins deste projeto.
+- Um único `POST` com as ~900 coordenadas dos 904 setores de SP respondeu
+  em ~2s numa primeira tentativa isolada — mas repetir esse volume de
+  requisições (como aconteceu naturalmente durante o desenvolvimento e
+  teste desta integração) ou pedir muitos dias de histórico de uma vez
+  para todos os setores gera `HTTP 429 Minutely API request limit
+  exceeded` de forma consistente. O limite prático parece depender do
+  volume (coordenadas × dias pedidos), não só da frequência de chamadas —
+  às vezes esperar o minuto que a própria API pede não é suficiente se a
+  cota do período (hora/dia) já foi consumida por testes anteriores.
+
+**Decisão de integração:** `src/ingest/openmeteo.py` (novo) divide as
+consultas em lotes de 50 coordenadas com uma pequena pausa entre lotes, e
+trata `HTTP 429` com uma espera fixa de 60s (em vez do backoff exponencial
+curto usado para outros erros transitórios). `src/export/dashboard_data.py`
+usa uma janela de histórico menor (4 dias, só o necessário para o
+acumulado de 72h) na consulta por setor — que é a maior, com ~900 pontos —
+e mantém 30 dias só na consulta por município (bem menor, ~100 pontos) que
+alimenta o gráfico de série temporal. Virou a fonte padrão da exportação do
+dashboard (`exportar_dashboard(..., fonte="openmeteo")`), sem remover o
+caminho por estação (INMET/ANA) já existente — `--fonte inmet` continua
+disponível. O design completo está em
+[`docs/superpowers/specs/2026-08-10-openmeteo-fonte-dashboard-design.md`](superpowers/specs/2026-08-10-openmeteo-fonte-dashboard-design.md).

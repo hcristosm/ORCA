@@ -48,3 +48,17 @@ def test_fetch_precipitacao_batch_falha_persistente_levanta_erro():
 
     with pytest.raises(OpenMeteoFetchError):
         fetch_precipitacao_batch([(-23.5, -46.6)], max_retries=2, backoff_factor=0.01)
+
+
+@responses.activate
+def test_fetch_precipitacao_batch_divide_em_lotes_e_preserva_ordem():
+    horas = ["2026-08-10T00:00"]
+    pontos = [(-23.0 - i * 0.01, -46.0) for i in range(5)]
+
+    responses.add(responses.POST, FORECAST_URL, json=_resposta(horas, [[1.0], [2.0], [3.0]]), status=200)
+    responses.add(responses.POST, FORECAST_URL, json=_resposta(horas, [[4.0], [5.0]]), status=200)
+
+    series = fetch_precipitacao_batch(pontos, tamanho_lote=3, pausa_entre_lotes=0)
+
+    assert len(responses.calls) == 2
+    assert [s["chuva_mm"].iloc[0] for s in series] == [1.0, 2.0, 3.0, 4.0, 5.0]
