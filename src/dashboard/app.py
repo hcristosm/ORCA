@@ -21,6 +21,7 @@ from src.config import (
     LIMIAR_ATENCAO_MM_PADRAO,
     UFS_DISPONIVEIS,
     caminho_chuva,
+    caminho_chuva_ana,
     caminho_setores,
 )
 from src.ingest.cprm import ingerir_uf as ingerir_cprm
@@ -51,6 +52,17 @@ def _carregar_chuva(uf: str, ano: int) -> pd.DataFrame:
     caminho = caminho_chuva(uf, ano, DATA_DIR)
     if not chuva_existe(caminho):
         return ingerir_inmet(uf, ano, DATA_DIR)
+    return ler_chuva(caminho)
+
+
+@st.cache_data(show_spinner=False)
+def _carregar_chuva_ana(uf: str) -> pd.DataFrame | None:
+    """Carrega a chuva da ANA se já existir localmente. Não baixa automaticamente
+    — a ANA é uma fonte complementar opcional, sem download obrigatório no
+    primeiro carregamento do dashboard (ver src/ingest/ana.py)."""
+    caminho = caminho_chuva_ana(uf, DATA_DIR)
+    if not chuva_existe(caminho):
+        return None
     return ler_chuva(caminho)
 
 
@@ -112,10 +124,13 @@ def _construir_mapa(cruzado: gpd.GeoDataFrame) -> folium.Map:
             "fillOpacity": 0.75,
         }
 
-    campos = ["munic", "num_setor", "grau_risco", "distancia_km", "chuva_24h", "chuva_72h"]
+    campos = [
+        "munic", "num_setor", "grau_risco", "distancia_km",
+        "chuva_24h", "chuva_72h", "fonte_estacao",
+    ]
     aliases = [
         "Município:", "Setor:", "Grau de risco:", "Estação a (km):",
-        "Chuva 24h (mm):", "Chuva 72h (mm):",
+        "Chuva 24h (mm):", "Chuva 72h (mm):", "Fonte da estação:",
     ]
     campos = [c for c in campos if c in exibicao.columns]
     aliases = aliases[: len(campos)]
@@ -188,6 +203,19 @@ def main() -> None:
     with st.spinner("Carregando dados locais..."):
         setores = _carregar_setores(uf)
         chuva = _carregar_chuva(uf, ano)
+        chuva_ana = _carregar_chuva_ana(uf)
+
+    if chuva_ana is not None:
+        st.sidebar.caption(
+            f"Chuva complementar da ANA carregada: "
+            f"{chuva_ana['codigo_estacao'].nunique()} estações com dado vivo."
+        )
+    else:
+        st.sidebar.caption(
+            "Chuva da ANA não carregada localmente — rode "
+            "`python -m src.cli ingest-ana --uf " + uf + "` para habilitá-la "
+            "como fonte complementar de chuva."
+        )
 
     municipios = sorted(setores["munic"].dropna().unique())
     municipios_selecionados = st.sidebar.multiselect("Município", municipios, default=[])
@@ -211,7 +239,7 @@ def main() -> None:
         st.warning("Nenhum setor encontrado para o filtro atual.")
         st.stop()
 
-    cruzado = calcular_cruzamento(setores_filtrados, chuva, janelas=(24, 72))
+    cruzado = calcular_cruzamento(setores_filtrados, chuva, chuva_ana=chuva_ana, janelas=(24, 72))
     cruzado = sinalizar_atencao(cruzado, limiar_mm=limiar_mm, coluna_chuva=f"chuva_{janela}h")
 
     st.caption(
@@ -233,10 +261,13 @@ def main() -> None:
             st.info("Nenhum setor ultrapassa o limiar configurado no momento.")
         else:
             st.dataframe(
-                em_atencao[["munic", "num_setor", "grau_risco", f"chuva_{janela}h", "distancia_km"]]
+                em_atencao[
+                    ["munic", "num_setor", "grau_risco", f"chuva_{janela}h", "distancia_km", "fonte_estacao"]
+                ]
                 .rename(columns={
                     "munic": "Município", "num_setor": "Setor", "grau_risco": "Grau de risco",
                     f"chuva_{janela}h": f"Chuva {janela}h (mm)", "distancia_km": "Estação a (km)",
+                    "fonte_estacao": "Fonte",
                 })
                 .reset_index(drop=True),
                 use_container_width=True,
