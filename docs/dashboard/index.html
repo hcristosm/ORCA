@@ -92,6 +92,7 @@
 
   .grafico-cabecalho { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
   #estacaoSelect { max-width: 260px; }
+  .grafico-container { position: relative; height: var(--chart-height, 300px); width: 100%; }
 
   footer { padding: var(--space-6); text-align: center; font-size: var(--text-caption); color: var(--text-caption); border-top: var(--border-hairline) solid var(--line-1); }
 </style>
@@ -145,7 +146,9 @@
         <h2>Série temporal de chuva</h2>
         <select id="estacaoSelect"></select>
       </div>
-      <canvas id="grafico" height="220"></canvas>
+      <div class="grafico-container">
+        <canvas id="grafico"></canvas>
+      </div>
     </div>
   </div>
 </main>
