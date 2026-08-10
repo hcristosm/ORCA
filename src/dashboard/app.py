@@ -243,8 +243,9 @@ def main() -> None:
     cruzado = sinalizar_atencao(cruzado, limiar_mm=limiar_mm, coluna_chuva=f"chuva_{janela}h")
 
     st.caption(
-        f"Chuva acumulada calculada em relação à leitura mais recente disponível no "
-        f"INMET: **{cruzado.attrs['referencia']}** (pode estar alguns dias atrás da "
+        f"Chuva acumulada calculada em relação à leitura mais recente disponível "
+        f"(por estação — INMET e ANA podem ter datas de referência diferentes): "
+        f"**{cruzado.attrs['referencia']}** (pode estar alguns dias atrás da "
         f"data de hoje — ver README)."
     )
 

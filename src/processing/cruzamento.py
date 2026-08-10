@@ -137,13 +137,20 @@ def calcular_cruzamento(
     """Cruza setores de risco com chuva: acha a estação mais próxima de cada setor
     (combinando INMET e, se fornecida, a ANA como fonte complementar — ver
     `encontrar_estacao_mais_proxima_combinada`) e calcula a chuva acumulada nas
-    janelas de tempo pedidas (em horas), terminando na leitura mais recente
-    disponível na série (`referencia`).
+    janelas de tempo pedidas (em horas).
+
+    Se `referencia` for informada, é usada como fim da janela para todas as
+    estações igualmente. Se não (caso padrão, usado pelo dashboard), cada
+    estação usa sua própria leitura mais recente como referência — INMET e ANA
+    têm granularidades e defasagens muito diferentes (leituras horárias com
+    dias de atraso vs. 15min quase em tempo real), então uma referência global
+    ancorada no INMET deixaria os setores atendidos pela ANA com janela de
+    acumulado presa a uma data antiga do INMET, gerando NaN sempre que a
+    defasagem do INMET ultrapassar os `dias_historico` mantidos pela ingestão
+    da ANA (ver src/ingest/ana.py).
     """
     if chuva_df.empty:
         raise ValueError("chuva_df está vazio; nada para cruzar.")
-
-    ref = referencia or chuva_df["data_hora"].max()
 
     resultado = encontrar_estacao_mais_proxima_combinada(setores, chuva_df, chuva_ana)
 
@@ -156,16 +163,25 @@ def calcular_cruzamento(
         for codigo, grupo in chuva_combinada.groupby("codigo_estacao")
     }
 
+    if referencia is not None:
+        referencias_por_estacao = {codigo: referencia for codigo in series_por_estacao}
+        ref_geral = referencia
+    else:
+        referencias_por_estacao = {
+            codigo: serie["data_hora"].max() for codigo, serie in series_por_estacao.items()
+        }
+        ref_geral = chuva_combinada["data_hora"].max()
+
     for horas in janelas:
         coluna = f"chuva_{horas}h"
         resultado[coluna] = [
-            _chuva_acumulada(series_por_estacao[codigo], ref, horas)
+            _chuva_acumulada(series_por_estacao[codigo], referencias_por_estacao[codigo], horas)
             if codigo in series_por_estacao
             else float("nan")
             for codigo in resultado["codigo_estacao"]
         ]
 
-    resultado.attrs["referencia"] = ref
+    resultado.attrs["referencia"] = ref_geral
     return resultado
 
 

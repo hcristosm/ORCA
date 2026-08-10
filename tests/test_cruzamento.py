@@ -182,3 +182,19 @@ def test_calcular_cruzamento_usa_chuva_da_ana_quando_ela_vence(setores):
     assert s1["fonte_estacao"] == "ana"
     assert s1["codigo_estacao"] == "ANA01"
     assert s1["chuva_24h"] == pytest.approx(48.0)
+
+
+def test_calcular_cruzamento_sem_referencia_explicita_usa_leitura_propria_da_ana(setores):
+    chuva_inmet = _serie_horaria(
+        "A701", -23.55, -46.65, "INMET LONGE E DEFASADO", {i: 1.0 for i in range(24)}, "2026-07-20 00:00"
+    )
+    chuva_ana = _serie_horaria(
+        "ANA01", -23.5005, -46.6005, "ANA PERTO E FRESCA", {i: 2.0 for i in range(24)}, "2026-08-08 00:00"
+    )
+
+    resultado = calcular_cruzamento(setores, chuva_inmet, chuva_ana=chuva_ana, janelas=(24,))
+
+    s1 = resultado[resultado["num_setor"] == "S1"].iloc[0]
+    assert s1["fonte_estacao"] == "ana"
+    assert not pd.isna(s1["chuva_24h"])
+    assert s1["chuva_24h"] == pytest.approx(48.0)
