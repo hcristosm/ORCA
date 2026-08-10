@@ -168,6 +168,16 @@ artefato do GitHub Actions.
   não é atualizado minuto a minuto; a "chuva acumulada" mostrada no dashboard
   é sempre relativa à leitura mais recente **disponível**, não necessariamente
   a "agora". O próprio dashboard mostra essa data de referência.
+- **A ingestão do INMET é incremental, não por data no servidor.** O INMET só
+  oferece o ZIP anual completo — não há como baixar só um intervalo de datas
+  do servidor (confirmado por `HEAD` real: `Range`/`ETag` suportados, mas
+  cada estação tem um único arquivo cobrindo o ano inteiro). A partir da
+  segunda execução, o download pula quando o ZIP não mudou (GET condicional)
+  e o reprocessamento local pula estações sem mudança via CRC32, mesclando
+  só os últimos 7 dias das que mudaram (janela de retificação). Retificações
+  do INMET fora dessa janela de 7 dias não são recapturadas — ver
+  `src/ingest/inmet.py` e
+  [o spec da ingestão incremental](docs/superpowers/specs/2026-08-09-ingestao-inmet-incremental-design.md).
 - **Densidade de estações é baixa.** SP tem 40 estações automáticas do INMET
   para 904 setores de risco; a distância média até a estação mais próxima
   fica em torno de 26km (máximo observado: ~74km). Chuva muito localizada
@@ -189,14 +199,16 @@ artefato do GitHub Actions.
 pytest
 ```
 
-36 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
-retry com backoff e fallback para cache local; parsing do CSV do INMET e
-leitura de estação dentro do ZIP anual; parsing do XML/SOAP da ANA, retry em
-HTTP 429 e o filtro de estações sem dado recente; a lógica de cruzamento
-espacial (estação mais próxima, incluindo o pareamento combinado INMET+ANA
-com desempate por recência) e temporal (chuva acumulada 24h/72h); e as
-funções auxiliares do dashboard. Toda chamada de rede é mockada, então a
-suíte roda sem internet.
+50 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
+retry com backoff e fallback para cache local; parsing do CSV do INMET,
+leitura de estação dentro do ZIP anual, GET condicional do ZIP (ETag/304) e
+a ingestão incremental por CRC32 (estação sem mudança pulada, estação
+mudada mesclada, retificação dentro da janela de 7 dias); parsing do
+XML/SOAP da ANA, retry em HTTP 429 e o filtro de estações sem dado recente;
+a lógica de cruzamento espacial (estação mais próxima, incluindo o
+pareamento combinado INMET+ANA com desempate por recência) e temporal
+(chuva acumulada 24h/72h); e as funções auxiliares do dashboard. Toda
+chamada de rede é mockada, então a suíte roda sem internet.
 
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda essa suíte a cada push e
 pull request, separado do cron diário de atualização de dados.
@@ -236,8 +248,6 @@ estação a menos de 500m de diferença de distância. →
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
   reescrever o pipeline de ingestão.
 - Cobrir mais UFs além de SP.
-- Persistir o histórico de chuva incrementalmente (hoje cada ingestão baixa o
-  ano inteiro de novo).
 
 ## Licença
 
