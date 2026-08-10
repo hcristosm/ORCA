@@ -14,6 +14,7 @@ from src.ingest.inmet import (
     _salvar_manifesto,
     baixar_zip_ano_condicional,
     fetch_estacoes,
+    ingerir_uf,
     ler_serie_estacao,
 )
 
@@ -38,6 +39,43 @@ def _zip_com_estacao(tmp_path: Path, nome_arquivo: str, conteudo: bytes) -> Path
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr(nome_arquivo, conteudo)
     return zip_path
+
+
+def _csv_estacao(codigo: str, leituras: list[tuple[str, str, str]]) -> bytes:
+    """Monta um CSV horário do INMET com as linhas de dado informadas (data, hora 'HHMM', precip)."""
+    linhas_dados = "".join(f"{data};{hora} UTC;{precip};999\r\n" for data, hora, precip in leituras)
+    return (
+        "REGIAO:;SE\r\nUF:;SP\r\nESTACAO:;TESTE\r\n"
+        f"CODIGO (WMO):;{codigo}\r\nLATITUDE:;-23,5\r\nLONGITUDE:;-46,6\r\n"
+        "ALTITUDE:;800\r\nDATA DE FUNDACAO:;01/01/00\r\n"
+        "Data;Hora UTC;PRECIPITACAO TOTAL, HORARIO (mm);OUTRA COLUNA\r\n"
+        f"{linhas_dados}"
+    ).encode("latin-1")
+
+
+def _bytes_zip(conteudos: dict[str, bytes]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for nome, conteudo in conteudos.items():
+            zf.writestr(nome, conteudo)
+    return buf.getvalue()
+
+
+def _mock_estacoes(*codigos: str) -> list[dict]:
+    return [
+        {
+            "CD_ESTACAO": codigo, "DC_NOME": f"ESTACAO {codigo}", "SG_ESTADO": "SP",
+            "VL_LATITUDE": "-23.5", "VL_LONGITUDE": "-46.6", "CD_SITUACAO": "Operante",
+        }
+        for codigo in codigos
+    ]
+
+
+_NOME_ZIP_URL = "https://portal.inmet.gov.br/uploads/dadoshistoricos/2026.zip"
+
+
+def _nome_no_zip(codigo: str) -> str:
+    return f"INMET_SE_SP_{codigo}_ESTACAO {codigo}_01-01-2026_A_09-08-2026.CSV"
 
 
 def test_parse_csv_estacao_le_datas_e_chuva():
@@ -191,3 +229,81 @@ def test_manifesto_carregar_arquivo_inexistente_retorna_vazio(tmp_path: Path):
     caminho = tmp_path / "nao_existe.json"
 
     assert _carregar_manifesto(caminho) == {"etag_zip": None, "estacoes": {}}
+
+
+@responses.activate
+def test_ingerir_uf_primeira_execucao_processa_todas_as_estacoes(tmp_path: Path):
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    zip_v1 = _bytes_zip({
+        _nome_no_zip("A701"): _csv_estacao("A701", [
+            ("2026/08/01", "0000", "1,0"),
+            ("2026/08/01", "0100", "2,0"),
+        ]),
+    })
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v1, status=200, headers={"ETag": '"v1"'})
+
+    resultado = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+
+    assert len(resultado) == 2
+    assert set(resultado["codigo_estacao"]) == {"A701"}
+
+
+@responses.activate
+def test_ingerir_uf_segunda_execucao_pula_estacao_sem_mudanca_e_mescla_a_que_mudou(
+    tmp_path: Path, monkeypatch
+):
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701", "B002"), status=200)
+    csv_a701 = _csv_estacao("A701", [("2026/08/01", "0000", "1,0"), ("2026/08/01", "0100", "2,0")])
+    csv_b002_v1 = _csv_estacao("B002", [("2026/08/01", "0000", "5,0")])
+    zip_v1 = _bytes_zip({_nome_no_zip("A701"): csv_a701, _nome_no_zip("B002"): csv_b002_v1})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v1, status=200, headers={"ETag": '"v1"'})
+
+    primeira = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+    assert len(primeira) == 3
+
+    responses.reset()
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701", "B002"), status=200)
+    csv_b002_v2 = _csv_estacao(
+        "B002", [("2026/08/01", "0000", "5,0"), ("2026/08/01", "0200", "7,0")]
+    )
+    zip_v2 = _bytes_zip({_nome_no_zip("A701"): csv_a701, _nome_no_zip("B002"): csv_b002_v2})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v2, status=200, headers={"ETag": '"v2"'})
+
+    chamadas_a701 = []
+    original_ler_serie = ler_serie_estacao
+
+    def _espiao(zip_path, uf, codigo):
+        if codigo == "A701":
+            chamadas_a701.append(codigo)
+        return original_ler_serie(zip_path, uf, codigo)
+
+    monkeypatch.setattr("src.ingest.inmet.ler_serie_estacao", _espiao)
+
+    segunda = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+
+    assert chamadas_a701 == []
+    assert len(segunda[segunda["codigo_estacao"] == "A701"]) == 2
+    assert len(segunda[segunda["codigo_estacao"] == "B002"]) == 2
+
+
+@responses.activate
+def test_ingerir_uf_retificacao_dentro_da_janela_usa_valor_mais_novo(tmp_path: Path):
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    csv_v1 = _csv_estacao("A701", [("2026/08/01", "0000", "1,0")])
+    zip_v1 = _bytes_zip({_nome_no_zip("A701"): csv_v1})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v1, status=200, headers={"ETag": '"v1"'})
+
+    primeira = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+    assert primeira[primeira["codigo_estacao"] == "A701"]["chuva_mm"].iloc[0] == 1.0
+
+    responses.reset()
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    csv_v2 = _csv_estacao("A701", [("2026/08/01", "0000", "9,9")])
+    zip_v2 = _bytes_zip({_nome_no_zip("A701"): csv_v2})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v2, status=200, headers={"ETag": '"v2"'})
+
+    segunda = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+
+    linha = segunda[segunda["codigo_estacao"] == "A701"]
+    assert len(linha) == 1
+    assert linha["chuva_mm"].iloc[0] == 9.9
