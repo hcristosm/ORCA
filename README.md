@@ -219,7 +219,7 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
 pytest
 ```
 
-Testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
+56 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
 retry com backoff e fallback para cache local; parsing do CSV do INMET,
 leitura de estação dentro do ZIP anual, GET condicional do ZIP (ETag/304) e
 a ingestão incremental por CRC32 (estação sem mudança pulada, estação

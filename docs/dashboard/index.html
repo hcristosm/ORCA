@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORCA — Dashboard</title>
+<meta name="description" content="Setores de risco geológico (CPRM/SGB) cruzados com chuva recente (INMET/ANA).">
+
+<link rel="stylesheet" href="../_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/fonts.css">
+<link rel="stylesheet" href="../_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/colors.css">
+<link rel="stylesheet" href="../_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/typography.css">
+<link rel="stylesheet" href="../_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/spacing.css">
+<link rel="stylesheet" href="../_ds/orca-design-system-bf9362b3-9980-4c1d-89f3-7fec7210fced/tokens/shape.css">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--surface-page); color: var(--text-body); font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased; display: flex; flex-direction: column;
+  }
+  a { color: var(--accent); }
+
+  /* ── Barra superior de filtros ─────────────────────────────────────── */
+  header.filtros {
+    position: sticky; top: 0; z-index: 40; display: flex; flex-wrap: wrap;
+    align-items: center; gap: var(--space-6); padding: var(--space-3) var(--space-6);
+    background: var(--surface-page); border-bottom: var(--border-hairline) solid var(--line-1);
+  }
+  header.filtros .marca { display: flex; align-items: baseline; gap: var(--space-2); margin-right: auto; }
+  header.filtros .marca b { font-size: var(--text-h3); font-weight: var(--weight-bold); letter-spacing: var(--tracking-tight); }
+  header.filtros .marca span { font-size: var(--text-caption); color: var(--text-caption); font-style: italic; }
+  .campo { display: flex; flex-direction: column; gap: var(--space-1); }
+  .campo label { font-size: var(--text-micro); color: var(--text-muted); text-transform: uppercase; letter-spacing: var(--tracking-wide); }
+  select, input[type="range"] {
+    font-family: var(--font-ui); font-size: var(--text-label); color: var(--text-body);
+    background: var(--surface-input); border: var(--border-hairline) solid var(--border-input);
+    border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); height: var(--control-height);
+  }
+  .toggle-janela { display: flex; border: var(--border-hairline) solid var(--border-input); border-radius: var(--radius-md); overflow: hidden; height: var(--control-height); }
+  .toggle-janela button {
+    font-family: var(--font-ui); font-size: var(--text-label); border: none; background: var(--surface-input);
+    color: var(--text-body); padding: 0 var(--space-4); cursor: pointer;
+  }
+  .toggle-janela button.ativo { background: var(--accent); color: var(--text-on-dark); }
+  .campo-limiar { min-width: 220px; }
+  .campo-limiar .valor { font-family: var(--font-mono); font-size: var(--text-label); color: var(--accent); }
+
+  /* ── Conteúdo ─────────────────────────────────────────────────────── */
+  main { flex: 1; padding: var(--space-6); max-width: var(--content-max); width: 100%; margin: 0 auto; }
+
+  .selo {
+    font-size: var(--text-caption); color: var(--text-caption); margin-bottom: var(--space-4);
+  }
+  .selo b { color: var(--text-muted); font-weight: var(--weight-medium); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6); }
+  .card {
+    background: var(--surface-card); border: var(--border-hairline) solid var(--border-card);
+    border-radius: var(--radius-lg); padding: var(--space-4);
+  }
+  .card .rotulo { font-size: var(--text-caption); color: var(--text-caption); }
+  .card .valor { font-family: var(--font-mono); font-size: var(--text-h2); font-weight: var(--weight-semibold); color: var(--text-title); margin-top: var(--space-1); }
+
+  #mapa {
+    height: var(--map-height); border: var(--border-hairline) solid var(--border-card);
+    border-radius: var(--radius-lg); margin-bottom: var(--space-6);
+  }
+  .legenda {
+    background: var(--surface-card); padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-legend); font-size: var(--text-caption); line-height: var(--leading-normal);
+  }
+  .legenda .amostra { display: inline-block; width: 11px; height: 11px; margin-right: var(--space-1); vertical-align: middle; }
+
+  .painel-inferior { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: flex-start; }
+  .painel-inferior > div { flex: 1 1 380px; min-width: 0; }
+  h2 { font-size: var(--text-h3); font-weight: var(--weight-semibold); color: var(--text-title); margin: 0 0 var(--space-3); }
+
+  table { width: 100%; border-collapse: collapse; font-size: var(--text-label); }
+  thead th {
+    text-align: left; font-weight: var(--weight-medium); color: var(--text-muted);
+    background: var(--surface-table-head); padding: var(--space-2) var(--space-3);
+    border-bottom: var(--border-hairline) solid var(--border-table); position: sticky; top: 0;
+  }
+  tbody td { padding: var(--space-2) var(--space-3); border-bottom: var(--border-hairline) solid var(--line-1); }
+  tbody tr:hover { background: var(--surface-sidebar); }
+  .tabela-scroll { max-height: 360px; overflow-y: auto; border: var(--border-hairline) solid var(--border-card); border-radius: var(--radius-lg); }
+  .vazio { padding: var(--space-6); text-align: center; color: var(--text-muted); font-size: var(--text-label); }
+
+  .grafico-cabecalho { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
+  #estacaoSelect { max-width: 260px; }
+
+  footer { padding: var(--space-6); text-align: center; font-size: var(--text-caption); color: var(--text-caption); border-top: var(--border-hairline) solid var(--line-1); }
+</style>
+</head>
+<body>
+
+<header class="filtros">
+  <div class="marca"><b>ORCA</b><span>risco geológico × chuva</span></div>
+
+  <div class="campo">
+    <label for="municipioSelect">Município</label>
+    <select id="municipioSelect"><option value="">Todos</option></select>
+  </div>
+
+  <div class="campo">
+    <label>Janela de chuva acumulada</label>
+    <div class="toggle-janela" id="janelaToggle">
+      <button data-janela="24">24h</button>
+      <button data-janela="72" class="ativo">72h</button>
+    </div>
+  </div>
+
+  <div class="campo campo-limiar">
+    <label>Limiar de atenção — <span class="valor" id="limiarValor">100</span>mm</label>
+    <input type="range" id="limiarSlider" min="0" max="300" step="5" value="100">
+  </div>
+</header>
+
+<main>
+  <p class="selo" id="selo">Carregando dados…</p>
+
+  <div class="cards" id="cards"></div>
+
+  <div id="mapa"></div>
+
+  <div class="painel-inferior">
+    <div>
+      <h2 id="tituloTabela">Setores em atenção</h2>
+      <div class="tabela-scroll">
+        <table>
+          <thead>
+            <tr><th>Município</th><th>Setor</th><th>Grau</th><th>Chuva (mm)</th><th>Fonte</th></tr>
+          </thead>
+          <tbody id="tabelaCorpo"></tbody>
+        </table>
+        <div class="vazio" id="tabelaVazia" hidden>Nenhum setor ultrapassa o limiar configurado.</div>
+      </div>
+    </div>
+    <div>
+      <div class="grafico-cabecalho">
+        <h2>Série temporal de chuva</h2>
+        <select id="estacaoSelect"></select>
+      </div>
+      <canvas id="grafico" height="220"></canvas>
+    </div>
+  </div>
+</main>
+
+<footer>
+  ORCA — dados públicos da CPRM/SGB, INMET e ANA. Site estático, atualizado
+  diariamente. <a href="../index.html">Sobre o projeto</a> ·
+  <a href="https://github.com/hcristosm/ORCA">GitHub</a>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  const UF = "sp";
+  const CORES_GRAU = { "alto": "#ec835a", "muito alto": "#d03b3b" };
+  const COR_PADRAO = "#9a9a94";
+  const COR_ATENCAO = "#1a1a19";
+
+  const estado = { janela: 72, limiar: 100, municipio: "" };
+  let setoresGeoJSON = null;
+  let series = {};
+  let camadaSetores = null;
+  let mapa = null;
+  let grafico = null;
+
+  async function carregarDados() {
+    const [setoresResp, seriesResp, metaResp] = await Promise.all([
+      fetch(`data/setores_${UF}.geojson`),
+      fetch(`data/series_${UF}.json`),
+      fetch(`data/meta_${UF}.json`),
+    ]);
+    if (!setoresResp.ok || !seriesResp.ok || !metaResp.ok) {
+      document.getElementById("selo").textContent =
+        "Não foi possível carregar os dados. Rode `python -m src.cli exportar-dashboard --uf SP` primeiro.";
+      return;
+    }
+    setoresGeoJSON = await setoresResp.json();
+    series = await seriesResp.json();
+    const meta = await metaResp.json();
+
+    document.getElementById("selo").innerHTML =
+      `<b>Referência da chuva:</b> ${formatarData(meta.referencia)} · ` +
+      `<b>Dados gerados em:</b> ${formatarData(meta.gerado_em)} · ` +
+      `${meta.total_estacoes_inmet} estações INMET, ${meta.total_estacoes_ana} estações ANA`;
+
+    popularMunicipios();
+    popularEstacoes();
+    inicializarMapa();
+    renderizarTudo();
+  }
+
+  function formatarData(iso) {
+    try {
+      return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "UTC" }) + " UTC";
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  function popularMunicipios() {
+    const select = document.getElementById("municipioSelect");
+    const municipios = Array.from(new Set(setoresGeoJSON.features.map(f => f.properties.munic))).sort();
+    for (const m of municipios) {
+      const opt = document.createElement("option");
+      opt.value = m; opt.textContent = m;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", () => { estado.municipio = select.value; renderizarTudo(); });
+  }
+
+  function popularEstacoes() {
+    const select = document.getElementById("estacaoSelect");
+    const codigos = Object.keys(series).sort((a, b) => (series[a].nome || "").localeCompare(series[b].nome || ""));
+    for (const codigo of codigos) {
+      const opt = document.createElement("option");
+      opt.value = codigo;
+      opt.textContent = `${series[codigo].nome} (${codigo}) — ${series[codigo].fonte.toUpperCase()}`;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", () => renderizarGrafico(select.value));
+    if (codigos.length) renderizarGrafico(codigos[0]);
+  }
+
+  function inicializarMapa() {
+    mapa = L.map("mapa");
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      attribution: "© OpenStreetMap, © CARTO", maxZoom: 19,
+    }).addTo(mapa);
+
+    const legenda = L.control({ position: "bottomleft" });
+    legenda.onAdd = function () {
+      const div = L.DomUtil.create("div", "legenda");
+      div.innerHTML =
+        '<b>Grau de risco</b><br>' +
+        '<span class="amostra" style="background:' + CORES_GRAU["alto"] + '"></span>Alto<br>' +
+        '<span class="amostra" style="background:' + CORES_GRAU["muito alto"] + '"></span>Muito alto<br>' +
+        '<span style="border:2px solid ' + COR_ATENCAO + ';padding:0 4px">Em atenção</span>';
+      return div;
+    };
+    legenda.addTo(mapa);
+  }
+
+  function setoresFiltrados() {
+    const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+    return setoresGeoJSON.features.filter(f =>
+      !estado.municipio || f.properties.munic === estado.municipio
+    ).map(f => ({ f, chuva: f.properties[campo] }));
+  }
+
+  function renderizarTudo() {
+    const filtrados = setoresFiltrados();
+    const emAtencao = filtrados.filter(r => typeof r.chuva === "number" && r.chuva >= estado.limiar);
+
+    renderizarCards(filtrados, emAtencao);
+    renderizarMapa(filtrados, emAtencao);
+    renderizarTabela(emAtencao);
+  }
+
+  function renderizarCards(filtrados, emAtencao) {
+    const grauAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "alto").length;
+    const grauMuitoAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "muito alto").length;
+    const cards = [
+      { rotulo: "Setores no recorte", valor: filtrados.length },
+      { rotulo: "Grau alto", valor: grauAlto },
+      { rotulo: "Grau muito alto", valor: grauMuitoAlto },
+      { rotulo: `Em atenção (≥ ${estado.limiar}mm)`, valor: emAtencao.length },
+    ];
+    document.getElementById("cards").innerHTML = cards.map(c =>
+      `<div class="card"><div class="rotulo">${c.rotulo}</div><div class="valor">${c.valor}</div></div>`
+    ).join("");
+  }
+
+  function corPorGrau(grau) {
+    return CORES_GRAU[(grau || "").toLowerCase()] || COR_PADRAO;
+  }
+
+  function renderizarMapa(filtrados, emAtencao) {
+    const codigosAtencao = new Set(emAtencao.map(r => r.f.properties.num_setor));
+    const colecao = { type: "FeatureCollection", features: filtrados.map(r => r.f) };
+
+    if (camadaSetores) mapa.removeLayer(camadaSetores);
+    camadaSetores = L.geoJSON(colecao, {
+      style: feature => {
+        const emAtencaoAgora = codigosAtencao.has(feature.properties.num_setor);
+        const cor = corPorGrau(feature.properties.grau_risco);
+        return {
+          fillColor: cor, fillOpacity: 0.75,
+          color: emAtencaoAgora ? COR_ATENCAO : cor,
+          weight: emAtencaoAgora ? 3 : 1,
+        };
+      },
+      onEachFeature: (feature, layer) => {
+        const p = feature.properties;
+        const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+        const chuva = typeof p[campo] === "number" ? p[campo].toFixed(1) : "—";
+        layer.bindTooltip(
+          `<b>${p.munic}</b><br>Setor: ${p.num_setor}<br>Grau: ${p.grau_risco}<br>` +
+          `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
+          `(${(p.fonte_estacao || "—").toUpperCase()})<br>Chuva ${estado.janela}h: ${chuva}mm`
+        );
+      },
+    }).addTo(mapa);
+
+    if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [20, 20] });
+  }
+
+  function renderizarTabela(emAtencao) {
+    const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+    const ordenado = emAtencao.slice().sort((a, b) => (b.chuva || 0) - (a.chuva || 0));
+    const corpo = document.getElementById("tabelaCorpo");
+    const vazio = document.getElementById("tabelaVazia");
+
+    if (!ordenado.length) {
+      corpo.innerHTML = "";
+      vazio.hidden = false;
+      return;
+    }
+    vazio.hidden = true;
+    corpo.innerHTML = ordenado.map(r => {
+      const p = r.f.properties;
+      return `<tr><td>${p.munic}</td><td>${p.num_setor}</td><td>${p.grau_risco}</td>` +
+        `<td>${(p[campo] || 0).toFixed(1)}</td><td>${(p.fonte_estacao || "—").toUpperCase()}</td></tr>`;
+    }).join("");
+  }
+
+  function renderizarGrafico(codigoEstacao) {
+    const dados = series[codigoEstacao];
+    if (!dados) return;
+    const ctx = document.getElementById("grafico").getContext("2d");
+    const labels = dados.serie.map(p => new Date(p[0]).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", timeZone: "UTC" }));
+    const valores = dados.serie.map(p => p[1]);
+
+    if (grafico) grafico.destroy();
+    grafico = new Chart(ctx, {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Chuva (mm)", data: valores, backgroundColor: "#256abf" }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } },
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+
+  document.getElementById("janelaToggle").addEventListener("click", ev => {
+    const btn = ev.target.closest("button[data-janela]");
+    if (!btn) return;
+    estado.janela = Number(btn.dataset.janela);
+    document.querySelectorAll("#janelaToggle button").forEach(b => b.classList.toggle("ativo", b === btn));
+    renderizarTudo();
+  });
+
+  document.getElementById("limiarSlider").addEventListener("input", ev => {
+    estado.limiar = Number(ev.target.value);
+    document.getElementById("limiarValor").textContent = estado.limiar;
+    renderizarTudo();
+  });
+
+  carregarDados();
+})();
+</script>
+</body>
+</html>

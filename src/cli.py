@@ -13,7 +13,8 @@ from pathlib import Path
 
 import typer
 
-from src.config import DATA_DIR, caminho_setores
+from src.config import DASHBOARD_DATA_DIR, DATA_DIR, caminho_setores
+from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
 from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
 from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
 from src.ingest.ana import ANAFetchError, ingerir_uf as ingerir_ana
@@ -61,6 +62,26 @@ def ingest_ana(
     typer.echo(f"{len(df)} leituras da ANA salvas em {diretorio}/chuva_ana_{uf.lower()}.csv")
 
 
+@app.command("exportar-dashboard")
+def exportar_dashboard_cmd(
+    uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
+    ano: int = typer.Option(
+        datetime.now(timezone.utc).year, "--ano", help="Ano dos dados do INMET a exportar"
+    ),
+    diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
+    saida: Path = typer.Option(
+        None, "--saida", help="Diretório de saída (padrão: docs/dashboard/data/)"
+    ),
+) -> None:
+    """Pré-computa o cruzamento e gera os arquivos estáticos do dashboard (GeoJSON/JSON)."""
+    saida_dir = saida or DASHBOARD_DATA_DIR
+    meta = exportar_dashboard(uf, ano, diretorio, saida_dir)
+    typer.echo(
+        f"{meta['total_setores']} setores exportados para {saida_dir} "
+        f"({meta['total_estacoes_inmet']} estações INMET, {meta['total_estacoes_ana']} estações ANA)"
+    )
+
+
 @app.command()
 def atualizar(
     uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
@@ -98,7 +119,15 @@ def atualizar(
         typer.echo(f"  FALHA na ANA: {exc}", err=True)
         falhas.append("ana")
 
-    falhas_criticas = [f for f in falhas if f != "ana"]
+    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando dados do dashboard ({uf_norm})...")
+    try:
+        meta = exportar_dashboard(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR)
+        typer.echo(f"  {meta['total_setores']} setores exportados para {DASHBOARD_DATA_DIR}.")
+    except (ExportacaoDashboardError, ValueError) as exc:
+        typer.echo(f"  FALHA na exportação do dashboard: {exc}", err=True)
+        falhas.append("dashboard")
+
+    falhas_criticas = [f for f in falhas if f not in ("ana", "dashboard")]
 
     marcador = DATA_DIR / "ultima_atualizacao.txt"
     marcador.write_text(
