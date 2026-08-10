@@ -66,26 +66,30 @@ def ingest_ana(
 def exportar_dashboard_cmd(
     uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
     ano: int = typer.Option(
-        datetime.now(timezone.utc).year, "--ano", help="Ano dos dados do INMET a exportar"
+        datetime.now(timezone.utc).year, "--ano", help="Ano dos dados do INMET a exportar (só usado com --fonte inmet)"
+    ),
+    fonte: str = typer.Option(
+        "openmeteo", "--fonte",
+        help="Fonte de chuva: 'openmeteo' (consulta direta por setor) ou 'inmet' (estação mais próxima, INMET+ANA)",
     ),
     diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
     saida: Path = typer.Option(
         None, "--saida", help="Diretório de saída (padrão: docs/dashboard/data/)"
     ),
 ) -> None:
-    """Pré-computa o cruzamento e gera os arquivos estáticos do dashboard (GeoJSON/JSON)."""
+    """Pré-computa a chuva por setor e gera os arquivos estáticos do dashboard (GeoJSON/JSON)."""
     saida_dir = saida or DASHBOARD_DATA_DIR
-    meta = exportar_dashboard(uf, ano, diretorio, saida_dir)
-    typer.echo(
-        f"{meta['total_setores']} setores exportados para {saida_dir} "
-        f"({meta['total_estacoes_inmet']} estações INMET, {meta['total_estacoes_ana']} estações ANA)"
-    )
+    meta = exportar_dashboard(uf, ano, diretorio, saida_dir, fonte=fonte)
+    typer.echo(f"{meta['total_setores']} setores exportados para {saida_dir} (fonte: {meta['fonte']})")
 
 
 @app.command()
 def atualizar(
     uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
     ano: int = typer.Option(..., "--ano", help="Ano dos dados históricos do INMET"),
+    fonte: str = typer.Option(
+        "openmeteo", "--fonte", help="Fonte de chuva do dashboard exportado: 'openmeteo' ou 'inmet'"
+    ),
 ) -> None:
     """Atualiza os dados locais de setores de risco (CPRM/SGB) e chuva (INMET e, como fonte complementar, ANA).
 
@@ -119,9 +123,9 @@ def atualizar(
         typer.echo(f"  FALHA na ANA: {exc}", err=True)
         falhas.append("ana")
 
-    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando dados do dashboard ({uf_norm})...")
+    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando dados do dashboard ({uf_norm}, fonte={fonte})...")
     try:
-        meta = exportar_dashboard(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR)
+        meta = exportar_dashboard(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR, fonte=fonte)
         typer.echo(f"  {meta['total_setores']} setores exportados para {DASHBOARD_DATA_DIR}.")
     except (ExportacaoDashboardError, ValueError) as exc:
         typer.echo(f"  FALHA na exportação do dashboard: {exc}", err=True)
