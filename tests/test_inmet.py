@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 import responses
+from responses import matchers
 
 from src.ingest.inmet import (
     ESTACOES_URL,
@@ -307,3 +308,92 @@ def test_ingerir_uf_retificacao_dentro_da_janela_usa_valor_mais_novo(tmp_path: P
     linha = segunda[segunda["codigo_estacao"] == "A701"]
     assert len(linha) == 1
     assert linha["chuva_mm"].iloc[0] == 9.9
+
+
+@responses.activate
+def test_ingerir_uf_preserva_linhas_fora_da_janela_de_retificacao(tmp_path: Path):
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    csv_v1 = _csv_estacao("A701", [
+        ("2026/07/01", "0000", "1,0"),
+        ("2026/08/01", "0000", "2,0"),
+    ])
+    zip_v1 = _bytes_zip({_nome_no_zip("A701"): csv_v1})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v1, status=200, headers={"ETag": '"v1"'})
+
+    primeira = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+    assert len(primeira) == 2
+
+    responses.reset()
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    # v2 "retifica" a linha de 07/01 (fora da janela de 7 dias a partir de 08/01) e soma uma nova em 08/02
+    csv_v2 = _csv_estacao("A701", [
+        ("2026/07/01", "0000", "999,9"),
+        ("2026/08/01", "0000", "2,0"),
+        ("2026/08/02", "0000", "3,0"),
+    ])
+    zip_v2 = _bytes_zip({_nome_no_zip("A701"): csv_v2})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v2, status=200, headers={"ETag": '"v2"'})
+
+    segunda = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+
+    assert len(segunda) == 3
+    linha_antiga = segunda[segunda["data_hora"] == segunda["data_hora"].min()]
+    assert linha_antiga["chuva_mm"].iloc[0] == 1.0  # fora da janela: não foi "retificada"
+
+
+@responses.activate
+def test_ingerir_uf_reaproveita_zip_em_304(tmp_path: Path):
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    csv_v1 = _csv_estacao("A701", [("2026/08/01", "0000", "1,0")])
+    zip_v1 = _bytes_zip({_nome_no_zip("A701"): csv_v1})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v1, status=200, headers={"ETag": '"v1"'})
+
+    ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+
+    responses.reset()
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    responses.add(responses.GET, _NOME_ZIP_URL, status=304)
+
+    segunda = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+
+    assert len(segunda) == 1
+    assert segunda["chuva_mm"].iloc[0] == 1.0
+
+
+@responses.activate
+def test_ingerir_uf_ignora_estacao_sem_leituras_validas(tmp_path: Path):
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701", "VAZIA"), status=200)
+    csv_a701 = _csv_estacao("A701", [("2026/08/01", "0000", "1,0")])
+    csv_vazia = _csv_estacao("VAZIA", [])
+    zip_v1 = _bytes_zip({_nome_no_zip("A701"): csv_a701, _nome_no_zip("VAZIA"): csv_vazia})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v1, status=200, headers={"ETag": '"v1"'})
+
+    resultado = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+
+    assert set(resultado["codigo_estacao"]) == {"A701"}
+
+
+@responses.activate
+def test_ingerir_uf_baixa_zip_de_novo_se_cache_local_sumiu(tmp_path: Path):
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    csv_v1 = _csv_estacao("A701", [("2026/08/01", "0000", "1,0")])
+    zip_v1 = _bytes_zip({_nome_no_zip("A701"): csv_v1})
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v1, status=200, headers={"ETag": '"v1"'})
+
+    ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+    (tmp_path / "inmet_2026.zip").unlink()
+
+    responses.reset()
+    responses.add(responses.GET, ESTACOES_URL, json=_mock_estacoes("A701"), status=200)
+    # Se o código (incorretamente) mandasse If-None-Match mesmo sem o ZIP local, cairia aqui e quebraria.
+    responses.add(
+        responses.GET, _NOME_ZIP_URL,
+        status=304,
+        match=[matchers.header_matcher({"If-None-Match": '"v1"'})],
+    )
+    # Sem o cache local, o código correto não manda If-None-Match e cai aqui, recebendo o ZIP de novo.
+    responses.add(responses.GET, _NOME_ZIP_URL, body=zip_v1, status=200, headers={"ETag": '"v1"'})
+
+    segunda = ingerir_uf("SP", 2026, tmp_path, max_retries=1)
+
+    assert len(segunda) == 1
