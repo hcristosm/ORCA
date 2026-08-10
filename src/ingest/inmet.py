@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
 import time
 import zipfile
@@ -34,8 +35,8 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from src.config import caminho_chuva, caminho_zip_inmet
-from src.storage import salvar_chuva
+from src.config import caminho_chuva, caminho_manifesto_inmet, caminho_zip_inmet
+from src.storage import ler_chuva, salvar_chuva
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +73,14 @@ def _get_com_retry(
     timeout: float,
     max_retries: int,
     backoff_factor: float,
+    headers_extra: dict[str, str] | None = None,
     **kwargs,
 ) -> requests.Response:
+    headers = {**_HEADERS, **(headers_extra or {})}
     last_exc: Exception | None = None
     for tentativa in range(1, max_retries + 1):
         try:
-            resp = session.get(url, headers=_HEADERS, timeout=timeout, **kwargs)
+            resp = session.get(url, headers=headers, timeout=timeout, **kwargs)
             resp.raise_for_status()
             return resp
         except requests.RequestException as exc:
@@ -123,32 +126,60 @@ def fetch_estacoes(
     return estacoes
 
 
-def baixar_zip_ano(
+def baixar_zip_ano_condicional(
     ano: int,
     destino: Path,
+    etag_anterior: str | None,
     timeout: float = 120.0,
     max_retries: int = 3,
     backoff_factor: float = 2.0,
     session: requests.Session | None = None,
-) -> Path:
-    """Baixa (ou reaproveita do cache local) o ZIP anual de dados históricos do INMET."""
+) -> tuple[Path, str | None]:
+    """Baixa o ZIP anual do INMET com GET condicional (`If-None-Match`).
+
+    O ZIP anual do INMET não permite baixar só um intervalo de datas: cada
+    estação tem um único arquivo cobrindo o ano inteiro, sem granularidade
+    por dia ou mês no lado do servidor (não há como pedir só "os últimos N
+    dias" de uma estação). O GET condicional aqui só evita retransferir os
+    mesmos ~55MB quando o arquivo não mudou nada desde a última execução
+    (`etag_anterior` bate com o ETag atual do servidor, HTTP 304); não
+    reduz o tamanho do download quando o arquivo de fato mudou, que é o
+    caso normal do cron diário. A otimização real de reprocessamento vem do
+    CRC32 por estação (ver `_crc32_estacao`), não de baixar menos bytes.
+
+    Retorna o caminho do ZIP e o ETag atual (pode ser `None` se o servidor
+    não enviar um, ou se a fonte remota falhar e um ZIP em cache local for
+    reaproveitado).
+    """
     sess = session or requests.Session()
     url = ZIP_URL_TEMPLATE.format(ano=ano)
+    headers_extra = {"If-None-Match": etag_anterior} if etag_anterior else None
 
     try:
-        resp = _get_com_retry(url, sess, timeout, max_retries, backoff_factor, stream=True)
-        destino.parent.mkdir(parents=True, exist_ok=True)
-        with open(destino, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                f.write(chunk)
-        return destino
+        resp = _get_com_retry(
+            url, sess, timeout, max_retries, backoff_factor,
+            headers_extra=headers_extra, stream=True,
+        )
     except INMETFetchError:
         if destino.exists():
             logger.warning(
                 "Fonte remota do INMET indisponível; usando ZIP em cache local em %s", destino
             )
-            return destino
+            return destino, etag_anterior
         raise
+
+    if resp.status_code == 304:
+        logger.info(
+            "ZIP do INMET para %d não mudou desde a última execução (ETag igual); "
+            "reaproveitando cache local em %s.", ano, destino,
+        )
+        return destino, etag_anterior
+
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    with open(destino, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=1024 * 1024):
+            f.write(chunk)
+    return destino, resp.headers.get("ETag")
 
 
 def _nome_arquivo_estacao(uf: str, codigo: str) -> str:
@@ -181,17 +212,42 @@ def _parse_csv_estacao(conteudo: bytes) -> pd.DataFrame:
     return pd.DataFrame(registros, columns=["data_hora", "chuva_mm"]).set_index("data_hora")
 
 
+def _nome_arquivo_no_zip(zf: zipfile.ZipFile, uf: str, codigo: str) -> str:
+    alvo = _nome_arquivo_estacao(uf, codigo)
+    candidatos = [n for n in zf.namelist() if alvo in n.upper()]
+    if not candidatos:
+        raise INMETFetchError(f"Estação {uf}/{codigo} não encontrada em {zf.filename}")
+    return candidatos[0]
+
+
+def _crc32_estacao(zip_path: Path, uf: str, codigo: str) -> int | None:
+    """CRC32 da entrada da estação no ZIP, sem descompactar (None se a estação não estiver no ZIP)."""
+    with zipfile.ZipFile(zip_path) as zf:
+        try:
+            nome = _nome_arquivo_no_zip(zf, uf, codigo)
+        except INMETFetchError:
+            return None
+        return zf.getinfo(nome).CRC
+
+
 def ler_serie_estacao(zip_path: Path, uf: str, codigo: str) -> pd.DataFrame:
     """Extrai e faz o parsing da série horária de chuva de uma estação a partir do ZIP anual."""
-    alvo = _nome_arquivo_estacao(uf, codigo)
     with zipfile.ZipFile(zip_path) as zf:
-        candidatos = [n for n in zf.namelist() if alvo in n.upper()]
-        if not candidatos:
-            raise INMETFetchError(f"Estação {uf}/{codigo} não encontrada em {zip_path}")
-        with zf.open(candidatos[0]) as f:
+        nome = _nome_arquivo_no_zip(zf, uf, codigo)
+        with zf.open(nome) as f:
             conteudo = f.read()
-
     return _parse_csv_estacao(conteudo)
+
+
+def _carregar_manifesto(caminho: Path) -> dict:
+    if not caminho.exists():
+        return {"etag_zip": None, "estacoes": {}}
+    return json.loads(caminho.read_text())
+
+
+def _salvar_manifesto(caminho: Path, manifesto: dict) -> None:
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    caminho.write_text(json.dumps(manifesto, indent=2, ensure_ascii=False))
 
 
 def ingerir_uf(

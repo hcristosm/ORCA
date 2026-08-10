@@ -8,8 +8,11 @@ import responses
 from src.ingest.inmet import (
     ESTACOES_URL,
     INMETFetchError,
+    _carregar_manifesto,
+    _crc32_estacao,
     _parse_csv_estacao,
-    baixar_zip_ano,
+    _salvar_manifesto,
+    baixar_zip_ano_condicional,
     fetch_estacoes,
     ler_serie_estacao,
 )
@@ -92,23 +95,99 @@ def test_fetch_estacoes_filtra_por_uf():
 
 
 @responses.activate
-def test_baixar_zip_ano_usa_cache_quando_download_falha(tmp_path: Path):
+def test_baixar_zip_ano_condicional_baixa_e_retorna_etag(tmp_path: Path):
+    destino = tmp_path / "inmet_2026.zip"
+    responses.add(
+        responses.GET,
+        "https://portal.inmet.gov.br/uploads/dadoshistoricos/2026.zip",
+        body=b"conteudo do zip",
+        status=200,
+        headers={"ETag": '"abc123"'},
+    )
+
+    caminho, etag = baixar_zip_ano_condicional(2026, destino, etag_anterior=None)
+
+    assert caminho == destino
+    assert destino.read_bytes() == b"conteudo do zip"
+    assert etag == '"abc123"'
+
+
+@responses.activate
+def test_baixar_zip_ano_condicional_reaproveita_cache_em_304(tmp_path: Path):
+    destino = tmp_path / "inmet_2026.zip"
+    destino.write_bytes(b"conteudo em cache")
+
+    responses.add(
+        responses.GET,
+        "https://portal.inmet.gov.br/uploads/dadoshistoricos/2026.zip",
+        status=304,
+    )
+
+    caminho, etag = baixar_zip_ano_condicional(2026, destino, etag_anterior='"abc123"')
+
+    assert caminho == destino
+    assert destino.read_bytes() == b"conteudo em cache"
+    assert etag == '"abc123"'
+
+
+@responses.activate
+def test_baixar_zip_ano_condicional_usa_cache_quando_download_falha(tmp_path: Path):
     destino = tmp_path / "inmet_2026.zip"
     destino.write_bytes(b"conteudo em cache")
 
     responses.add(responses.GET, "https://portal.inmet.gov.br/uploads/dadoshistoricos/2026.zip", status=500)
 
-    resultado = baixar_zip_ano(2026, destino, max_retries=1, backoff_factor=0.01)
+    caminho, etag = baixar_zip_ano_condicional(
+        2026, destino, etag_anterior='"abc123"', max_retries=1, backoff_factor=0.01
+    )
 
-    assert resultado == destino
+    assert caminho == destino
     assert destino.read_bytes() == b"conteudo em cache"
+    assert etag == '"abc123"'
 
 
 @responses.activate
-def test_baixar_zip_ano_sem_cache_levanta_erro(tmp_path: Path):
+def test_baixar_zip_ano_condicional_sem_cache_levanta_erro(tmp_path: Path):
     destino = tmp_path / "inmet_2026.zip"
 
     responses.add(responses.GET, "https://portal.inmet.gov.br/uploads/dadoshistoricos/2026.zip", status=500)
 
     with pytest.raises(INMETFetchError):
-        baixar_zip_ano(2026, destino, max_retries=1, backoff_factor=0.01)
+        baixar_zip_ano_condicional(2026, destino, etag_anterior=None, max_retries=1, backoff_factor=0.01)
+
+
+def test_crc32_estacao_retorna_crc_sem_descompactar(tmp_path: Path):
+    nome = "INMET_SE_SP_A701_SAO PAULO - MIRANTE_01-01-2026_A_31-07-2026.CSV"
+    zip_path = _zip_com_estacao(tmp_path, nome, CSV_ESTACAO_EXEMPLO)
+
+    crc = _crc32_estacao(zip_path, "SP", "A701")
+
+    with zipfile.ZipFile(zip_path) as zf:
+        crc_esperado = zf.getinfo(zf.namelist()[0]).CRC
+    assert crc == crc_esperado
+
+
+def test_crc32_estacao_retorna_none_se_estacao_nao_existe(tmp_path: Path):
+    nome = "INMET_SE_SP_A701_SAO PAULO - MIRANTE_01-01-2026_A_31-07-2026.CSV"
+    zip_path = _zip_com_estacao(tmp_path, nome, CSV_ESTACAO_EXEMPLO)
+
+    assert _crc32_estacao(zip_path, "SP", "A999") is None
+
+
+def test_manifesto_salvar_e_carregar_round_trip(tmp_path: Path):
+    caminho = tmp_path / "inmet_manifest_sp_2026.json"
+    manifesto = {
+        "etag_zip": '"abc123"',
+        "estacoes": {"A701": {"crc32": 999, "ultima_data_hora": "2026-08-05T23:00:00+00:00"}},
+    }
+
+    _salvar_manifesto(caminho, manifesto)
+    carregado = _carregar_manifesto(caminho)
+
+    assert carregado == manifesto
+
+
+def test_manifesto_carregar_arquivo_inexistente_retorna_vazio(tmp_path: Path):
+    caminho = tmp_path / "nao_existe.json"
+
+    assert _carregar_manifesto(caminho) == {"etag_zip": None, "estacoes": {}}
