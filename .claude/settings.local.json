@@ -41,7 +41,14 @@
       "Bash(.venv/bin/python /home/lepto/claude/ORCA/scripts/atualizar_dados.py --help)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(find /tmp -iname \"*.png\" -newer /home/lepto/claude/ORCA/README.md -mmin -60 2>/dev/null | head -20 *)",
+      "Read(//home/lepto/**)",
+      "Bash(mkdir -p /home/lepto/claude/ORCA/docs/logo)",
+      "Bash(cp \"/home/lepto/Downloads/ORCA logo.png\" /home/lepto/claude/ORCA/docs/logo/orca-logo.png)",
+      "Bash(git -C /home/lepto/claude/ORCA diff --stat .claude/settings.local.json)",
+      "Bash(git -C /home/lepto/claude/ORCA log --oneline -1 -- .claude/settings.local.json)",
+      "Bash(python3 -c \"import PIL; print\\(PIL.__version__\\)\")"
     ]
   }
 }
