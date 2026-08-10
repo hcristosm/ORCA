@@ -84,3 +84,44 @@ consistente/confiável antes de integrar como fonte de verdade. Com isso, o
 pré-requisito do roadmap está atendido e a integração como fonte
 complementar ao INMET vale a pena tentar. O design da integração está em
 [`docs/superpowers/specs/2026-08-09-ingestao-ana-design.md`](superpowers/specs/2026-08-09-ingestao-ana-design.md).
+
+## Streamlit → dashboard estático
+
+O dashboard nasceu como um app Streamlit (`src/dashboard/app.py`) — a escolha
+óbvia pra prototipar rápido um mapa interativo em Python sem escrever
+frontend. Funcionalmente resolvia o problema (mapa colorido por grau de
+risco, painel de setores em atenção, série temporal por estação, filtros na
+barra lateral), mas trouxe três limitações que se acumularam:
+
+1. **Estética genérica.** O chrome padrão do Streamlit (sidebar cinza,
+   tipografia e espaçamento fixos) é difícil de customizar visualmente sem
+   sair do modelo de componentes do framework.
+2. **Layout pouco flexível.** Montar um layout mais deliberado (cards, grids,
+   posicionamento fino) dentro do sistema de colunas do Streamlit tem um teto
+   baixo.
+3. **Sem distribuição como site.** Streamlit precisa de um processo Python
+   rodando pra servir a interface — não dá pra publicar como página estática
+   (o projeto já tinha uma landing page estática em `docs/index.html` no
+   GitHub Pages, mas o dashboard real ficava de fora desse modelo).
+
+A decisão (09/08/2026) foi pré-computar o cruzamento espacial/temporal
+(`calcular_cruzamento`, já existente) como arquivos estáticos — GeoJSON dos
+setores e JSON da série temporal, recortada aos últimos 30 dias pra não
+crescer sem limite agora que o INMET acumula o ano inteiro
+(`src/export/dashboard_data.py`, novo) — e servir um dashboard em HTML/CSS/JS
+puro (`docs/dashboard/`), sem framework nem build step, reaproveitando só os
+tokens de design (cores, tipografia, espaçamento) que já existiam em
+`docs/_ds/` a partir da landing page, sem depender do runtime de componentes
+dela. Mapa com Leaflet (a mesma engine que o Folium já usava por baixo) e
+gráfico com Chart.js, ambos via CDN. Os filtros (município, janela de
+acumulado, limiar de atenção) passaram a rodar inteiramente no navegador,
+sem round-trip.
+
+Isso trocou o botão "Baixar/atualizar dados agora" (atualização sob demanda)
+por um selo de última atualização — sem processo rodando, não há o que
+baixar na hora; a atualização passou a vir do cron diário
+(`atualizar-dados.yml`), que agora também comita os dados exportados de
+volta no repositório pro GitHub Pages publicar. O dashboard Streamlit foi
+removido por completo (não manteve como alternativa local), pra não manter
+duas UIs divergindo. O design completo está em
+[`docs/superpowers/specs/2026-08-09-dashboard-estatico-design.md`](superpowers/specs/2026-08-09-dashboard-estatico-design.md).
