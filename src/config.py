@@ -42,3 +42,7 @@ def caminho_chuva_ana(uf: str, data_dir: Path = DATA_DIR) -> Path:
 
 def caminho_zip_inmet(ano: int, data_dir: Path = DATA_DIR) -> Path:
     return data_dir / f"inmet_{ano}.zip"
+
+
+def caminho_manifesto_inmet(uf: str, ano: int, data_dir: Path = DATA_DIR) -> Path:
+    return data_dir / f"inmet_manifest_{uf.lower()}_{ano}.json"
