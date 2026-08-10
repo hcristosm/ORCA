@@ -28,6 +28,13 @@ logger = logging.getLogger(__name__)
 
 JANELA_SERIE_DIAS = 30
 
+# A chuva acumulada por setor (mapa/tabela) só precisa de ~72h + folga — pedir
+# 30 dias de histórico para todos os ~900 setores de uma vez esbarrou em
+# HTTP 429 (rate limit) na Open-Meteo em testes reais (ver
+# src/ingest/openmeteo.py). O gráfico por município (bem menos pontos) ainda
+# usa JANELA_SERIE_DIAS.
+DIAS_HISTORICO_CRUZAMENTO = 4
+
 PROPRIEDADES_SETOR = [
     "num_setor", "munic", "grau_risco", "distancia_km",
     "chuva_24h", "chuva_72h", "fonte_estacao", "codigo_estacao", "nome_estacao",
@@ -76,7 +83,7 @@ def _recortar_series(chuva_df: pd.DataFrame, referencia: pd.Timestamp) -> dict:
 def _calcular_chuva_openmeteo(
     setores: gpd.GeoDataFrame,
     janelas: tuple[int, ...] = (24, 72),
-    dias_historico: int = JANELA_SERIE_DIAS,
+    dias_historico: int = DIAS_HISTORICO_CRUZAMENTO,
     agora: pd.Timestamp | None = None,
 ) -> gpd.GeoDataFrame:
     """Consulta a Open-Meteo direto no centroide de cada setor e calcula a chuva acumulada.
