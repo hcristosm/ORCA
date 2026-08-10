@@ -37,8 +37,13 @@ DIAS_HISTORICO_CRUZAMENTO = 4
 
 # Horizonte da previsão de "alerta previsto": até 3 dias (72h) à frente,
 # amostrado de 3 em 3 horas — depois desse prazo a previsão de chuva fica
-# pouco confiável pra esse tipo de sinalização antecipada.
-DIAS_PREVISAO_ALERTA = 3
+# pouco confiável pra esse tipo de sinalização antecipada. O valor abaixo é
+# 4 (não 3): a Open-Meteo entrega `forecast_days` em dias-calendário GMT
+# inteiros, não em horas a partir do instante da consulta — com 3 dias a
+# cobertura real pode cair pra ~25h dependendo da hora do dia em que a
+# exportação roda. O dia extra é folga pra garantir cobertura de 72h
+# completos independente do horário de execução.
+DIAS_PREVISAO_ALERTA = 4
 PASSO_PREVISAO_HORAS = 3
 HORIZONTE_PREVISAO_HORAS = 72
 
@@ -101,6 +106,12 @@ def _trajetoria_chuva_72h(
     futuros, já que a série da Open-Meteo já vem contínua (observado +
     previsto misturados na mesma sequência de `data_hora`).
 
+    Pontos além do último dado disponível na série (`serie["data_hora"].max()`)
+    recebem `None` em vez de um valor calculado — sem essa checagem,
+    `_chuva_acumulada` soma só a parte da janela que ainda tem dado e o
+    valor decai silenciosamente rumo a zero conforme `t` avança além do
+    horizonte real da previsão, em vez de sinalizar "sem dado aqui".
+
     Retorna `[[timestamp_iso, mm_acumulado_previsto], ...]`, do ponto
     `agora` até `agora + horizonte_horas` em passos de `passo_horas`
     (25 pontos com os valores padrão: 0h, 3h, ..., 72h).
@@ -108,10 +119,14 @@ def _trajetoria_chuva_72h(
     pontos = []
     passo = pd.Timedelta(hours=passo_horas)
     limite = agora + pd.Timedelta(hours=horizonte_horas)
+    dados_validos_ate = serie["data_hora"].max() if not serie.empty else agora
     t = agora
     while t <= limite:
-        valor = _chuva_acumulada(serie, t, 72)
-        pontos.append([t.isoformat(), None if pd.isna(valor) else round(float(valor), 2)])
+        if t > dados_validos_ate:
+            pontos.append([t.isoformat(), None])
+        else:
+            valor = _chuva_acumulada(serie, t, 72)
+            pontos.append([t.isoformat(), None if pd.isna(valor) else round(float(valor), 2)])
         t += passo
     return pontos
 
@@ -160,7 +175,7 @@ def _calcular_chuva_openmeteo(
         ]
 
     previsao = {
-        num_setor: _trajetoria_chuva_72h(serie, agora)
+        num_setor: _trajetoria_chuva_72h(serie, referencia)
         for num_setor, serie in zip(setores["num_setor"], series)
     }
 
@@ -293,7 +308,7 @@ def exportar_dashboard(
     )
     if previsao is not None:
         (saida_dir / f"previsao_{uf_norm.lower()}.json").write_text(
-            json.dumps(previsao, ensure_ascii=False, indent=2)
+            json.dumps(previsao, ensure_ascii=False, separators=(",", ":"))
         )
     (saida_dir / f"meta_{uf_norm.lower()}.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2)

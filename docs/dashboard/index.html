@@ -295,13 +295,14 @@
     return null;
   }
 
-  function calcularAlertaPrevisto(filtrados, emAtencao) {
+  function calcularAlertaPrevisto(filtrados) {
     if (!previsao) return [];
-    const jaEmAtencao = new Set(emAtencao.map(r => r.f.properties.num_setor));
     const previsto = [];
     for (const r of filtrados) {
       const numSetor = r.f.properties.num_setor;
-      if (jaEmAtencao.has(numSetor)) continue;
+      const chuva72hAtual = r.f.properties.chuva_72h;
+      const jaEmAtencao72h = typeof chuva72hAtual === "number" && chuva72hAtual >= estado.limiar;
+      if (jaEmAtencao72h) continue;
       const quando = primeiroPontoQueCruza(previsao[numSetor], estado.limiar);
       if (quando) previsto.push({ f: r.f, quando });
     }
@@ -312,7 +313,7 @@
   function renderizarTudo() {
     const filtrados = setoresFiltrados();
     const emAtencao = filtrados.filter(r => typeof r.chuva === "number" && r.chuva >= estado.limiar);
-    const alertaPrevisto = calcularAlertaPrevisto(filtrados, emAtencao);
+    const alertaPrevisto = calcularAlertaPrevisto(filtrados);
 
     renderizarCards(filtrados, emAtencao, alertaPrevisto);
     renderizarMapa(filtrados, emAtencao, alertaPrevisto);
