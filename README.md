@@ -57,6 +57,7 @@ aparecem lado a lado.
 |---|---|---|
 | **CPRM/SGB** | Polígonos de setorização de risco geológico (grau de risco, tipologia, nº de moradias/pessoas afetadas) | `https://geoportal.sgb.gov.br/server/rest/services/gestaoterritorial/risco/FeatureServer/0` (ArcGIS REST, GeoJSON) |
 | **INMET** | Chuva horária por estação meteorológica automática | `https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` (CSV, pacote público anual) |
+| **ANA** | Chuva em intervalos de 15min por estação telemétrica (fonte complementar ao INMET; nem toda estação tem dado vivo — ver [Decisões e investigações](#decisões-e-investigações)) | `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP/XML, sem captcha/autenticação) |
 
 A CPRM foi renomeada para **SGB**. Os domínios do enunciado original
 (`geoportal.cprm.gov.br`, `sace.cprm.gov.br`, `arcgisserver.cprm.gov.br`) ainda
@@ -69,9 +70,11 @@ respondem parcialmente, mas a camada de setorização de risco hoje mora em
 flowchart LR
     CPRM[("CPRM/SGB<br/>ArcGIS REST")] --> ING1["src/ingest/cprm.py"]
     INMET[("INMET<br/>ZIP anual")] --> ING2["src/ingest/inmet.py"]
+    ANA[("ANA<br/>rede telemétrica")] --> ING3["src/ingest/ana.py"]
     ING1 --> STORE["src/storage/<br/>GeoPackage + CSV"]
     ING2 --> STORE
-    STORE --> PROC["src/processing/cruzamento.py<br/>setor mais próximo + chuva 24h/72h"]
+    ING3 --> STORE
+    STORE --> PROC["src/processing/cruzamento.py<br/>estação mais próxima (INMET+ANA) + chuva 24h/72h"]
     PROC --> DASH["src/dashboard/app.py<br/>Streamlit"]
 ```
 
@@ -186,12 +189,14 @@ artefato do GitHub Actions.
 pytest
 ```
 
-22 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
+36 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
 retry com backoff e fallback para cache local; parsing do CSV do INMET e
-leitura de estação dentro do ZIP anual; a lógica de cruzamento espacial
-(estação mais próxima) e temporal (chuva acumulada 24h/72h); e as funções
-auxiliares do dashboard. Toda chamada de rede é mockada, então a suíte roda
-sem internet.
+leitura de estação dentro do ZIP anual; parsing do XML/SOAP da ANA, retry em
+HTTP 429 e o filtro de estações sem dado recente; a lógica de cruzamento
+espacial (estação mais próxima, incluindo o pareamento combinado INMET+ANA
+com desempate por recência) e temporal (chuva acumulada 24h/72h); e as
+funções auxiliares do dashboard. Toda chamada de rede é mockada, então a
+suíte roda sem internet.
 
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda essa suíte a cada push e
 pull request, separado do cron diário de atualização de dados.
@@ -209,22 +214,25 @@ atrás de um WAF que bloqueia clientes não navegador. A solução viável foi o
 pacote histórico anual do INMET, usado hoje pelo ORCA. →
 [detalhes completos](docs/investigacoes.md#cemaden--inmet-por-que-a-fonte-de-chuva-mudou)
 
-**Investigação da ANA.** A rede telemétrica da ANA foi avaliada como fonte
-complementar de chuva em tempo real: das 437 estações listadas para SP, 271
-(62%) têm dado vivo, com distância mediana de 18,6km até o setor de risco
-mais próximo — cobertura mais densa que o INMET. Ressalva: as estações com
-dado vivo são majoritariamente hidrelétricas/fluviométricas, não pluviômetros
-dedicados. →
+**Investigação da ANA → integração feita.** A rede telemétrica da ANA foi
+avaliada como fonte complementar de chuva em tempo real: das 437 estações
+listadas para SP, 271 (62%) têm dado vivo, com distância mediana de 18,6km
+até o setor de risco mais próximo — cobertura mais densa que o INMET.
+Ressalva: as estações com dado vivo são majoritariamente
+hidrelétricas/fluviométricas, não pluviômetros dedicados. A integração foi
+implementada em `src/ingest/ana.py`: o cruzamento (`calcular_cruzamento`)
+agora usa a estação mais próxima entre INMET e ANA combinadas — distância
+manda, com desempate por recência de leitura quando as duas fontes têm uma
+estação a menos de 500m de diferença de distância. →
 [detalhes completos](docs/investigacoes.md#investigação-fontes-de-chuva-em-tempo-real)
 
 ## Roadmap
 
 - ~~Levantar quais estações da rede telemétrica da ANA têm dado vivo de chuva
-  em SP~~ — feito em 08/08/2026: 62% de cobertura, distância mediana de
-  18,6km até o setor de risco mais próximo (ver
-  [Decisões e investigações](#decisões-e-investigações)). Próximo passo:
-  implementar `src/ingest/ana.py` e integrar como fonte complementar ao
-  INMET no cruzamento (`src/processing/cruzamento.py`).
+  em SP e integrar como fonte complementar ao INMET~~ — levantamento feito em
+  08/08/2026, integração (`src/ingest/ana.py` + cruzamento combinado)
+  implementada em 09/08/2026 (ver
+  [Decisões e investigações](#decisões-e-investigações)).
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
   reescrever o pipeline de ingestão.
 - Cobrir mais UFs além de SP.
