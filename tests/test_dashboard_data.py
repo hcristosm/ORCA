@@ -7,7 +7,11 @@ import pytest
 from shapely.geometry import Polygon
 
 from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores
-from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
+from src.export.dashboard_data import (
+    ExportacaoDashboardError,
+    _calcular_chuva_openmeteo,
+    exportar_dashboard,
+)
 from src.storage import salvar_chuva, salvar_setores
 
 
@@ -56,7 +60,7 @@ def test_exportar_dashboard_gera_geojson_series_e_meta_so_com_inmet(tmp_path: Pa
     salvar_chuva(chuva, caminho_chuva("SP", 2026, tmp_path))
 
     saida = tmp_path / "export"
-    meta = exportar_dashboard("SP", 2026, tmp_path, saida)
+    meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="inmet")
 
     geojson_path = saida / "setores_sp.geojson"
     assert geojson_path.exists()
@@ -82,7 +86,7 @@ def test_exportar_dashboard_combina_ana_quando_disponivel(tmp_path: Path, setore
     salvar_chuva(chuva_ana, caminho_chuva_ana("SP", tmp_path))
 
     saida = tmp_path / "export"
-    meta = exportar_dashboard("SP", 2026, tmp_path, saida)
+    meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="inmet")
 
     gdf = gpd.read_file(saida / "setores_sp.geojson")
     s1 = gdf[gdf["num_setor"] == "S1"].iloc[0]
@@ -107,7 +111,7 @@ def test_exportar_dashboard_recorta_serie_aos_ultimos_30_dias(tmp_path: Path, se
     salvar_chuva(chuva, caminho_chuva("SP", 2026, tmp_path))
 
     saida = tmp_path / "export"
-    exportar_dashboard("SP", 2026, tmp_path, saida)
+    exportar_dashboard("SP", 2026, tmp_path, saida, fonte="inmet")
 
     series = json.loads((saida / "series_sp.json").read_text())
     assert len(series["A701"]["serie"]) == 1
@@ -122,4 +126,70 @@ def test_exportar_dashboard_levanta_erro_se_setores_nao_existem(tmp_path: Path):
 def test_exportar_dashboard_levanta_erro_se_chuva_inmet_nao_existe(tmp_path: Path, setores):
     salvar_setores(setores, caminho_setores("SP", tmp_path))
     with pytest.raises(ExportacaoDashboardError):
-        exportar_dashboard("SP", 2026, tmp_path, tmp_path / "export")
+        exportar_dashboard("SP", 2026, tmp_path, tmp_path / "export", fonte="inmet")
+
+
+def test_calcular_chuva_openmeteo_consulta_centroide_e_acumula(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+
+    agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
+    horas = pd.date_range("2026-08-08 00:00", periods=61, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+    resposta = [
+        {"latitude": -23.50, "longitude": -46.60, "hourly": {"time": horas_iso, "precipitation": [1.0] * 61}},
+        {"latitude": -24.00, "longitude": -47.00, "hourly": {"time": horas_iso, "precipitation": [0.0] * 61}},
+    ]
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
+        resultado = _calcular_chuva_openmeteo(setores, janelas=(24, 72), agora=agora)
+
+    assert set(resultado["fonte_estacao"]) == {"openmeteo"}
+    assert set(resultado["distancia_km"]) == {0.0}
+    s1 = resultado[resultado["num_setor"] == "S1"].iloc[0]
+    assert s1["chuva_24h"] == pytest.approx(24.0)
+    s2 = resultado[resultado["num_setor"] == "S2"].iloc[0]
+    assert s2["chuva_24h"] == pytest.approx(0.0)
+
+
+def test_exportar_dashboard_fonte_openmeteo_fim_a_fim(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+
+    agora = pd.Timestamp.now(tz="UTC").floor("h")
+    horas = pd.date_range(agora - pd.Timedelta(hours=47), periods=48, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+
+    def _resposta_para(n_pontos: int) -> list[dict]:
+        return [
+            {"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas_iso, "precipitation": [1.0] * 48}}
+            for _ in range(n_pontos)
+        ]
+
+    saida = tmp_path / "export"
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_para(2), status=200)  # setores
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_para(2), status=200)  # municípios
+        meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="openmeteo")
+
+    assert meta["fonte"] == "openmeteo"
+    assert meta["total_setores"] == 2
+    assert meta["total_municipios"] == 2
+    assert "total_estacoes_inmet" not in meta
+
+    gdf = gpd.read_file(saida / "setores_sp.geojson")
+    assert set(gdf["fonte_estacao"]) == {"openmeteo"}
+    assert set(gdf["codigo_estacao"]) == {"openmeteo"}
+
+    series = json.loads((saida / "series_sp.json").read_text())
+    assert set(series.keys()) == {"CIDADE A", "CIDADE B"}
+    assert series["CIDADE A"]["fonte"] == "openmeteo"
+
+
+def test_exportar_dashboard_fonte_invalida_levanta_erro(tmp_path: Path, setores):
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    with pytest.raises(ValueError):
+        exportar_dashboard("SP", 2026, tmp_path, tmp_path / "export", fonte="xyz")
