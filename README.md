@@ -118,7 +118,7 @@ distribuição sem processo Python rodando — ver
 Requer Python 3.11+.
 
 ```bash
-git clone (https://github.com/hcristosm/ORCA
+git clone https://github.com/hcristosm/ORCA
 cd ORCA
 python3 -m venv .venv
 source .venv/bin/activate
