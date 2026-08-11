@@ -4,6 +4,12 @@
   const LIMITE_AREAS = 5;
   const LIMITE_TAMANHO_BYTES = 10 * 1024 * 1024;
 
+  const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
+  const DIAS_HISTORICO = 4;
+  const DIAS_PREVISAO = 4;
+  const PASSO_PREVISAO_HORAS = 3;
+  const HORIZONTE_PREVISAO_HORAS = 72;
+
   let areas = [];
   let proximoId = 1;
 
@@ -72,6 +78,84 @@
     return [centro.lat, centro.lng];
   }
 
+  function chuvaAcumulada(serie, referenciaMs, horas) {
+    const inicio = referenciaMs - horas * 3600 * 1000;
+    let soma = 0;
+    let temValor = false;
+    for (const ponto of serie) {
+      if (ponto.dataHoraMs > inicio && ponto.dataHoraMs <= referenciaMs && typeof ponto.chuvaMm === "number") {
+        soma += ponto.chuvaMm;
+        temValor = true;
+      }
+    }
+    return temValor ? soma : null;
+  }
+
+  function referenciaObservada(serie, agoraMs) {
+    const validos = serie.filter(p => p.dataHoraMs <= agoraMs && typeof p.chuvaMm === "number");
+    if (!validos.length) return agoraMs;
+    return Math.max(...validos.map(p => p.dataHoraMs));
+  }
+
+  function trajetoria72h(serie, agoraMs, passoHoras, horizonteHoras) {
+    const passo = (passoHoras || PASSO_PREVISAO_HORAS) * 3600 * 1000;
+    const limite = agoraMs + (horizonteHoras || HORIZONTE_PREVISAO_HORAS) * 3600 * 1000;
+    const dadosValidosAte = serie.length ? Math.max(...serie.map(p => p.dataHoraMs)) : agoraMs;
+
+    const pontos = [];
+    for (let t = agoraMs; t <= limite; t += passo) {
+      if (t > dadosValidosAte) {
+        pontos.push([new Date(t).toISOString(), null]);
+      } else {
+        const valor = chuvaAcumulada(serie, t, 72);
+        pontos.push([new Date(t).toISOString(), valor === null ? null : Math.round(valor * 100) / 100]);
+      }
+    }
+    return pontos;
+  }
+
+  async function buscarChuvaOpenMeteo(lat, lon) {
+    const url = new URL(FORECAST_URL);
+    url.searchParams.set("latitude", lat);
+    url.searchParams.set("longitude", lon);
+    url.searchParams.set("hourly", "precipitation");
+    url.searchParams.set("past_days", String(DIAS_HISTORICO));
+    url.searchParams.set("forecast_days", String(DIAS_PREVISAO));
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`Open-Meteo respondeu ${resp.status}. Tente novamente em instantes.`);
+    }
+    const dados = await resp.json();
+    const horario = (dados && dados.hourly) || {};
+    const horas = horario.time || [];
+    const precipitacoes = horario.precipitation || [];
+    return horas.map((iso, i) => ({
+      dataHoraMs: Date.parse(iso.endsWith("Z") ? iso : `${iso}Z`),
+      chuvaMm: typeof precipitacoes[i] === "number" ? precipitacoes[i] : null,
+    }));
+  }
+
+  async function processarArea(area) {
+    area.estado = "carregando";
+    area.erro = null;
+    if (typeof renderizarAreas === "function") renderizarAreas();
+
+    try {
+      const serie = await buscarChuvaOpenMeteo(area.centroide[0], area.centroide[1]);
+      const agoraMs = Date.now();
+      const referenciaMs = referenciaObservada(serie, agoraMs);
+      area.chuva24 = chuvaAcumulada(serie, referenciaMs, 24);
+      area.chuva72 = chuvaAcumulada(serie, referenciaMs, 72);
+      area.trajetoria = trajetoria72h(serie, agoraMs, PASSO_PREVISAO_HORAS, HORIZONTE_PREVISAO_HORAS);
+      area.estado = "pronto";
+    } catch (e) {
+      area.estado = "erro";
+      area.erro = e.message || "Falha ao consultar a Open-Meteo.";
+    }
+    if (typeof renderizarAreas === "function") renderizarAreas();
+  }
+
   document.getElementById("uploadArquivo").addEventListener("change", async ev => {
     const file = ev.target.files[0];
     ev.target.value = "";
@@ -124,7 +208,11 @@
         centroide: centroide(feature),
       };
       areas.push(area);
-      console.log("Área carregada:", area.id, area.nome, area.centroide);
+      processarArea(area).then(() => {
+        console.log("Área processada:", area.id, area.nome, {
+          chuva24: area.chuva24, chuva72: area.chuva72, estado: area.estado, erro: area.erro,
+        });
+      });
     }
   });
 })();
