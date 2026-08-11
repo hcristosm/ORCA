@@ -102,9 +102,16 @@
   "use strict";
 
   const UF = "sp";
-  const CORES_GRAU = { "alto": "#ec835a", "muito alto": "#d03b3b" };
-  const COR_PADRAO = "#9a9a94";
-  const COR_ATENCAO = "#1a1a19";
+
+  function token(nome) {
+    return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+  }
+  function coresGrau() {
+    return { "alto": token("--risco-alto"), "muito alto": token("--risco-muito-alto") };
+  }
+  function corPadrao() { return token("--risco-padrao"); }
+  function corAtencao() { return token("--contorno-atencao"); }
+  function corSerie() { return token("--serie-chuva"); }
 
   const estado = { janela: 72, limiar: 100, municipio: "" };
   let setoresGeoJSON = null;
@@ -113,6 +120,32 @@
   let camadaSetores = null;
   let mapa = null;
   let grafico = null;
+
+  const CHAVE_TEMA = "orca-tema";
+
+  function temaAtual() {
+    const salvo = localStorage.getItem(CHAVE_TEMA);
+    if (salvo === "claro" || salvo === "escuro") return salvo;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro";
+  }
+
+  function aplicarTema(tema) {
+    document.documentElement.setAttribute("data-tema", tema);
+    document.getElementById("logoImg").src =
+      tema === "escuro" ? "../logo/orca-logo-escuro.png" : "../logo/orca-logo-claro.png";
+  }
+
+  function alternarTema() {
+    const novo = temaAtual() === "escuro" ? "claro" : "escuro";
+    localStorage.setItem(CHAVE_TEMA, novo);
+    aplicarTema(novo);
+    if (setoresGeoJSON) {
+      inicializarMapa();
+      renderizarTudo();
+    }
+    const estacaoSelect = document.getElementById("estacaoSelect");
+    if (estacaoSelect && estacaoSelect.value) renderizarGrafico(estacaoSelect.value);
+  }
 
   async function carregarDados() {
     const [setoresResp, seriesResp, metaResp] = await Promise.all([
@@ -182,21 +215,28 @@
     if (codigos.length) renderizarGrafico(codigos[0]);
   }
 
+  const TILE_URLS = {
+    claro: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    escuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  };
+
   function inicializarMapa() {
+    if (mapa) { mapa.remove(); mapa = null; camadaSetores = null; }
     mapa = L.map("mapa");
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer(TILE_URLS[temaAtual()], {
       attribution: "© OpenStreetMap, © CARTO", maxZoom: 19,
     }).addTo(mapa);
 
+    const cores = coresGrau();
     const legenda = L.control({ position: "bottomleft" });
     legenda.onAdd = function () {
       const div = L.DomUtil.create("div", "legenda");
       div.innerHTML =
         '<b>Grau de risco</b><br>' +
-        '<span class="amostra" style="background:' + CORES_GRAU["alto"] + '"></span>Alto<br>' +
-        '<span class="amostra" style="background:' + CORES_GRAU["muito alto"] + '"></span>Muito alto<br>' +
-        '<span style="border:2px solid ' + COR_ATENCAO + ';padding:0 4px">Em atenção</span><br>' +
-        '<span style="border:2px dashed ' + COR_ATENCAO + ';padding:0 4px">Alerta previsto</span>';
+        '<span class="amostra" style="background:' + cores["alto"] + '"></span>Alto<br>' +
+        '<span class="amostra" style="background:' + cores["muito alto"] + '"></span>Muito alto<br>' +
+        '<span style="border:2px solid ' + corAtencao() + ';padding:0 4px">Em atenção</span><br>' +
+        '<span style="border:2px dashed ' + corAtencao() + ';padding:0 4px">Alerta previsto</span>';
       return div;
     };
     legenda.addTo(mapa);
@@ -260,7 +300,7 @@
   }
 
   function corPorGrau(grau) {
-    return CORES_GRAU[(grau || "").toLowerCase()] || COR_PADRAO;
+    return coresGrau()[(grau || "").toLowerCase()] || corPadrao();
   }
 
   function renderizarMapa(filtrados, emAtencao, alertaPrevisto) {
@@ -278,7 +318,7 @@
         const cor = corPorGrau(feature.properties.grau_risco);
         return {
           fillColor: cor, fillOpacity: 0.75,
-          color: emAtencaoAgora ? COR_ATENCAO : cor,
+          color: emAtencaoAgora ? corAtencao() : cor,
           weight: emAtencaoAgora || previstoAgora ? 3 : 1,
           dashArray: previstoAgora && !emAtencaoAgora ? "6 4" : null,
         };
@@ -346,7 +386,7 @@
     if (grafico) grafico.destroy();
     grafico = new Chart(ctx, {
       type: "bar",
-      data: { labels, datasets: [{ label: "Chuva (mm)", data: valores, backgroundColor: "#256abf" }] },
+      data: { labels, datasets: [{ label: "Chuva (mm)", data: valores, backgroundColor: corSerie() }] },
       options: {
         responsive: true, maintainAspectRatio: false,
         scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } },
@@ -368,6 +408,9 @@
     document.getElementById("limiarValor").textContent = estado.limiar;
     renderizarTudo();
   });
+
+  aplicarTema(temaAtual());
+  document.getElementById("botaoTema").addEventListener("click", alternarTema);
 
   carregarDados();
 })();
