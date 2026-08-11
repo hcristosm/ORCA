@@ -1,0 +1,26 @@
+:root{
+  --font-ui:"Source Sans 3","Source Sans Pro",-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"Source Code Pro",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  --text-display:2.5rem;   /* 40px — st.title */
+  --text-h2:1.5rem;        /* 24px — st.subheader */
+  --text-h3:1.125rem;      /* 18px — sidebar section header */
+  --text-body:1rem;        /* 16px */
+  --text-label:0.875rem;   /* 14px — widget labels, table cells */
+  --text-caption:0.8125rem;/* 13px — st.caption, map legend */
+  --text-micro:0.75rem;    /* 12px — axis ticks */
+
+  --weight-regular:400;
+  --weight-medium:500;
+  --weight-semibold:600;
+  --weight-bold:700;
+
+  --leading-tight:1.2;
+  --leading-snug:1.35;
+  --leading-normal:1.5;
+  --leading-loose:1.6;
+
+  --tracking-tight:-0.01em;
+  --tracking-normal:0;
+  --tracking-wide:0.04em;
+}
