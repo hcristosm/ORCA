@@ -2,6 +2,7 @@ import io
 import zipfile
 from pathlib import Path
 
+import pandas as pd
 import pytest
 import responses
 from responses import matchers
@@ -11,6 +12,7 @@ from src.ingest.inmet import (
     INMETFetchError,
     _carregar_manifesto,
     _crc32_estacao,
+    _mesclar_serie_estacao,
     _parse_csv_estacao,
     _salvar_manifesto,
     baixar_zip_ano_condicional,
@@ -339,6 +341,46 @@ def test_ingerir_uf_preserva_linhas_fora_da_janela_de_retificacao(tmp_path: Path
     assert len(segunda) == 3
     linha_antiga = segunda[segunda["data_hora"] == segunda["data_hora"].min()]
     assert linha_antiga["chuva_mm"].iloc[0] == 1.0  # fora da janela: não foi "retificada"
+
+
+def _serie(pontos: list[tuple[str, float]]) -> pd.DataFrame:
+    return pd.DataFrame({
+        "data_hora": [pd.Timestamp(iso) for iso, _ in pontos],
+        "chuva_mm": [mm for _, mm in pontos],
+    })
+
+
+def test_mesclar_serie_estacao_usa_valor_novo_dentro_da_janela():
+    cutoff = pd.Timestamp("2026-08-01 00:00")
+    existente = _serie([("2026-08-01 00:00", 1.0)])
+    nova = _serie([("2026-08-01 00:00", 9.9)])
+
+    resultado = _mesclar_serie_estacao(existente, nova, cutoff)
+
+    assert len(resultado) == 1
+    assert resultado["chuva_mm"].iloc[0] == 9.9
+
+
+def test_mesclar_serie_estacao_preserva_valor_existente_fora_da_janela():
+    cutoff = pd.Timestamp("2026-08-01 00:00")
+    existente = _serie([("2026-07-01 00:00", 1.0)])
+    nova = _serie([("2026-07-01 00:00", 999.9), ("2026-08-01 00:00", 2.0)])
+
+    resultado = _mesclar_serie_estacao(existente, nova, cutoff)
+
+    assert len(resultado) == 2
+    linha_antiga = resultado[resultado["data_hora"] == pd.Timestamp("2026-07-01 00:00")]
+    assert linha_antiga["chuva_mm"].iloc[0] == 1.0
+
+
+def test_mesclar_serie_estacao_ordena_por_data_hora():
+    cutoff = pd.Timestamp("2026-08-01 00:00")
+    existente = _serie([("2026-07-01 00:00", 1.0)])
+    nova = _serie([("2026-08-02 00:00", 3.0), ("2026-08-01 00:00", 2.0)])
+
+    resultado = _mesclar_serie_estacao(existente, nova, cutoff)
+
+    assert list(resultado["data_hora"]) == sorted(resultado["data_hora"])
 
 
 @responses.activate

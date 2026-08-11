@@ -19,6 +19,16 @@ from src.config import LIMIAR_ATENCAO_MM_PADRAO
 CRS_METRICO = "EPSG:5880"  # SIRGAS 2000 / Brasil Polícônica — boa para distâncias em todo o país
 
 
+def centroides_metricos(setores: gpd.GeoDataFrame) -> gpd.GeoSeries:
+    """Centroide de cada setor, projetado em `CRS_METRICO` (bom para distâncias/médias em metros)."""
+    return setores.to_crs(CRS_METRICO).geometry.centroid
+
+
+def centroides_4326(setores: gpd.GeoDataFrame) -> gpd.GeoSeries:
+    """Centroide de cada setor em EPSG:4326 (lat/lon), pronto para geocodificação/APIs externas."""
+    return centroides_metricos(setores).to_crs("EPSG:4326")
+
+
 def _estacoes_para_pontos(chuva_df: pd.DataFrame) -> gpd.GeoDataFrame:
     estacoes = chuva_df.drop_duplicates("codigo_estacao")[
         ["codigo_estacao", "nome_estacao", "latitude", "longitude"]
@@ -27,7 +37,7 @@ def _estacoes_para_pontos(chuva_df: pd.DataFrame) -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(estacoes, geometry=geometry, crs="EPSG:4326")
 
 
-def _chuva_acumulada(
+def chuva_acumulada(
     serie_estacao: pd.DataFrame, referencia: pd.Timestamp, horas: int
 ) -> float:
     janela = serie_estacao[
@@ -175,7 +185,7 @@ def calcular_cruzamento(
     for horas in janelas:
         coluna = f"chuva_{horas}h"
         resultado[coluna] = [
-            _chuva_acumulada(series_por_estacao[codigo], referencias_por_estacao[codigo], horas)
+            chuva_acumulada(series_por_estacao[codigo], referencias_por_estacao[codigo], horas)
             if codigo in series_por_estacao
             else float("nan")
             for codigo in resultado["codigo_estacao"]
