@@ -180,6 +180,7 @@
     }
     const estacaoSelect = document.getElementById("estacaoSelect");
     if (estacaoSelect && estacaoSelect.value) renderizarGrafico(estacaoSelect.value);
+    if (window.ORCA_atualizarTemaAreas) window.ORCA_atualizarTemaAreas();
   }
 
   async function carregarDados() {
