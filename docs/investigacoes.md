@@ -1,169 +1,55 @@
 # Investigações técnicas do ORCA
 
-Histórico de decisões e investigações técnicas do projeto — fontes
-descartadas, motivos, e levantamentos feitos com requisições reais antes de
-decidir integrar (ou não) uma fonte de dados. Referenciado a partir do
-[README](../README.md#decisões-e-investigações).
+Registro velho de escolha e busca técnica do projeto — fonte descartada, motivo por trás, e teste feito com requisição real antes de decidir usar (ou não) fonte de dado. Ver [README](../README.md#decisões-e-investigações).
 
-## CEMADEN → INMET: por que a fonte de chuva mudou
+## CEMADEN → INMET: por que fonte de chuva mudou
 
-O plano inicial previa usar o **CEMADEN** como fonte de chuva. A investigação,
-feita com requisições reais e não por suposição, mostrou dois problemas
-intransponíveis sem contornar proteções que não pareceu certo contornar:
+Plano primeiro queria **CEMADEN** pra chuva. Teste real, não chute, achou dois problema sem jeito de contornar sem burlar proteção — e burlar não pareceu certo:
 
-1. **O download mensal do CEMADEN exige captcha**
-   (`mapainterativo.cemaden.gov.br/download/download_form.php`), o que não é
-   automatizável de forma honesta.
-2. **As únicas camadas do CEMADEN acessíveis sem captcha são espelhos estáticos
-   e antigos**: a camada `Cemaden` do próprio geoportal da SGB tem leituras de
-   **setembro de 2019**; a camada `precipitacao_bacia_24` do GeoServer oficial
-   do CEMADEN (`gsc.cemaden.gov.br`) tem timestamps de **junho de 2017** e é
-   agregada por bacia hidrográfica inteira (grão grosseiro demais).
+1. **Download mensal do CEMADEN pede captcha**
+   (`mapainterativo.cemaden.gov.br/download/download_form.php`), não dá pra automatizar honesto.
+2. **Única camada CEMADEN sem captcha é espelho velho parado**: camada `Cemaden` do geoportal SGB tem leitura de **setembro 2019**; camada `precipitacao_bacia_24` do GeoServer oficial CEMADEN (`gsc.cemaden.gov.br`) tem timestamp de **junho 2017** e junta por bacia inteira (grão grosso demais).
 
-A alternativa avaliada em seguida, a API dinâmica do INMET
-(`apitempo.inmet.gov.br/estacao/...`), também não é utilizável por um cliente
-não navegador: está atrás de um WAF (cookies `TS...`, padrão de F5 Bot
-Defense) que devolve **HTTP 204 vazio** em vez de um erro claro para qualquer
-requisição sem uma sessão de navegador legítima.
+Alternativa testada depois, API dinâmica do INMET (`apitempo.inmet.gov.br/estacao/...`), também não presta pra cliente sem navegador: atrás de WAF (cookie `TS...`, padrão F5 Bot Defense) que devolve **HTTP 204 vazio** em vez de erro claro pra quem não tem sessão de navegador de verdade.
 
-A solução que sobrou, e que efetivamente funciona sem captcha, sem WAF e sem
-navegador automatizado, é o **pacote de dados históricos anuais do INMET**: um
-ZIP público por ano com o CSV de cada estação automática do país, atualizado
-com poucos dias de defasagem. É o que o ORCA usa hoje. Essa substituição
-(CEMADEN → INMET) está documentada também no topo de
-[`src/ingest/inmet.py`](../src/ingest/inmet.py).
+Solução que sobrou, e que funciona sem captcha, sem WAF, sem navegador robô, é o **pacote histórico anual do INMET**: ZIP público por ano com CSV de cada estação automática do país, atrasa só poucos dias. ORCA usa isso hoje. Troca (CEMADEN → INMET) documentada também no topo de [`src/ingest/inmet.py`](../src/ingest/inmet.py).
 
-## Investigação: fontes de chuva em tempo real
+## Investigação: fonte de chuva em tempo real
 
-A defasagem do pacote histórico do INMET (dias, não minutos) limita a
-utilidade do ORCA num evento de chuva em andamento. Em 07/08/2026 investiguei,
-com requisições reais, se havia alguma fonte pública de chuva atualizada
-continuamente para substituir ou complementar o INMET.
+Atraso do pacote histórico INMET (dias, não minuto) limita ORCA num evento de chuva rolando agora. Em 07/08/2026 testei, com requisição real, se tem fonte pública de chuva atualizada sem parar pra trocar ou somar com INMET.
 
-**ANA (Agência Nacional de Águas), rede telemétrica.** O web service
-`https://telemetriaws1.ana.gov.br/ServiceANA.asmx` é público, sem captcha e
-sem autenticação. `ListaEstacoesTelemetricas` retorna 5.194 estações em todo
-o país (bem mais que as 40 do INMET só em SP), e
-`DadosHidrometeorologicos?codEstacao=...&dataInicio=...&dataFim=...` devolve
-chuva, nível de rio e vazão em intervalos de 15 minutos. Testado ao vivo: a
-estação 58040000 (São Luís do Paraitinga/SP) tinha leitura de poucos minutos
-atrás no momento do teste, contra dias de defasagem do INMET.
+**ANA (Agência Nacional de Águas), rede telemétrica.** Web service `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` é público, sem captcha, sem login. `ListaEstacoesTelemetricas` devolve 5.194 estação no país inteiro (bem mais que as 40 do INMET só em SP), e `DadosHidrometeorologicos?codEstacao=...&dataInicio=...&dataFim=...` dá chuva, nível de rio e vazão a cada 15 minuto. Testado ao vivo: estação 58040000 (São Luís do Paraitinga/SP) tinha leitura de poucos minuto atrás na hora do teste, contra dias de atraso do INMET.
 
-A ressalva é que a cobertura real é bem menor que a lista sugere. Nem toda
-estação listada como "Ativo" transmite dado recente por esse endpoint: de uma
-amostra de 25 outras estações de SP (origem RHN, status Ativo), nenhuma tinha
-leitura nos últimos dois dias. A rede parece combinar estações com telemetria
-de verdade e estações que só reportam manualmente ou em ciclos mais longos, e
-não há como distinguir as duas coisas pela lista de estações sozinha. Um
-levantamento (varrer os códigos de SP e medir quantos têm dado vivo, e qual a
-distância média resultante até os setores de risco) é pré-requisito antes de
-integrar essa fonte.
+Ressalva: cobertura real bem menor que lista sugere. Nem toda estação marcada "Ativo" manda dado recente por esse endpoint: de amostra de 25 outra estação de SP (origem RHN, status Ativo), nenhuma tinha leitura nos último dois dia. Rede parece misturar estação com telemetria de verdade e estação que só manda manual ou em ciclo longo, sem jeito de distinguir só pela lista. Levantamento (varrer código de SP, medir quanto tem dado vivo, e distância média até setor de risco) é pré-requisito antes de integrar essa fonte.
 
-**CEMADEN.** O endpoint de dados recentes das PCDs
-(`sws.cemaden.gov.br/PED/rest/pcds/dados_recentes`), mapeado numa investigação
-anterior deste projeto, agora retorna 404. Não encontrei substituto
-equivalente sem engenharia reversa mais profunda do mapa interativo deles.
+**CEMADEN.** Endpoint de dado recente das PCDs (`sws.cemaden.gov.br/PED/rest/pcds/dados_recentes`), mapeado em investigação anterior deste projeto, agora devolve 404. Não achei substituto equivalente sem engenharia reversa mais funda do mapa interativo deles.
 
-Essa investigação está registrada aqui para não se perder; a integração em si
-ainda não foi feita (ver [Roadmap](../README.md#roadmap)).
+Investigação anotada aqui pra não perder; integração em si ainda não feita (ver [Roadmap](../README.md#roadmap)).
 
-**Atualização (08/08/2026): levantamento de cobertura da ANA em SP.** Rodei
-[`scripts/investigar_ana.py`](../scripts/investigar_ana.py), que varre todas as
-estações telemétricas da ANA cadastradas em SP e testa, uma a uma, se cada
-uma tem leitura de chuva nas últimas 48h (com retry/backoff — o serviço
-devolve HTTP 429 com facilidade sob concorrência, e a primeira tentativa sem
-isso gerou um falso "quase nada tem dado vivo"). Resultado real: das **437
-estações listadas para SP, 271 (62%) têm dado vivo**, com distância mediana
-de **18,6km** até o setor de risco mais próximo (média 27,5km, puxada por
-alguns outliers a até 190km). Isso é uma cobertura bem mais densa que as 40
-estações do INMET em SP (26km de distância média). A ressalva: as estações
-com dado vivo são majoritariamente hidrelétricas/fluviométricas (nomes como
-"UHE ... BARRAMENTO/JUSANTE"), não uma rede de pluviômetros dedicada — o
-campo `Chuva` existe e responde, mas vale checar se a série é
-consistente/confiável antes de integrar como fonte de verdade. Com isso, o
-pré-requisito do roadmap está atendido e a integração como fonte
-complementar ao INMET vale a pena tentar. O design da integração está em
-[`docs/superpowers/specs/2026-08-09-ingestao-ana-design.md`](superpowers/specs/2026-08-09-ingestao-ana-design.md).
+**Atualização (08/08/2026): levantamento de cobertura da ANA em SP.** Rodei [`scripts/investigar_ana.py`](../scripts/investigar_ana.py), que varre toda estação telemétrica ANA cadastrada em SP e testa, uma por uma, se tem leitura de chuva nas últimas 48h (com retry/backoff — serviço devolve HTTP 429 fácil sob concorrência, primeira tentativa sem isso deu falso "quase nada tem dado vivo"). Resultado real: das **437 estação listada pra SP, 271 (62%) têm dado vivo**, distância mediana de **18,6km** até setor de risco mais próximo (média 27,5km, puxada por outlier até 190km). Cobertura bem mais densa que as 40 estação do INMET em SP (26km distância média). Ressalva: estação com dado vivo é majoritariamente hidrelétrica/fluviométrica (nome tipo "UHE ... BARRAMENTO/JUSANTE"), não rede de pluviômetro dedicada — campo `Chuva` existe e responde, mas vale checar se série é consistente antes de usar como fonte de verdade. Com isso, pré-requisito do roadmap atendido, integração como fonte extra do INMET vale tentar. Design da integração em [`docs/superpowers/specs/2026-08-09-ingestao-ana-design.md`](superpowers/specs/2026-08-09-ingestao-ana-design.md).
 
 ## Streamlit → dashboard estático
 
-O dashboard nasceu como um app Streamlit (`src/dashboard/app.py`) — a escolha
-óbvia pra prototipar rápido um mapa interativo em Python sem escrever
-frontend. Funcionalmente resolvia o problema (mapa colorido por grau de
-risco, painel de setores em atenção, série temporal por estação, filtros na
-barra lateral), mas trouxe três limitações que se acumularam:
+Dashboard nasceu como app Streamlit (`src/dashboard/app.py`) — escolha óbvia pra prototipar rápido mapa interativo em Python sem escrever frontend. Resolvia o problema (mapa colorido por grau de risco, painel de setor em atenção, série temporal por estação, filtro na barra lateral), mas trouxe três limite que foram se acumulando:
 
-1. **Estética genérica.** O chrome padrão do Streamlit (sidebar cinza,
-   tipografia e espaçamento fixos) é difícil de customizar visualmente sem
-   sair do modelo de componentes do framework.
-2. **Layout pouco flexível.** Montar um layout mais deliberado (cards, grids,
-   posicionamento fino) dentro do sistema de colunas do Streamlit tem um teto
-   baixo.
-3. **Sem distribuição como site.** Streamlit precisa de um processo Python
-   rodando pra servir a interface — não dá pra publicar como página estática
-   (o projeto já tinha uma landing page estática em `docs/index.html` no
-   GitHub Pages, mas o dashboard real ficava de fora desse modelo).
+1. **Estética genérica.** Chrome padrão do Streamlit (sidebar cinza, tipografia e espaçamento fixo) difícil de customizar sem sair do modelo de componente do framework.
+2. **Layout pouco flexível.** Montar layout mais caprichado (card, grid, posicionamento fino) dentro do sistema de coluna do Streamlit tem teto baixo.
+3. **Sem distribuição como site.** Streamlit precisa de processo Python rodando pra servir a interface — não dá pra publicar como página estática (projeto já tinha landing page estática em `docs/index.html` no GitHub Pages, mas dashboard real ficava de fora desse modelo).
 
-A decisão (09/08/2026) foi pré-computar o cruzamento espacial/temporal
-(`calcular_cruzamento`, já existente) como arquivos estáticos — GeoJSON dos
-setores e JSON da série temporal, recortada aos últimos 30 dias pra não
-crescer sem limite agora que o INMET acumula o ano inteiro
-(`src/export/dashboard_data.py`, novo) — e servir um dashboard em HTML/CSS/JS
-puro (`docs/dashboard/`), sem framework nem build step, reaproveitando só os
-tokens de design (cores, tipografia, espaçamento) que já existiam em
-`docs/_ds/` a partir da landing page, sem depender do runtime de componentes
-dela. Mapa com Leaflet (a mesma engine que o Folium já usava por baixo) e
-gráfico com Chart.js, ambos via CDN. Os filtros (município, janela de
-acumulado, limiar de atenção) passaram a rodar inteiramente no navegador,
-sem round-trip.
+Decisão (09/08/2026) foi pré-computar o cruzamento espacial/temporal (`calcular_cruzamento`, já existia) como arquivo estático — GeoJSON dos setores e JSON da série temporal, recortada aos último 30 dias pra não crescer sem limite agora que INMET acumula ano inteiro (`src/export/dashboard_data.py`, novo) — e servir dashboard em HTML/CSS/JS puro (`docs/dashboard/`), sem framework nem build step, reaproveitando só token de design (cor, tipografia, espaçamento) que já existia em `docs/_ds/` vindo da landing page, sem depender do runtime de componente dela. Mapa com Leaflet (mesma engine que Folium já usava por baixo) e gráfico com Chart.js, ambos via CDN. Filtro (município, janela de acumulado, limiar de atenção) passou a rodar tudo no navegador, sem round-trip.
 
-Isso trocou o botão "Baixar/atualizar dados agora" (atualização sob demanda)
-por um selo de última atualização — sem processo rodando, não há o que
-baixar na hora; a atualização passou a vir do cron diário
-(`atualizar-dados.yml`), que agora também comita os dados exportados de
-volta no repositório pro GitHub Pages publicar. O dashboard Streamlit foi
-removido por completo (não manteve como alternativa local), pra não manter
-duas UIs divergindo. O design completo está em
-[`docs/superpowers/specs/2026-08-09-dashboard-estatico-design.md`](superpowers/specs/2026-08-09-dashboard-estatico-design.md).
+Isso trocou botão "Baixar/atualizar dados agora" (atualização sob pedido) por selo de última atualização — sem processo rodando, não tem o que baixar na hora; atualização passou a vir do cron diário (`atualizar-dados.yml`), que agora também comita dado exportado de volta no repositório pro GitHub Pages publicar. Dashboard Streamlit foi removido de vez (não guardou como alternativa local), pra não manter duas UI divergindo. Design completo em [`docs/superpowers/specs/2026-08-09-dashboard-estatico-design.md`](superpowers/specs/2026-08-09-dashboard-estatico-design.md).
 
 ## Open-Meteo como fonte padrão do dashboard
 
-O INMET tem alguns dias de defasagem (ver a primeira seção deste documento).
-Em 10/08/2026 testei a [Open-Meteo](https://open-meteo.com/)
-(`https://api.open-meteo.com/v1/forecast`) como alternativa: diferente do
-INMET (ZIP anual por estação) e da ANA (rede telemétrica com estações),
-a Open-Meteo responde chuva horária **por coordenada** — não tem o conceito
-de estação, então dá pra consultar diretamente o centro de cada setor de
-risco, sem precisar de "estação mais próxima".
+INMET tem uns dia de atraso (ver primeira seção deste documento). Em 10/08/2026 testei a [Open-Meteo](https://open-meteo.com/) (`https://api.open-meteo.com/v1/forecast`) como alternativa: diferente do INMET (ZIP anual por estação) e da ANA (rede telemétrica com estação), Open-Meteo dá chuva horária **por coordenada** — sem conceito de estação, dá pra consultar direto o centro de cada setor de risco, sem precisar de "estação mais perto".
 
-**Descobertas com requisições reais:**
+**Achado com requisição real:**
 
-- `GET` com muitas coordenadas na query string esbarra em `HTTP 414 URI Too
-  Long` bem antes de chegar a algumas centenas de pontos. `POST` com
-  `latitude`/`longitude` como arrays no corpo é obrigatório para lotes
-  grandes.
-- O parâmetro `timezone` não pode ser enviado como string simples nesse
-  modo (a API exige um array, um valor por coordenada); omiti-lo faz a API
-  responder em GMT, equivalente a UTC para os fins deste projeto.
-- Um único `POST` com as ~900 coordenadas dos 904 setores de SP respondeu
-  em ~2s numa primeira tentativa isolada — mas repetir esse volume de
-  requisições (como aconteceu naturalmente durante o desenvolvimento e
-  teste desta integração) ou pedir muitos dias de histórico de uma vez
-  para todos os setores gera `HTTP 429 Minutely API request limit
-  exceeded` de forma consistente. O limite prático parece depender do
-  volume (coordenadas × dias pedidos), não só da frequência de chamadas —
-  às vezes esperar o minuto que a própria API pede não é suficiente se a
-  cota do período (hora/dia) já foi consumida por testes anteriores.
+- `GET` com muita coordenada na query string bate em `HTTP 414 URI Too
+  Long` bem antes de chegar a algumas centena de ponto. `POST` com `latitude`/`longitude` como array no corpo é obrigatório pra lote grande.
+- Parâmetro `timezone` não pode ir como string simples nesse modo (API pede array, um valor por coordenada); deixar de fora faz API responder em GMT, equivale a UTC pros fim deste projeto.
+- Um `POST` só com as ~900 coordenada dos 904 setor de SP respondeu em ~2s numa primeira tentativa isolada — mas repetir esse volume de requisição (como aconteceu naturalmente durante desenvolvimento e teste desta integração) ou pedir muito dia de histórico de uma vez pra todo setor gera `HTTP 429 Minutely API request limit
+  exceeded` de jeito consistente. Limite prático parece depender do volume (coordenada × dia pedido), não só da frequência de chamada — às vez esperar o minuto que a própria API pede não basta se cota do período (hora/dia) já foi gasta por teste anterior.
 
-**Decisão de integração:** `src/ingest/openmeteo.py` (novo) divide as
-consultas em lotes de 50 coordenadas com uma pequena pausa entre lotes, e
-trata `HTTP 429` com uma espera fixa de 60s (em vez do backoff exponencial
-curto usado para outros erros transitórios). `src/export/dashboard_data.py`
-usa uma janela de histórico menor (4 dias, só o necessário para o
-acumulado de 72h) na consulta por setor — que é a maior, com ~900 pontos —
-e mantém 30 dias só na consulta por município (bem menor, ~100 pontos) que
-alimenta o gráfico de série temporal. Virou a fonte padrão da exportação do
-dashboard (`exportar_dashboard(..., fonte="openmeteo")`), sem remover o
-caminho por estação (INMET/ANA) já existente — `--fonte inmet` continua
-disponível. O design completo está em
-[`docs/superpowers/specs/2026-08-10-openmeteo-fonte-dashboard-design.md`](superpowers/specs/2026-08-10-openmeteo-fonte-dashboard-design.md).
+**Decisão de integração:** `src/ingest/openmeteo.py` (novo) divide consulta em lote de 50 coordenada com pequena pausa entre lote, e trata `HTTP 429` com espera fixa de 60s (em vez do backoff exponencial curto usado pra outro erro transitório). `src/export/dashboard_data.py` usa janela de histórico menor (4 dias, só o necessário pro acumulado de 72h) na consulta por setor — que é a maior, com ~900 ponto — e mantém 30 dias só na consulta por município (bem menor, ~100 ponto) que alimenta o gráfico de série temporal. Virou fonte padrão da exportação do dashboard (`exportar_dashboard(..., fonte="openmeteo")`), sem tirar o caminho por estação (INMET/ANA) que já existia — `--fonte inmet` continua disponível. Design completo em [`docs/superpowers/specs/2026-08-10-openmeteo-fonte-dashboard-design.md`](superpowers/specs/2026-08-10-openmeteo-fonte-dashboard-design.md).
