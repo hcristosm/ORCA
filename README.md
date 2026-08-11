@@ -169,14 +169,22 @@ python -m src.cli exportar-dashboard --uf SP
 # -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json
 # (com --fonte openmeteo, também gera previsao_sp.json — trajetória de alerta previsto)
 
-python -m http.server 8000 --directory docs
+scripts/rodar_dashboard.sh
 # depois abra http://localhost:8000/dashboard/
+# (ou `python -m http.server 8000 --directory docs`, o script é só um atalho)
 ```
 
 (Servir por HTTP local é necessário porque o `fetch()` do navegador não lê
 `file://` para os arquivos de dados; não precisa de nada além da biblioteca
 padrão do Python.) Em produção, o mesmo `docs/dashboard/` é publicado pelo
 GitHub Pages, com os dados atualizados diariamente pelo cron (ver abaixo).
+
+Visualmente, o dashboard segue a linguagem "cartografia editorial": fundo de
+papel com tinta escura, tipografia serifada nos títulos (Source Serif 4,
+self-hosted), terracota como única cor de alarme, ícones de linha fina
+(Lucide) e mapa base CARTO nos tons do tema ativo. Tema claro/escuro
+acompanha a preferência do sistema por padrão, com um botão sol/lua no
+header para trocar manualmente — a escolha fica salva no navegador.
 
 Por padrão a exportação usa a **Open-Meteo** (`--fonte openmeteo`): chuva
 consultada direto no centro de cada setor, sem depender de estação nem de
