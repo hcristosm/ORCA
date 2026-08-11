@@ -222,8 +222,7 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
   e o reprocessamento local pula estações sem mudança via CRC32, mesclando
   só os últimos 7 dias das que mudaram (janela de retificação). Retificações
   do INMET fora dessa janela de 7 dias não são recapturadas — ver
-  `src/ingest/inmet.py` e
-  [o spec da ingestão incremental](docs/superpowers/specs/2026-08-09-ingestao-inmet-incremental-design.md).
+  `src/ingest/inmet.py`.
 - **Densidade de estações é baixa.** SP tem 40 estações automáticas do INMET
   para 904 setores de risco; a distância média até a estação mais próxima
   fica em torno de 26km (máximo observado: ~74km). Chuva muito localizada
