@@ -206,6 +206,16 @@ dados, a referência da chuva e qual fonte foi usada.
 
 Sem seletor de UF/Ano por enquanto — os dados de hoje cobrem só SP.
 
+Abaixo do dashboard oficial, a seção **"Minhas áreas"** deixa qualquer visitante carregar um arquivo
+geolocalizado próprio (GeoJSON, KML ou shapefile em `.zip`) e ver chuva acumulada (24h/72h) e a
+trajetória de alerta previsto (72h) calculadas para essa área — útil porque a setorização da
+CPRM/SGB não é exaustiva. Tudo roda no navegador do visitante: o arquivo é parseado localmente, o
+centróide da geometria é calculado com Leaflet e a chuva é buscada direto na Open-Meteo, sem passar
+por nenhum servidor do ORCA. Nada do que é enviado é salvo em lugar nenhum — nem em `localStorage`,
+nem no repositório; a página some tudo ao recarregar. Limite de 5 áreas por vez e 10MB por arquivo.
+Como a CPRM não avaliou essas áreas, não há grau de risco geológico inferido — só um campo opcional
+para o próprio visitante informar uma classificação (sinalizada como autodeclarada, não oficial).
+
 ### 4. Atualização automática
 
 ```bash
