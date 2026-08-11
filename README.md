@@ -15,7 +15,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](#instalação)
 [![Dashboard ao vivo](https://img.shields.io/badge/dashboard-ao%20vivo%20no%20GitHub%20Pages-c0472f)](https://hcristosm.github.io/ORCA/dashboard/)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Licença](https://img.shields.io/badge/uso-portfólio-lightgrey)](#licença)
+[![Licença](https://img.shields.io/badge/licença-BSD%203--Clause-blue)](LICENSE)
 
 ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-150458?logo=pandas&logoColor=white)
@@ -363,8 +363,12 @@ continua disponível via `--fonte inmet`. →
 
 ## Licença
 
-Projeto de portfólio pessoal. Os dados públicos usados pertencem aos seus
-respectivos órgãos/serviços — [CPRM/SGB](https://www.sgb.gov.br/),
-[INMET](https://portal.inmet.gov.br/), [ANA](https://www.gov.br/ana/pt-br) e
-[Open-Meteo](https://open-meteo.com/) — consulte os termos de uso de cada um
-antes de redistribuir.
+Distribuído sob a licença [BSD 3-Clause](LICENSE) — uso, cópia, modificação e
+redistribuição são livres, inclusive comerciais, desde que o aviso de
+copyright e a licença sejam mantidos e o crédito ao autor original
+(Mateus Hcristos Leptokarydis) seja preservado.
+
+Os dados públicos usados pertencem aos seus respectivos órgãos/serviços —
+[CPRM/SGB](https://www.sgb.gov.br/), [INMET](https://portal.inmet.gov.br/),
+[ANA](https://www.gov.br/ana/pt-br) e [Open-Meteo](https://open-meteo.com/) —
+consulte os termos de uso de cada um antes de redistribuir.
