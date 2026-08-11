@@ -85,6 +85,38 @@
       </div>
     </div>
   </div>
+
+  <section class="areas-customizadas" id="areasCustomizadas">
+    <h2><svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>Minhas áreas</h2>
+    <p class="aviso-privacidade">
+      <svg class="icone"><use href="icons/sprite.svg#icon-info"></use></svg>
+      Carregue um arquivo com sua área (GeoJSON, KML ou shapefile em .zip) e veja chuva acumulada e
+      alerta previsto nela, calculados na hora pelo seu navegador. Nada que você envia é salvo em
+      lugar nenhum — some ao recarregar a página. Limite de 5 áreas por vez, até 10MB por arquivo.
+    </p>
+
+    <div class="upload-area">
+      <label for="uploadArquivo" class="botao-upload">
+        <svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>
+        Carregar arquivo (.geojson, .kml, .zip)
+      </label>
+      <input type="file" id="uploadArquivo" accept=".geojson,.json,.kml,.zip" hidden>
+      <div class="campo campo-classificacao">
+        <label for="classificacaoSelect">Classificação de risco (opcional, autodeclarada)</label>
+        <select id="classificacaoSelect">
+          <option value="">Não informado</option>
+          <option value="alto">Alto</option>
+          <option value="muito alto">Muito alto</option>
+        </select>
+      </div>
+    </div>
+
+    <p class="upload-erro" id="uploadErro" hidden></p>
+
+    <div id="mapaAreas" hidden></div>
+
+    <div class="cards-areas" id="cardsAreas"></div>
+  </section>
 </main>
 
 <footer>
@@ -96,6 +128,9 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.min.js"></script>
+<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+<script src="areas-customizadas.js"></script>
 
 <script>
 (function () {
