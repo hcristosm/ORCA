@@ -156,6 +156,168 @@
     if (typeof renderizarAreas === "function") renderizarAreas();
   }
 
+  function token(nome) {
+    return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+  }
+
+  const CORES_CLASSIFICACAO = { "alto": "--risco-alto", "muito alto": "--risco-muito-alto" };
+
+  function corClassificacao(classificacao) {
+    const variavel = CORES_CLASSIFICACAO[classificacao];
+    return token(variavel || "--risco-padrao");
+  }
+
+  function limiarAtual() {
+    const slider = document.getElementById("limiarSlider");
+    return slider ? Number(slider.value) : 100;
+  }
+
+  function formatarMm(valor) {
+    return typeof valor === "number" ? `${valor.toFixed(1)}mm` : "—";
+  }
+
+  function escaparHtml(texto) {
+    const div = document.createElement("div");
+    div.textContent = texto;
+    return div.innerHTML;
+  }
+
+  function removerArea(id) {
+    const area = areas.find(a => a.id === id);
+    if (area && area.grafico) area.grafico.destroy();
+    areas = areas.filter(a => a.id !== id);
+    renderizarAreas();
+    renderizarMapaAreas();
+  }
+
+  function retentarArea(id) {
+    const area = areas.find(a => a.id === id);
+    if (area) processarArea(area).then(renderizarMapaAreas);
+  }
+
+  function desenharGraficoArea(area) {
+    const canvas = document.getElementById(`grafico-area-${area.id}`);
+    if (!canvas || !area.trajetoria) return;
+    const labels = area.trajetoria.map(p =>
+      new Date(p[0]).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", timeZone: "UTC" })
+    );
+    const valores = area.trajetoria.map(p => p[1]);
+    if (area.grafico) area.grafico.destroy();
+    area.grafico = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{ label: "Alerta previsto 72h (mm)", data: valores, borderColor: token("--serie-chuva"), tension: 0.2, spanGaps: true }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { ticks: { maxTicksLimit: 6 } }, y: { beginAtZero: true } },
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+
+  function cardAreaHTML(area) {
+    const badge = area.classificacao
+      ? `<span class="selo-autodeclarado">Classificação informada pelo usuário (${escaparHtml(area.classificacao)}) — não avaliada pela CPRM/IPT</span>`
+      : "";
+
+    let corpo;
+    if (area.estado === "carregando") {
+      corpo = `<p class="card-area-estado">Consultando chuva na Open-Meteo…</p>`;
+    } else if (area.estado === "erro") {
+      corpo =
+        `<p class="card-area-estado erro">${escaparHtml(area.erro)}</p>` +
+        `<button class="botao-retentar" type="button" data-retentar="${area.id}">` +
+        `<svg class="icone"><use href="icons/sprite.svg#icon-refresh-cw"></use></svg>Tentar novamente</button>`;
+    } else {
+      const emAtencao = typeof area.chuva72 === "number" && area.chuva72 >= limiarAtual();
+      corpo =
+        `<div class="card-area-metricas">` +
+        `<div><span class="rotulo">24h</span><span class="valor">${formatarMm(area.chuva24)}</span></div>` +
+        `<div><span class="rotulo">72h</span><span class="valor">${formatarMm(area.chuva72)}</span></div>` +
+        `<span class="selo-atencao${emAtencao ? " ativo" : ""}">${emAtencao ? "Em atenção" : "Sem alerta"}</span>` +
+        `</div>` +
+        `<div class="card-area-grafico"><canvas id="grafico-area-${area.id}"></canvas></div>`;
+    }
+
+    return (
+      `<div class="card-area">` +
+      `<div class="card-area-cabecalho"><b>${escaparHtml(area.nome)}</b>` +
+      `<button class="botao-remover" type="button" data-remover="${area.id}" aria-label="Remover área">` +
+      `<svg class="icone"><use href="icons/sprite.svg#icon-trash-2"></use></svg></button></div>` +
+      badge + corpo + `</div>`
+    );
+  }
+
+  function renderizarAreas() {
+    const container = document.getElementById("cardsAreas");
+    if (!areas.length) {
+      container.innerHTML = "";
+      return;
+    }
+    container.innerHTML = areas.map(cardAreaHTML).join("");
+    for (const area of areas) {
+      if (area.estado === "pronto") desenharGraficoArea(area);
+    }
+  }
+
+  const TILE_URLS_AREAS = {
+    claro: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    escuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  };
+
+  function temaAtualAreas() {
+    const atributo = document.documentElement.getAttribute("data-tema");
+    if (atributo === "claro" || atributo === "escuro") return atributo;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro";
+  }
+
+  let mapaAreas = null;
+
+  function renderizarMapaAreas() {
+    const container = document.getElementById("mapaAreas");
+    if (!areas.length) {
+      container.hidden = true;
+      if (mapaAreas) { mapaAreas.remove(); mapaAreas = null; }
+      return;
+    }
+    container.hidden = false;
+
+    if (mapaAreas) { mapaAreas.remove(); mapaAreas = null; }
+    mapaAreas = L.map("mapaAreas");
+    L.tileLayer(TILE_URLS_AREAS[temaAtualAreas()], {
+      attribution: "© OpenStreetMap, © CARTO", maxZoom: 19,
+    }).addTo(mapaAreas);
+
+    const colecao = { type: "FeatureCollection", features: areas.map(a => a.feature) };
+    const camada = L.geoJSON(colecao, {
+      style: feature => {
+        const area = areas.find(a => a.feature === feature);
+        const cor = area && area.classificacao ? corClassificacao(area.classificacao) : token("--risco-padrao");
+        return { color: cor, weight: 2, dashArray: "6 4", fillColor: cor, fillOpacity: 0.25 };
+      },
+      onEachFeature: (feature, layer) => {
+        const area = areas.find(a => a.feature === feature);
+        if (area) layer.bindTooltip(area.nome);
+      },
+    }).addTo(mapaAreas);
+
+    mapaAreas.fitBounds(camada.getBounds(), { padding: [20, 20] });
+  }
+
+  window.ORCA_atualizarTemaAreas = renderizarMapaAreas;
+
+  document.getElementById("cardsAreas").addEventListener("click", ev => {
+    const remover = ev.target.closest("button[data-remover]");
+    if (remover) { removerArea(Number(remover.dataset.remover)); return; }
+    const retentar = ev.target.closest("button[data-retentar]");
+    if (retentar) retentarArea(Number(retentar.dataset.retentar));
+  });
+
+  const limiarSliderEl = document.getElementById("limiarSlider");
+  if (limiarSliderEl) limiarSliderEl.addEventListener("input", () => renderizarAreas());
+
   document.getElementById("uploadArquivo").addEventListener("change", async ev => {
     const file = ev.target.files[0];
     ev.target.value = "";
@@ -197,7 +359,9 @@
       erroEl.hidden = false;
     }
 
+    const classificacao = document.getElementById("classificacaoSelect").value;
     const baseNome = file.name.replace(/\.(geojson|json|kml|zip)$/i, "");
+
     for (const [i, feature] of usadas.entries()) {
       const props = feature.properties || {};
       const nomePropriedade = props.name || props.Name || props.NOME;
@@ -205,14 +369,15 @@
         id: gerarId(),
         nome: nomePropriedade || (usadas.length > 1 ? `${baseNome} — ${i + 1}` : baseNome),
         feature,
+        classificacao,
         centroide: centroide(feature),
+        estado: "carregando",
+        chuva24: null, chuva72: null, trajetoria: null, erro: null, grafico: null,
       };
       areas.push(area);
-      processarArea(area).then(() => {
-        console.log("Área processada:", area.id, area.nome, {
-          chuva24: area.chuva24, chuva72: area.chuva72, estado: area.estado, erro: area.erro,
-        });
-      });
+      processarArea(area).then(renderizarMapaAreas);
     }
+    renderizarAreas();
+    renderizarMapaAreas();
   });
 })();
