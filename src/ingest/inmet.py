@@ -270,6 +270,26 @@ def _salvar_manifesto(caminho: Path, manifesto: dict) -> None:
 JANELA_RETIFICACAO = pd.Timedelta(days=7)
 
 
+def _mesclar_serie_estacao(
+    serie_existente: pd.DataFrame, serie_nova: pd.DataFrame, cutoff: pd.Timestamp
+) -> pd.DataFrame:
+    """Funde a série já salva de uma estação com a recém-baixada, na janela de retificação.
+
+    Antes de `cutoff`, os dados existentes são tratados como estáveis e
+    preservados; a partir de `cutoff` (inclusive), a leitura mais recente
+    baixada prevalece em caso de retificação (mesmo `data_hora`, `chuva_mm`
+    diferente) — ver docstring do módulo para a estratégia incremental.
+    """
+    antigas_estaveis = serie_existente[serie_existente["data_hora"] < cutoff]
+    recentes_novas = serie_nova[serie_nova["data_hora"] >= cutoff]
+    return (
+        pd.concat([antigas_estaveis, recentes_novas], ignore_index=True)
+        .drop_duplicates(subset="data_hora", keep="last")
+        .sort_values("data_hora")
+        .reset_index(drop=True)
+    )
+
+
 def ingerir_uf(
     uf: str,
     ano: int,
@@ -353,16 +373,8 @@ def ingerir_uf(
             if serie_existente_estacao is None:
                 serie_final = serie_nova
             else:
-                ultima_existente = serie_existente_estacao["data_hora"].max()
-                cutoff = ultima_existente - JANELA_RETIFICACAO
-                antigas_estaveis = serie_existente_estacao[serie_existente_estacao["data_hora"] < cutoff]
-                recentes_novas = serie_nova[serie_nova["data_hora"] >= cutoff]
-                serie_final = (
-                    pd.concat([antigas_estaveis, recentes_novas], ignore_index=True)
-                    .drop_duplicates(subset="data_hora", keep="last")
-                    .sort_values("data_hora")
-                    .reset_index(drop=True)
-                )
+                cutoff = serie_existente_estacao["data_hora"].max() - JANELA_RETIFICACAO
+                serie_final = _mesclar_serie_estacao(serie_existente_estacao, serie_nova, cutoff)
 
         if serie_final.empty:
             logger.warning(

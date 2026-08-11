@@ -91,7 +91,9 @@ flowchart LR
     ING2 --> STORE
     ING3 --> STORE
     STORE --> PROC["src/processing/cruzamento.py<br/>estação mais próxima (INMET+ANA) + chuva 24h/72h"]
+    PROC --> PREV["src/processing/previsao.py<br/>trajetória de alerta previsto (72h)"]
     PROC --> EXPORT["src/export/dashboard_data.py<br/>fonte openmeteo (padrão) ou inmet"]
+    PREV --> EXPORT
     ING4 --> EXPORT
     EXPORT --> DASH["docs/dashboard/<br/>HTML/JS estático (Leaflet + Chart.js)"]
 ```
@@ -108,6 +110,12 @@ pareciam desnecessários para o volume de dados de um estado). Hoje ela existe
 como uma camada fina sobre GeoPackage (setores) e CSV (chuva), usada por
 `ingest`, `processing` e pela exportação estática, sem introduzir dependência
 de banco.
+
+`src/processing/` tem dois módulos: `cruzamento.py` (cruzamento espacial —
+setor → estação mais próxima — e chuva acumulada observada) e `previsao.py`
+(projeção temporal — trajetória do acumulado de 72h combinando chuva
+observada e prevista pela Open-Meteo). `dashboard_data.py` consome os dois só
+pela interface pública de cada um.
 
 O dashboard já foi um app Streamlit (`src/dashboard/app.py`); foi substituído
 por um site estático (`docs/dashboard/`) para resolver estética, layout e
@@ -254,20 +262,22 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
 pytest
 ```
 
-64 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
+73 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
 retry com backoff e fallback para cache local; parsing do CSV do INMET,
 leitura de estação dentro do ZIP anual, GET condicional do ZIP (ETag/304) e
 a ingestão incremental por CRC32 (estação sem mudança pulada, estação
-mudada mesclada, retificação dentro da janela de 7 dias); parsing do
-XML/SOAP da ANA, retry em HTTP 429 e o filtro de estações sem dado recente;
-parsing em lote da Open-Meteo, divisão em lotes e retry; a lógica de
-cruzamento espacial (estação mais próxima, incluindo o pareamento combinado
-INMET+ANA com desempate por recência) e temporal (chuva acumulada 24h/72h);
-e a exportação dos dados do dashboard nas duas fontes (GeoJSON de setores,
-recorte de 30 dias na série temporal, metadados). Toda chamada de rede é
-mockada, então a suíte roda sem internet. O dashboard em si (HTML/JS
-estático) não tem testes automatizados — sem framework de teste de frontend
-no projeto, a validação é manual.
+mudada mesclada, retificação dentro da janela de 7 dias — a fusão em si,
+`_mesclar_serie_estacao`, também é testada isoladamente como função pura,
+sem precisar montar ZIP/HTTP); parsing do XML/SOAP da ANA, retry em HTTP 429
+e o filtro de estações sem dado recente; parsing em lote da Open-Meteo,
+divisão em lotes e retry; a lógica de cruzamento espacial (estação mais
+próxima, incluindo o pareamento combinado INMET+ANA com desempate por
+recência) e temporal (chuva acumulada 24h/72h); a trajetória de alerta
+previsto (`src/processing/previsao.py`); e a exportação dos dados do
+dashboard nas duas fontes (GeoJSON de setores, recorte de 30 dias na série
+temporal, metadados). Toda chamada de rede é mockada, então a suíte roda sem
+internet. O dashboard em si (HTML/JS estático) não tem testes automatizados
+— sem framework de teste de frontend no projeto, a validação é manual.
 
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda essa suíte a cada push e
 pull request, separado do cron diário de atualização de dados.
