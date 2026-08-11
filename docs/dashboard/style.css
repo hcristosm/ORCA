@@ -191,3 +191,49 @@ tbody tr:hover { background: var(--papel-hover); }
 
 footer { padding: var(--space-6); text-align: center; font-size: var(--text-caption); color: var(--tinta-fraca); border-top: var(--border-hairline) solid var(--linha); }
 footer a { display: inline-flex; align-items: center; gap: 4px; }
+
+.areas-customizadas { margin-top: var(--space-6); padding-top: var(--space-6); border-top: var(--border-hairline) solid var(--linha); }
+
+.aviso-privacidade {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  font-size: var(--text-caption); color: var(--tinta-muted);
+  background: var(--papel-elevado); border: var(--border-hairline) solid var(--linha);
+  border-radius: var(--radius-md); padding: var(--space-3); margin-bottom: var(--space-4);
+}
+.aviso-privacidade .icone { margin-top: 2px; }
+
+.upload-area { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); margin-bottom: var(--space-3); }
+.botao-upload {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-label); color: var(--papel); background: var(--acento);
+  border-radius: var(--radius-md); padding: 0 var(--space-4); height: var(--control-height);
+  cursor: pointer; border: none;
+}
+.campo-classificacao { min-width: 220px; }
+.upload-erro { font-size: var(--text-caption); color: var(--risco-muito-alto); margin-bottom: var(--space-4); }
+
+#mapaAreas { height: 320px; border: var(--border-hairline) solid var(--linha); border-radius: var(--radius-lg); margin-bottom: var(--space-4); background: var(--papel-elevado); }
+
+.cards-areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); }
+.card-area { background: var(--papel-elevado); border: var(--border-hairline) solid var(--linha); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--shadow-card); }
+.card-area-cabecalho { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.botao-remover { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: none; background: transparent; color: var(--tinta-fraca); cursor: pointer; border-radius: var(--radius-md); }
+.botao-remover:hover { background: var(--papel-hover); color: var(--tinta); }
+
+.selo-autodeclarado { display: block; font-size: var(--text-micro); color: var(--tinta-fraca); margin-bottom: var(--space-2); }
+
+.card-area-estado { font-size: var(--text-label); color: var(--tinta-muted); }
+.card-area-estado.erro { color: var(--risco-muito-alto); }
+.botao-retentar {
+  display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-caption);
+  color: var(--tinta); background: var(--papel); border: var(--border-hairline) solid var(--linha);
+  border-radius: var(--radius-md); padding: var(--space-1) var(--space-2); cursor: pointer; margin-top: var(--space-2);
+}
+
+.card-area-metricas { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.card-area-metricas .rotulo { display: block; font-size: var(--text-micro); color: var(--tinta-fraca); text-transform: uppercase; letter-spacing: var(--tracking-wide); }
+.card-area-metricas .valor { font-family: var(--font-serif); font-size: var(--text-h3); font-weight: var(--weight-semibold); color: var(--tinta); }
+.selo-atencao { font-size: var(--text-micro); padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); border: var(--border-hairline) solid var(--linha); color: var(--tinta-muted); }
+.selo-atencao.ativo { border-color: var(--contorno-atencao); color: var(--contorno-atencao); font-weight: var(--weight-medium); }
+
+.card-area-grafico { position: relative; height: 140px; }
