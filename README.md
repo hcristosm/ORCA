@@ -13,7 +13,7 @@
 
 [![Release](https://img.shields.io/github/v/release/hcristosm/ORCA)](https://github.com/hcristosm/ORCA/releases/latest)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](#instalação)
-[![Dashboard](https://img.shields.io/badge/dashboard-est%C3%A1tico-1a1a19)](#3-abrir-o-dashboard)
+[![Dashboard ao vivo](https://img.shields.io/badge/dashboard-ao%20vivo%20no%20GitHub%20Pages-c0472f)](https://hcristosm.github.io/ORCA/dashboard/)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Licença](https://img.shields.io/badge/uso-portfólio-lightgrey)](#licença)
 
@@ -40,10 +40,14 @@ visão computacional para monitoramento de encostas, eu queria uma ferramenta
 local, sem backend, sem custo, que juntasse duas fontes públicas que raramente
 aparecem lado a lado.
 
-> As capturas de tela do dashboard anterior (Streamlit) foram removidas deste
-> README por não refletirem mais a interface atual; novas capturas do site
-> estático entram assim que ele estiver publicado no GitHub Pages (ver
-> [Roadmap](#roadmap)).
+**Dashboard ao vivo:** [hcristosm.github.io/ORCA/dashboard](https://hcristosm.github.io/ORCA/dashboard/)
+— publicado no GitHub Pages e atualizado todo dia pelo cron (ver
+[Atualização automática](#4-atualização-automática)).
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-claro.png" alt="Dashboard do ORCA em tema claro: mapa de setores de risco geológico coloridos por grau, cards de contagem, tabela de setores em atenção e gráfico de série temporal de chuva" width="49%">
+  <img src="docs/screenshots/dashboard-escuro.png" alt="Mesmo dashboard do ORCA em tema escuro" width="49%">
+</p>
 
 ---
 
@@ -342,8 +346,6 @@ continua disponível via `--fonte inmet`. →
   08/08/2026, integração (`src/ingest/ana.py` + cruzamento combinado)
   implementada em 09/08/2026 (ver
   [Decisões e investigações](#decisões-e-investigações)).
-- Novas capturas de tela do dashboard estático para este README, depois da
-  primeira publicação no GitHub Pages.
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
   reescrever o pipeline de ingestão.
 - Cobrir mais UFs além de SP (inclui trazer de volta um seletor de UF no
