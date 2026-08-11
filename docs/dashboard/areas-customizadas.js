@@ -147,7 +147,7 @@
       const referenciaMs = referenciaObservada(serie, agoraMs);
       area.chuva24 = chuvaAcumulada(serie, referenciaMs, 24);
       area.chuva72 = chuvaAcumulada(serie, referenciaMs, 72);
-      area.trajetoria = trajetoria72h(serie, agoraMs, PASSO_PREVISAO_HORAS, HORIZONTE_PREVISAO_HORAS);
+      area.trajetoria = trajetoria72h(serie, referenciaMs, PASSO_PREVISAO_HORAS, HORIZONTE_PREVISAO_HORAS);
       area.estado = "pronto";
     } catch (e) {
       area.estado = "erro";
@@ -299,7 +299,7 @@
       },
       onEachFeature: (feature, layer) => {
         const area = areas.find(a => a.feature === feature);
-        if (area) layer.bindTooltip(area.nome);
+        if (area) layer.bindTooltip(escaparHtml(area.nome));
       },
     }).addTo(mapaAreas);
 
@@ -362,20 +362,33 @@
     const classificacao = document.getElementById("classificacaoSelect").value;
     const baseNome = file.name.replace(/\.(geojson|json|kml|zip)$/i, "");
 
+    let comFalha = 0;
     for (const [i, feature] of usadas.entries()) {
       const props = feature.properties || {};
       const nomePropriedade = props.name || props.Name || props.NOME;
+      let centro;
+      try {
+        centro = centroide(feature);
+      } catch (e) {
+        comFalha++;
+        continue;
+      }
       const area = {
         id: gerarId(),
         nome: nomePropriedade || (usadas.length > 1 ? `${baseNome} — ${i + 1}` : baseNome),
         feature,
         classificacao,
-        centroide: centroide(feature),
+        centroide: centro,
         estado: "carregando",
         chuva24: null, chuva72: null, trajetoria: null, erro: null, grafico: null,
       };
       areas.push(area);
       processarArea(area).then(renderizarMapaAreas);
+    }
+    if (comFalha > 0) {
+      erroEl.textContent = (erroEl.hidden ? "" : erroEl.textContent + " ") +
+        `${comFalha} geometria(s) sem coordenadas válidas foram ignoradas.`;
+      erroEl.hidden = false;
     }
     renderizarAreas();
     renderizarMapaAreas();
