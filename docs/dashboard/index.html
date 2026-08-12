@@ -149,12 +149,24 @@
   function corPadrao() { return token("--risco-padrao"); }
   function corAtencao() { return token("--contorno-atencao"); }
   function corSerie() { return token("--serie-chuva"); }
+  function coresVento() {
+    return {
+      "atencao": token("--vento-atencao"),
+      "perigo": token("--vento-perigo"),
+      "grande_perigo": token("--vento-grande-perigo"),
+    };
+  }
+  function rotuloSeveridade(sev) {
+    return { "atencao": "Atenção", "perigo": "Perigo", "grande_perigo": "Grande perigo" }[sev] || sev;
+  }
 
   const estado = { janela: 72, limiar: 100, municipio: "" };
   let setoresGeoJSON = null;
   let series = {};
   let previsao = null;
+  let ventoGeoJSON = null;
   let camadaSetores = null;
+  let camadaVento = null;
   let mapa = null;
   let grafico = null;
 
@@ -205,6 +217,13 @@
       previsao = previsaoResp.ok ? await previsaoResp.json() : null;
     } catch (e) {
       previsao = null;
+    }
+
+    try {
+      const ventoResp = await fetch(`data/vento_${UF}.geojson`);
+      ventoGeoJSON = ventoResp.ok ? await ventoResp.json() : null;
+    } catch (e) {
+      ventoGeoJSON = null;
     }
 
     const detalheFonte = meta.fonte === "openmeteo"
@@ -274,10 +293,20 @@
         '<span class="amostra" style="background:' + cores["alto"] + '"></span>Alto<br>' +
         '<span class="amostra" style="background:' + cores["muito alto"] + '"></span>Muito alto<br>' +
         '<span style="border:2px solid ' + corAtencao() + ';padding:0 4px">Em atenção</span><br>' +
-        '<span style="border:2px dashed ' + corAtencao() + ';padding:0 4px">Alerta previsto</span>';
+        '<span style="border:2px dashed ' + corAtencao() + ';padding:0 4px">Alerta previsto</span>' +
+        (ventoGeoJSON && ventoGeoJSON.features.length
+          ? '<br><b>Vento (rajada 24h)</b><br>' +
+            '<span class="amostra" style="background:' + coresVento()["atencao"] + '"></span>Atenção<br>' +
+            '<span class="amostra" style="background:' + coresVento()["perigo"] + '"></span>Perigo<br>' +
+            '<span class="amostra" style="background:' + coresVento()["grande_perigo"] + '"></span>Grande perigo'
+          : '');
       return div;
     };
     legenda.addTo(mapa);
+    renderizarVento();
+    if (ventoGeoJSON && ventoGeoJSON.features.length) {
+      L.control.layers(null, { "Rajada de vento": camadaVento }, { position: "topright", collapsed: false }).addTo(mapa);
+    }
   }
 
   function setoresFiltrados() {
@@ -381,6 +410,29 @@
     }).addTo(mapa);
 
     if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [20, 20] });
+  }
+
+  function renderizarVento() {
+    if (camadaVento) { mapa.removeLayer(camadaVento); camadaVento = null; }
+    if (!ventoGeoJSON || !ventoGeoJSON.features.length) return;
+
+    const cores = coresVento();
+    camadaVento = L.geoJSON(ventoGeoJSON, {
+      pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+        radius: 8,
+        fillColor: cores[feature.properties.severidade] || corPadrao(),
+        fillOpacity: 0.85,
+        color: corAtencao(),
+        weight: 1,
+      }),
+      onEachFeature: (feature, layer) => {
+        const p = feature.properties;
+        layer.bindTooltip(
+          `<b>${p.munic}</b><br>Rajada (24h): ${p.rajada_kmh_24h.toFixed(1)} km/h<br>` +
+          `Severidade: ${rotuloSeveridade(p.severidade)}`
+        );
+      },
+    });
   }
 
   function renderizarTabela(emAtencao, alertaPrevisto) {
