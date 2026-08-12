@@ -51,6 +51,7 @@ class OpenMeteoFetchError(RuntimeError):
 
 def _post_lote(
     pontos: list[tuple[float, float]],
+    variaveis_hourly: list[str],
     dias_historico: int,
     dias_previsao: int,
     timeout: float,
@@ -62,7 +63,7 @@ def _post_lote(
     corpo = {
         "latitude": [lat for lat, _ in pontos],
         "longitude": [lon for _, lon in pontos],
-        "hourly": ["precipitation"],
+        "hourly": variaveis_hourly,
         "past_days": dias_historico,
         "forecast_days": dias_previsao,
     }
@@ -101,6 +102,53 @@ def _post_lote(
     return resposta_ok.json()
 
 
+def _fetch_variavel_batch(
+    pontos: list[tuple[float, float]],
+    variavel_hourly: str,
+    coluna_saida: str,
+    dias_historico: int,
+    dias_previsao: int,
+    timeout: float,
+    max_retries: int,
+    backoff_factor: float,
+    session: requests.Session | None,
+    tamanho_lote: int,
+    pausa_entre_lotes: float,
+) -> list[pd.DataFrame]:
+    """Busca uma variável horária da Open-Meteo para uma lista de pontos, em lotes.
+
+    Compartilhada por `fetch_precipitacao_batch` (variavel="precipitation") e
+    `fetch_vento_batch` (variavel="windgusts_10m") — mesma paginação, retry e
+    tratamento de 429, só muda qual campo é pedido/lido da resposta.
+    """
+    if not pontos:
+        return []
+
+    sess = session or requests.Session()
+    dados: list[dict] = []
+    for inicio in range(0, len(pontos), tamanho_lote):
+        lote = pontos[inicio:inicio + tamanho_lote]
+        dados.extend(
+            _post_lote(
+                lote, [variavel_hourly], dias_historico, dias_previsao,
+                timeout, max_retries, backoff_factor, sess,
+            )
+        )
+        if inicio + tamanho_lote < len(pontos):
+            time.sleep(pausa_entre_lotes)
+
+    series = []
+    for item in dados:
+        horario = item.get("hourly", {})
+        horas = horario.get("time", [])
+        valores = horario.get(variavel_hourly, [])
+        series.append(pd.DataFrame({
+            "data_hora": pd.to_datetime(horas, utc=True),
+            coluna_saida: valores,
+        }))
+    return series
+
+
 def fetch_precipitacao_batch(
     pontos: list[tuple[float, float]],
     dias_historico: int = 30,
@@ -125,29 +173,30 @@ def fetch_precipitacao_batch(
     ver docstring do módulo sobre o limite prático da API), com uma pausa de
     `pausa_entre_lotes` segundos entre as chamadas.
     """
-    if not pontos:
-        return []
+    return _fetch_variavel_batch(
+        pontos, "precipitation", "chuva_mm", dias_historico, dias_previsao,
+        timeout, max_retries, backoff_factor, session, tamanho_lote, pausa_entre_lotes,
+    )
 
-    sess = session or requests.Session()
-    dados: list[dict] = []
-    for inicio in range(0, len(pontos), tamanho_lote):
-        lote = pontos[inicio:inicio + tamanho_lote]
-        dados.extend(
-            _post_lote(lote, dias_historico, dias_previsao, timeout, max_retries, backoff_factor, sess)
-        )
-        if inicio + tamanho_lote < len(pontos):
-            time.sleep(pausa_entre_lotes)
 
-    series = []
-    for item in dados:
-        horario = item.get("hourly", {})
-        horas = horario.get("time", [])
-        precipitacoes = horario.get("precipitation", [])
-        df = pd.DataFrame(
-            {
-                "data_hora": pd.to_datetime(horas, utc=True),
-                "chuva_mm": precipitacoes,
-            }
-        )
-        series.append(df)
-    return series
+def fetch_vento_batch(
+    pontos: list[tuple[float, float]],
+    dias_historico: int = 4,
+    dias_previsao: int = 1,
+    timeout: float = 60.0,
+    max_retries: int = 5,
+    backoff_factor: float = 2.0,
+    session: requests.Session | None = None,
+    tamanho_lote: int = TAMANHO_LOTE_PADRAO,
+    pausa_entre_lotes: float = PAUSA_ENTRE_LOTES_PADRAO,
+) -> list[pd.DataFrame]:
+    """Busca rajada de vento (`windgusts_10m`) horária para uma lista de pontos `(lat, lon)`.
+
+    Mesmo cliente/lote/retry de `fetch_precipitacao_batch` — reaproveita
+    `_fetch_variavel_batch`. Retorna uma lista de DataFrames
+    (`data_hora, vento_rajada_kmh`), um por ponto, na mesma ordem de `pontos`.
+    """
+    return _fetch_variavel_batch(
+        pontos, "windgusts_10m", "vento_rajada_kmh", dias_historico, dias_previsao,
+        timeout, max_retries, backoff_factor, session, tamanho_lote, pausa_entre_lotes,
+    )
