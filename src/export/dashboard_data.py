@@ -269,9 +269,10 @@ def exportar_dashboard(
         (saida_dir / f"previsao_{uf_norm.lower()}.json").write_text(
             json.dumps(previsao, ensure_ascii=False, separators=(",", ":"))
         )
-    (saida_dir / f"meta_{uf_norm.lower()}.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2)
-    )
+    caminho_meta = saida_dir / f"meta_{uf_norm.lower()}.json"
+    meta_existente = json.loads(caminho_meta.read_text()) if caminho_meta.exists() else {}
+    meta_existente.update(meta)
+    caminho_meta.write_text(json.dumps(meta_existente, ensure_ascii=False, indent=2))
 
     logger.info("Exportados dados do dashboard (fonte=%s) para %s: %s", fonte, uf_norm, meta)
     return meta
