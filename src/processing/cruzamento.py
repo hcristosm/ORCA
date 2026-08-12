@@ -29,6 +29,31 @@ def centroides_4326(setores: gpd.GeoDataFrame) -> gpd.GeoSeries:
     return centroides_metricos(setores).to_crs("EPSG:4326")
 
 
+def centroides_municipio(setores: gpd.GeoDataFrame) -> tuple[list[str], list[tuple[float, float]]]:
+    """Um ponto representativo por município: centroide médio (métrico) dos setores daquele município.
+
+    Não é dissolve de geometria — a média dos centroides dos setores já é
+    suficiente para escolher um ponto de consulta razoável para APIs por
+    coordenada (Open-Meteo). Retorna `(municipios, pontos)` em
+    correspondência posicional, `pontos` já em `(lat, lon)`.
+    """
+    centroides = centroides_metricos(setores)
+    df_centroides = pd.DataFrame({
+        "munic": setores["munic"].values,
+        "x": centroides.x.values,
+        "y": centroides.y.values,
+    })
+    medios = df_centroides.groupby("munic")[["x", "y"]].mean()
+    municipios = list(medios.index)
+
+    pontos_metricos = gpd.GeoSeries(
+        [Point(linha.x, linha.y) for linha in medios.itertuples()], crs=centroides.crs
+    )
+    pontos_4326 = pontos_metricos.to_crs("EPSG:4326")
+    pontos = [(pt.y, pt.x) for pt in pontos_4326]
+    return municipios, pontos
+
+
 def _estacoes_para_pontos(chuva_df: pd.DataFrame) -> gpd.GeoDataFrame:
     estacoes = chuva_df.drop_duplicates("codigo_estacao")[
         ["codigo_estacao", "nome_estacao", "latitude", "longitude"]

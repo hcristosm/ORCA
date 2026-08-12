@@ -198,3 +198,28 @@ def test_calcular_cruzamento_sem_referencia_explicita_usa_leitura_propria_da_ana
     assert s1["fonte_estacao"] == "ana"
     assert not pd.isna(s1["chuva_24h"])
     assert s1["chuva_24h"] == pytest.approx(48.0)
+
+
+def test_centroides_municipio_agrupa_e_ordena_por_nome():
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+
+    from src.processing.cruzamento import centroides_municipio
+
+    def quadrado(cx, cy, lado=0.01):
+        d = lado / 2
+        return Polygon([(cx - d, cy - d), (cx + d, cy - d), (cx + d, cy + d), (cx - d, cy + d)])
+
+    setores = gpd.GeoDataFrame(
+        {"munic": ["CIDADE B", "CIDADE A", "CIDADE A"]},
+        geometry=[quadrado(-47.0, -24.0), quadrado(-46.5, -23.5), quadrado(-46.7, -23.6)],
+        crs="EPSG:4326",
+    )
+
+    municipios, pontos = centroides_municipio(setores)
+
+    assert municipios == ["CIDADE A", "CIDADE B"]
+    assert len(pontos) == 2
+    lat_a, lon_a = pontos[0]
+    assert -24.0 < lat_a < -23.0
+    assert -47.0 < lon_a < -46.0

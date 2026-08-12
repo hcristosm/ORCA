@@ -15,6 +15,7 @@ import typer
 
 from src.config import DASHBOARD_DATA_DIR, DATA_DIR, caminho_setores
 from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
+from src.export.vento_data import exportar_vento
 from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
 from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
 from src.ingest.ana import ANAFetchError, ingerir_uf as ingerir_ana
@@ -83,6 +84,27 @@ def exportar_dashboard_cmd(
     typer.echo(f"{meta['total_setores']} setores exportados para {saida_dir} (fonte: {meta['fonte']})")
 
 
+@app.command("exportar-vento")
+def exportar_vento_cmd(
+    uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
+    ano: int = typer.Option(
+        datetime.now(timezone.utc).year, "--ano",
+        help="Não usado hoje; mantido por simetria com exportar-dashboard",
+    ),
+    diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
+    saida: Path = typer.Option(
+        None, "--saida", help="Diretório de saída (padrão: docs/dashboard/data/)"
+    ),
+) -> None:
+    """Consulta a rajada de vento recente por município e gera vento_<uf>.geojson."""
+    saida_dir = saida or DASHBOARD_DATA_DIR
+    resultado = exportar_vento(uf, ano, diretorio, saida_dir)
+    typer.echo(
+        f"{resultado['total_municipios_sinalizados']} município(s) sinalizado(s) "
+        f"exportados para {saida_dir}"
+    )
+
+
 @app.command()
 def atualizar(
     uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
@@ -131,7 +153,15 @@ def atualizar(
         typer.echo(f"  FALHA na exportação do dashboard: {exc}", err=True)
         falhas.append("dashboard")
 
-    falhas_criticas = [f for f in falhas if f not in ("ana", "dashboard")]
+    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando camada de vento ({uf_norm})...")
+    try:
+        resultado_vento = exportar_vento(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR)
+        typer.echo(f"  {resultado_vento['total_municipios_sinalizados']} município(s) sinalizado(s).")
+    except (ExportacaoDashboardError, ValueError) as exc:
+        typer.echo(f"  FALHA na exportação de vento: {exc}", err=True)
+        falhas.append("vento")
+
+    falhas_criticas = [f for f in falhas if f not in ("ana", "dashboard", "vento")]
 
     marcador = DATA_DIR / "ultima_atualizacao.txt"
     marcador.write_text(
