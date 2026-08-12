@@ -17,11 +17,10 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
-from shapely.geometry import Point
 
 from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_precipitacao_batch
-from src.processing.cruzamento import calcular_cruzamento, centroides_4326, centroides_metricos, chuva_acumulada
+from src.processing.cruzamento import calcular_cruzamento, centroides_4326, centroides_municipio, chuva_acumulada
 from src.processing.previsao import (
     DIAS_PREVISAO_ALERTA,
     HORIZONTE_PREVISAO_HORAS,
@@ -144,21 +143,7 @@ def _series_openmeteo_por_municipio(
     """Um ponto por município (média dos centroides dos setores daquele município)."""
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
 
-    centroides = centroides_metricos(setores)
-    df_centroides = pd.DataFrame({
-        "munic": setores["munic"].values,
-        "x": centroides.x.values,
-        "y": centroides.y.values,
-    })
-    medios = df_centroides.groupby("munic")[["x", "y"]].mean()
-    municipios = list(medios.index)
-
-    pontos_metricos = gpd.GeoSeries(
-        [Point(linha.x, linha.y) for linha in medios.itertuples()], crs=centroides.crs
-    )
-    pontos_4326 = pontos_metricos.to_crs("EPSG:4326")
-    pontos = [(pt.y, pt.x) for pt in pontos_4326]
-
+    municipios, pontos = centroides_municipio(setores)
     series_brutas = fetch_precipitacao_batch(pontos, dias_historico=dias_historico)
 
     limite = agora - timedelta(days=JANELA_SERIE_DIAS)
