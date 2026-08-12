@@ -96,3 +96,24 @@ def test_exportar_vento_atualiza_meta_existente_sem_apagar_outros_campos(tmp_pat
 def test_exportar_vento_levanta_erro_se_setores_nao_existem(tmp_path: Path):
     with pytest.raises(ExportacaoDashboardError):
         exportar_vento("SP", 2026, tmp_path, tmp_path / "export")
+
+
+def test_exportar_vento_ignora_rajadas_futuras_na_janela_de_24h(tmp_path: Path, setores):
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
+    # 24h observadas (passado, até `agora`) com rajada baixa, seguidas de
+    # horas futuras (previsão) com rajada altíssima (200.0 -> grande_perigo).
+    horas = pd.date_range(agora - pd.Timedelta(hours=23), periods=48, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+    rajadas = [30.0] * 24 + [200.0] * 24
+    resposta = _resposta(horas_iso, [rajadas, rajadas])
+
+    saida = tmp_path / "export"
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
+        resultado = exportar_vento("SP", 2026, tmp_path, saida, agora=agora)
+
+    gdf = gpd.read_file(saida / "vento_sp.geojson")
+    assert len(gdf) == 0
+    assert resultado["total_municipios_sinalizados"] == 0
+    assert resultado["referencia"] == agora.isoformat()

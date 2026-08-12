@@ -30,14 +30,24 @@ logger = logging.getLogger(__name__)
 JANELA_RAJADA_HORAS = 24
 
 
-def exportar_vento(uf: str, ano: int, diretorio_dados: Path, saida_dir: Path) -> dict:
+def exportar_vento(
+    uf: str,
+    ano: int,
+    diretorio_dados: Path,
+    saida_dir: Path,
+    agora: pd.Timestamp | None = None,
+) -> dict:
     """Consulta a rajada de vento recente por município e grava `vento_<uf>.geojson`.
 
     Só municípios com severidade acionável (`classificar_severidade` != `None`)
     entram no GeoJSON. `ano` não é usado hoje — mantido só por simetria de
     assinatura com `exportar_dashboard`, caso uma fonte futura de vento
-    precise de um parâmetro de período.
+    precise de um parâmetro de período. `agora` é parametrizável para tornar
+    testes determinísticos e para excluir as horas de previsão (a série
+    inclui `dias_previsao=1`) da janela de "últimas 24h observadas" — em
+    produção usa o instante atual.
     """
+    agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
     uf_norm = uf.strip().upper()
     caminho_setores_path = caminho_setores(uf_norm, diretorio_dados)
     if not caminho_setores_path.exists():
@@ -54,11 +64,13 @@ def exportar_vento(uf: str, ano: int, diretorio_dados: Path, saida_dir: Path) ->
     except OpenMeteoFetchError as exc:
         raise ExportacaoDashboardError(f"Falha ao consultar vento na Open-Meteo: {exc}") from exc
 
-    partes_validas = [s[s["vento_rajada_kmh"].notna()] for s in series if not s.empty]
+    partes_validas = [
+        s[(s["data_hora"] <= agora) & s["vento_rajada_kmh"].notna()] for s in series if not s.empty
+    ]
     validas = pd.concat(partes_validas, ignore_index=True) if partes_validas else pd.DataFrame(
         columns=["data_hora", "vento_rajada_kmh"]
     )
-    referencia = validas["data_hora"].max() if not validas.empty else pd.Timestamp.now(tz="UTC")
+    referencia = validas["data_hora"].max() if not validas.empty else agora
 
     registros = []
     for municipio, (lat, lon), serie in zip(municipios, pontos, series):

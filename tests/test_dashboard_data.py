@@ -254,3 +254,27 @@ def test_exportar_dashboard_fonte_inmet_nao_gera_previsao(tmp_path: Path, setore
     exportar_dashboard("SP", 2026, tmp_path, saida, fonte="inmet")
 
     assert not (saida / "previsao_sp.json").exists()
+
+
+def test_exportar_dashboard_preserva_bloco_vento_existente_no_meta(tmp_path: Path, setores):
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    chuva = pd.concat(
+        [
+            _serie_horaria("A701", -23.501, -46.601, "PERTO DE S1", {i: 1.0 for i in range(40)}, "2026-08-01 00:00"),
+            _serie_horaria("A736", -24.001, -47.001, "PERTO DE S2", {i: 0.0 for i in range(40)}, "2026-08-01 00:00"),
+        ],
+        ignore_index=True,
+    )
+    salvar_chuva(chuva, caminho_chuva("SP", 2026, tmp_path))
+
+    saida = tmp_path / "export"
+    saida.mkdir(parents=True)
+    bloco_vento = {"referencia": "2026-01-01T00:00:00+00:00", "total_municipios_sinalizados": 2}
+    (saida / "meta_sp.json").write_text(json.dumps({"vento": bloco_vento}))
+
+    exportar_dashboard("SP", 2026, tmp_path, saida, fonte="inmet")
+
+    meta = json.loads((saida / "meta_sp.json").read_text())
+    assert meta["vento"] == bloco_vento
+    assert meta["total_setores"] == 2
+    assert meta["total_estacoes_inmet"] == 2
