@@ -76,7 +76,7 @@ aparecem lado a lado.
 | [**CPRM/SGB**](https://www.sgb.gov.br/) | Polígonos de setorização de risco geológico (grau de risco, tipologia, nº de moradias/pessoas afetadas) | `https://geoportal.sgb.gov.br/server/rest/services/gestaoterritorial/risco/FeatureServer/0` (ArcGIS REST, GeoJSON) |
 | [**INMET**](https://portal.inmet.gov.br/) | Chuva horária por estação meteorológica automática | `https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` (CSV, pacote público anual) |
 | [**ANA**](https://www.gov.br/ana/pt-br) | Chuva em intervalos de 15min por estação telemétrica (fonte complementar ao INMET; nem toda estação tem dado vivo — ver [Decisões e investigações](#decisões-e-investigações)) | `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP/XML, sem captcha/autenticação) |
-| [**Open-Meteo**](https://open-meteo.com/) | Chuva horária por coordenada (consulta direta no centro de cada setor, sem estação) — **fonte padrão do dashboard exportado** | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
+| [**Open-Meteo**](https://open-meteo.com/) | Chuva e rajada de vento horárias por coordenada (consulta direta no centro de cada setor, sem estação) — **fonte padrão do dashboard exportado** | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
 
 A CPRM foi renomeada para **SGB**. Os domínios do enunciado original
 (`geoportal.cprm.gov.br`, `sace.cprm.gov.br`, `arcgisserver.cprm.gov.br`) ainda
@@ -206,6 +206,15 @@ dados, a referência da chuva e qual fonte foi usada.
 
 Sem seletor de UF/Ano por enquanto — os dados de hoje cobrem só SP.
 
+O mapa também traz uma camada de **rajada de vento**, desligada por padrão —
+liga pelo controle de camadas no canto superior direito ("Rajada de vento").
+Ligada, ela mostra um círculo por município que teve rajada relevante nas
+últimas 24h, colorido pela severidade em três faixas (atenção, perigo, grande
+perigo) derivadas de uma escala Beaufort simplificada; passar o mouse num
+círculo mostra o valor em km/h e a faixa. Como o limiar de chuva, essa escala
+é ilustrativa — não é um critério oficial brasileiro calibrado para risco
+geológico, só uma referência de leitura rápida.
+
 Abaixo do dashboard oficial, a seção **"Minhas áreas"** deixa qualquer visitante carregar um arquivo
 geolocalizado próprio (GeoJSON, KML ou shapefile em `.zip`) e ver chuva acumulada (24h/72h) e a
 trajetória de alerta previsto (72h) calculadas para essa área — útil porque a setorização da
@@ -254,6 +263,12 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
   comum na literatura de risco de deslizamento, não um valor oficial calibrado
   para os setores da CPRM/SGB. O próprio dashboard avisa isso e deixa o valor
   livremente ajustável.
+- **A camada de vento é observação recente, sem previsão.** Diferente da
+  chuva (que tem trajetória de alerta previsto para os próximos 3 dias), a
+  rajada de vento mostrada é só a máxima observada nas últimas 24h — não há
+  projeção futura de vento no momento. Consumir os avisos oficiais do INMET
+  diretamente (em vez de derivar severidade da Open-Meteo) é uma evolução
+  possível, fora do escopo desta fase.
 - **Cobertura nacional é parcial por design.** O MVP cobre SP; a arquitetura
   já generaliza para qualquer UF (ambos os clientes aceitam `--uf`), mas
   cobrir o Brasil inteiro de uma vez não fazia parte do escopo desta fase.
