@@ -24,9 +24,12 @@
     <svg class="icone icone-lua"><use href="icons/sprite.svg#icon-moon"></use></svg>
   </button>
 
-  <div class="campo">
-    <label for="municipioSelect">Município</label>
-    <select id="municipioSelect"><option value="">Todos</option></select>
+  <div class="campo campo-busca-municipio">
+    <label for="buscaMunicipio">Município</label>
+    <div class="busca-municipio">
+      <input type="text" id="buscaMunicipio" autocomplete="off" placeholder="Todos (buscar município…)">
+      <ul class="sugestoes" id="buscaMunicipioSugestoes" role="listbox" hidden></ul>
+    </div>
   </div>
 
   <div class="campo">
@@ -78,10 +81,11 @@
     <div>
       <div class="grafico-cabecalho">
         <h2>Série temporal de chuva</h2>
-        <select id="estacaoSelect"></select>
+        <span class="grafico-rotulo" id="estacaoRotulo">Busque um município acima</span>
       </div>
       <div class="grafico-container">
-        <canvas id="grafico"></canvas>
+        <canvas id="grafico" hidden></canvas>
+        <p class="vazio" id="graficoVazio">Busque um município no filtro acima para ver o histórico de chuva.</p>
       </div>
     </div>
   </div>
@@ -166,10 +170,23 @@
   let previsao = null;
   let ventoGeoJSON = null;
   let malhaMunicipios = null;
+  let codareaPorNome = null;
+  let opcoesMunicipios = [];
   let camadaSetores = null;
+  let camadaChoropleth = null;
+  let camadaSetoresTodos = null;
   let camadaVento = null;
   let mapa = null;
+  let legendaDiv = null;
   let grafico = null;
+
+  function normalizarNome(s) {
+    return (s || "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
 
   const CHAVE_TEMA = "orca-tema";
 
@@ -193,8 +210,7 @@
       inicializarMapa();
       renderizarTudo();
     }
-    const estacaoSelect = document.getElementById("estacaoSelect");
-    if (estacaoSelect && estacaoSelect.value) renderizarGrafico(estacaoSelect.value);
+    if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
     if (window.ORCA_atualizarTemaAreas) window.ORCA_atualizarTemaAreas();
   }
 
@@ -235,10 +251,15 @@
       `<b>Dados gerados em:</b> ${formatarData(meta.gerado_em)} · ` +
       detalheFonte;
 
-    popularMunicipios();
-    popularEstacoes();
+    popularBuscaMunicipios();
     inicializarMapa();
     renderizarTudo();
+
+    // Malha/nomes do IBGE não bloqueiam o primeiro render (cards/tabela/mapa já saem
+    // com os dados locais) — quando chegam, promovem o mapa para o choropleth municipal.
+    Promise.all([garantirMalhaMunicipios(), garantirNomesMunicipios()]).then(() => {
+      if (!estado.municipio && choroplethDisponivel() && !camadaChoropleth) renderizarTudo();
+    });
   }
 
   function formatarData(iso) {
@@ -249,49 +270,222 @@
     }
   }
 
+  const TIMEOUT_IBGE_MS = 6000;
+
+  async function fetchComTimeout(url, ms = TIMEOUT_IBGE_MS) {
+    const controlador = new AbortController();
+    const idTimeout = setTimeout(() => controlador.abort(), ms);
+    try {
+      return await fetch(url, { signal: controlador.signal });
+    } finally {
+      clearTimeout(idTimeout);
+    }
+  }
+
   const MALHA_MUNICIPIOS_URL =
     `https://servicodados.ibge.gov.br/api/v3/malhas/estados/${UF.toUpperCase()}` +
     `?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio`;
 
+  let promessaMalha = null;
   async function garantirMalhaMunicipios() {
     if (malhaMunicipios) return malhaMunicipios;
-    try {
-      const resp = await fetch(MALHA_MUNICIPIOS_URL);
-      if (resp.ok) {
-        malhaMunicipios = await resp.json();
-      } else {
-        console.warn("Falha ao buscar a malha municipal do IBGE: HTTP " + resp.status);
-        malhaMunicipios = null;
-      }
-    } catch (e) {
-      console.warn("Falha ao buscar a malha municipal do IBGE", e);
-      malhaMunicipios = null;
+    if (!promessaMalha) {
+      // Evita disparar fetches duplicados se dois gatilhos (load inicial + toggle do
+      // vento) chamarem isso antes do primeiro terminar.
+      promessaMalha = (async () => {
+        try {
+          const resp = await fetchComTimeout(MALHA_MUNICIPIOS_URL);
+          if (resp.ok) {
+            malhaMunicipios = await resp.json();
+          } else {
+            console.warn("Falha ao buscar a malha municipal do IBGE: HTTP " + resp.status);
+          }
+        } catch (e) {
+          console.warn("Falha ao buscar a malha municipal do IBGE", e);
+        } finally {
+          promessaMalha = null;
+        }
+      })();
     }
+    await promessaMalha;
     return malhaMunicipios;
   }
 
-  function popularMunicipios() {
-    const select = document.getElementById("municipioSelect");
-    const municipios = Array.from(new Set(setoresGeoJSON.features.map(f => f.properties.munic))).sort();
-    for (const m of municipios) {
-      const opt = document.createElement("option");
-      opt.value = m; opt.textContent = m;
-      select.appendChild(opt);
+  const NOMES_MUNICIPIOS_URL =
+    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${UF.toUpperCase()}/municipios`;
+
+  let promessaNomes = null;
+  async function garantirNomesMunicipios() {
+    if (codareaPorNome) return codareaPorNome;
+    if (!promessaNomes) {
+      promessaNomes = (async () => {
+        try {
+          const resp = await fetchComTimeout(NOMES_MUNICIPIOS_URL);
+          if (resp.ok) {
+            const lista = await resp.json();
+            const indice = new Map();
+            for (const m of lista) indice.set(normalizarNome(m.nome), String(m.id));
+            codareaPorNome = indice;
+          } else {
+            console.warn("Falha ao buscar os nomes de município do IBGE: HTTP " + resp.status);
+          }
+        } catch (e) {
+          console.warn("Falha ao buscar os nomes de município do IBGE", e);
+        } finally {
+          promessaNomes = null;
+        }
+      })();
     }
-    select.addEventListener("change", () => { estado.municipio = select.value; renderizarTudo(); });
+    await promessaNomes;
+    return codareaPorNome;
   }
 
-  function popularEstacoes() {
-    const select = document.getElementById("estacaoSelect");
-    const codigos = Object.keys(series).sort((a, b) => (series[a].nome || "").localeCompare(series[b].nome || ""));
-    for (const codigo of codigos) {
-      const opt = document.createElement("option");
-      opt.value = codigo;
-      opt.textContent = `${series[codigo].nome} (${codigo}) — ${series[codigo].fonte.toUpperCase()}`;
-      select.appendChild(opt);
+  function popularBuscaMunicipios() {
+    opcoesMunicipios = Array.from(new Set(setoresGeoJSON.features.map(f => f.properties.munic))).sort();
+
+    const input = document.getElementById("buscaMunicipio");
+    const lista = document.getElementById("buscaMunicipioSugestoes");
+    let indiceAtivo = -1;
+    let ultimoFiltro = null;
+
+    function renderSugestoes(filtro) {
+      ultimoFiltro = filtro;
+      const termo = normalizarNome(filtro);
+      const opcoes = termo ? opcoesMunicipios.filter(m => normalizarNome(m).includes(termo)).slice(0, 8) : [];
+      indiceAtivo = -1;
+      lista.innerHTML = "";
+      if (!opcoes.length) { lista.hidden = true; return; }
+      for (const m of opcoes) {
+        const li = document.createElement("li");
+        li.setAttribute("role", "option");
+        li.dataset.nome = m;
+        li.textContent = m;
+        lista.appendChild(li);
+      }
+      lista.hidden = false;
     }
-    select.addEventListener("change", () => renderizarGrafico(select.value));
-    if (codigos.length) renderizarGrafico(codigos[0]);
+
+    function marcarAtivo() {
+      Array.from(lista.children).forEach((li, i) => li.classList.toggle("ativo", i === indiceAtivo));
+    }
+
+    function escolher(nome) {
+      clearTimeout(debounceId);
+      input.value = nome;
+      lista.hidden = true;
+      lista.innerHTML = "";
+      selecionarMunicipio(nome);
+    }
+
+    let debounceId = null;
+    input.addEventListener("input", () => {
+      clearTimeout(debounceId);
+      const valor = input.value;
+      if (!valor.trim()) limparMunicipio();
+      debounceId = setTimeout(() => renderSugestoes(valor), 120);
+    });
+
+    input.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        clearTimeout(debounceId);
+        // Só recalcula se a lista visível estiver atrasada (debounce de 120ms) em
+        // relação ao texto atual — preserva indiceAtivo/realce de seta-cima/seta-baixo
+        // quando a lista já está em dia.
+        if (ultimoFiltro !== input.value) renderSugestoes(input.value);
+        if (lista.children.length) {
+          escolher((lista.children[indiceAtivo] || lista.children[0]).dataset.nome);
+        } else if (!input.value.trim()) {
+          limparMunicipio();
+        } else {
+          // Sem correspondência: volta o campo para o que está de fato aplicado.
+          input.value = estado.municipio;
+        }
+        return;
+      }
+      const itens = lista.children;
+      if (lista.hidden || !itens.length) return;
+      if (ev.key === "ArrowDown") { ev.preventDefault(); indiceAtivo = Math.min(indiceAtivo + 1, itens.length - 1); marcarAtivo(); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); indiceAtivo = Math.max(indiceAtivo - 1, 0); marcarAtivo(); }
+      else if (ev.key === "Escape") {
+        // Marca o texto atual como "já resolvido" (sem sugestões) para que um Enter
+        // logo em seguida não reabra a lista e selecione algo que acabou de ser dispensado.
+        clearTimeout(debounceId);
+        lista.hidden = true;
+        lista.innerHTML = "";
+        ultimoFiltro = input.value;
+      }
+    });
+
+    lista.addEventListener("click", ev => {
+      const li = ev.target.closest("li[data-nome]");
+      if (li) escolher(li.dataset.nome);
+    });
+
+    function fecharEReconciliar() {
+      clearTimeout(debounceId);
+      lista.hidden = true;
+      // Se o usuário editou o texto sem confirmar uma sugestão, volta o campo
+      // para refletir o que está de fato aplicado (evita busca e mapa dessincronizados).
+      if (input.value !== estado.municipio) input.value = estado.municipio;
+    }
+
+    document.addEventListener("click", ev => {
+      if (!ev.target.closest(".busca-municipio")) fecharEReconciliar();
+    });
+
+    input.addEventListener("blur", () => {
+      // Adiado: um clique numa sugestão dispara blur antes de click, então sem o
+      // atraso a lista fecharia antes de escolher() rodar.
+      setTimeout(fecharEReconciliar, 150);
+    });
+  }
+
+  function selecionarMunicipio(nome) {
+    estado.municipio = nome;
+    const input = document.getElementById("buscaMunicipio");
+    if (input.value !== nome) input.value = nome;
+    renderizarTudo();
+    atualizarGraficoParaMunicipio(nome);
+  }
+
+  function limparMunicipio() {
+    estado.municipio = "";
+    renderizarTudo();
+    limparGrafico();
+  }
+
+  function encontrarCodigoEstacao(nomeMunicipio) {
+    // Usa o vínculo já resolvido no pipeline (codigo_estacao por setor) em vez de comparar
+    // nomes: com fonte="inmet" a estação mais próxima raramente tem o nome do município.
+    // Percorre todos os setores do município (não só o primeiro): com fonte="inmet" setores
+    // do mesmo município podem apontar para estações diferentes, e nem todas têm série válida.
+    for (const f of setoresGeoJSON.features) {
+      if (f.properties.munic !== nomeMunicipio) continue;
+      const codigo = f.properties.codigo_estacao;
+      if (codigo && codigo !== "openmeteo" && series[codigo]) return codigo;
+    }
+    if (series[nomeMunicipio]) return nomeMunicipio;
+    return null;
+  }
+
+  function atualizarGraficoParaMunicipio(nome) {
+    const codigo = encontrarCodigoEstacao(nome);
+    const rotulo = document.getElementById("estacaoRotulo");
+    if (!codigo) {
+      limparGrafico();
+      rotulo.textContent = `Sem série de chuva disponível para ${nome}.`;
+      return;
+    }
+    rotulo.textContent = `${series[codigo].nome} — ${series[codigo].fonte.toUpperCase()}`;
+    renderizarGrafico(codigo);
+  }
+
+  function limparGrafico() {
+    if (grafico) { grafico.destroy(); grafico = null; }
+    document.getElementById("grafico").hidden = true;
+    document.getElementById("graficoVazio").hidden = false;
+    document.getElementById("estacaoRotulo").textContent = "Busque um município acima";
   }
 
   const TILE_URLS = {
@@ -300,46 +494,48 @@
   };
 
   function inicializarMapa() {
-    if (mapa) { mapa.remove(); mapa = null; camadaSetores = null; }
+    clearTimeout(idAgendaSetoresCompleto);
+    if (mapa) { mapa.remove(); mapa = null; camadaSetores = null; camadaChoropleth = null; camadaSetoresTodos = null; }
     mapa = L.map("mapa");
     L.tileLayer(TILE_URLS[temaAtual()], {
       attribution: "© OpenStreetMap, © CARTO", maxZoom: 19,
     }).addTo(mapa);
 
-    const cores = coresGrau();
     const legenda = L.control({ position: "bottomleft" });
     legenda.onAdd = function () {
-      const div = L.DomUtil.create("div", "legenda");
-      div.innerHTML =
-        '<b>Grau de risco</b><br>' +
-        '<span class="amostra" style="background:' + cores["alto"] + '"></span>Alto<br>' +
-        '<span class="amostra" style="background:' + cores["muito alto"] + '"></span>Muito alto<br>' +
-        '<span style="border:2px solid ' + corAtencao() + ';padding:0 4px">Em atenção</span><br>' +
-        '<span style="border:2px dashed ' + corAtencao() + ';padding:0 4px">Alerta previsto</span>' +
-        (ventoGeoJSON && ventoGeoJSON.features.length
-          ? '<br><b>Vento (rajada 24h)</b><br>' +
-            '<span class="amostra" style="background:' + coresVento()["atencao"] + '"></span>Atenção<br>' +
-            '<span class="amostra" style="background:' + coresVento()["perigo"] + '"></span>Perigo<br>' +
-            '<span class="amostra" style="background:' + coresVento()["grande_perigo"] + '"></span>Grande perigo'
-          : '');
-      return div;
+      legendaDiv = L.DomUtil.create("div", "legenda");
+      legendaDiv.innerHTML = conteudoLegenda();
+      return legendaDiv;
     };
     legenda.addTo(mapa);
 
     camadaVento = L.layerGroup();
-    if (ventoGeoJSON && ventoGeoJSON.features.length) {
-      L.control.layers(null, { "Rajada de vento": camadaVento }, { position: "topright", collapsed: false }).addTo(mapa);
-    }
+    camadaSetoresTodos = L.layerGroup();
+    const overlays = { "Setores de risco (estado completo)": camadaSetoresTodos };
+    if (ventoGeoJSON && ventoGeoJSON.features.length) overlays["Rajada de vento"] = camadaVento;
+    L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
+
     mapa.on("overlayadd", ev => {
-      if (ev.name !== "Rajada de vento") return;
-      garantirMalhaMunicipios().then(renderizarVento);
+      if (ev.name === "Rajada de vento") {
+        // Também tenta recuperar os nomes do IBGE aqui: é o único gatilho de retry
+        // disponível se aquele fetch falhou/expirou no carregamento inicial.
+        Promise.all([garantirMalhaMunicipios(), garantirNomesMunicipios()]).then(() => {
+          renderizarVento();
+          if (!estado.municipio && choroplethDisponivel() && !camadaChoropleth) renderizarTudo();
+        });
+      }
+      else if (ev.name === "Setores de risco (estado completo)") { renderizarSetoresCompletoEstado(); atualizarLegenda(); }
+    });
+    mapa.on("overlayremove", ev => {
+      if (ev.name === "Setores de risco (estado completo)") { camadaSetoresTodos.clearLayers(); atualizarLegenda(); }
     });
   }
 
-  function setoresFiltrados() {
+  function setoresFiltrados(municipio = estado.municipio, excluirMunicipio = null) {
     const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
     return setoresGeoJSON.features.filter(f =>
-      !estado.municipio || f.properties.munic === estado.municipio
+      (!municipio || f.properties.munic === municipio) &&
+      (!excluirMunicipio || f.properties.munic !== excluirMunicipio)
     ).map(f => ({ f, chuva: f.properties[campo] }));
   }
 
@@ -366,14 +562,29 @@
     return previsto;
   }
 
-  function renderizarTudo() {
-    const filtrados = setoresFiltrados();
+  function calcularRecorte(municipio, excluirMunicipio = null) {
+    const filtrados = setoresFiltrados(municipio, excluirMunicipio);
     const emAtencao = filtrados.filter(r => typeof r.chuva === "number" && r.chuva >= estado.limiar);
     const alertaPrevisto = calcularAlertaPrevisto(filtrados);
+    return { filtrados, emAtencao, alertaPrevisto };
+  }
+
+  function renderizarTudo() {
+    const { filtrados, emAtencao, alertaPrevisto } = calcularRecorte(estado.municipio);
 
     renderizarCards(filtrados, emAtencao, alertaPrevisto);
     renderizarMapa(filtrados, emAtencao, alertaPrevisto);
     renderizarTabela(emAtencao, alertaPrevisto);
+    agendarRenderizarSetoresCompletoEstado();
+  }
+
+  let idAgendaSetoresCompleto = null;
+  function agendarRenderizarSetoresCompletoEstado() {
+    if (!mapa || !camadaSetoresTodos || !mapa.hasLayer(camadaSetoresTodos)) return;
+    // Debounced: essa camada opcional reconstrói ~900 polígonos/tooltips, custosa
+    // demais para rodar a cada evento "input" do slider de limiar.
+    clearTimeout(idAgendaSetoresCompleto);
+    idAgendaSetoresCompleto = setTimeout(renderizarSetoresCompletoEstado, 200);
   }
 
   function renderizarCards(filtrados, emAtencao, alertaPrevisto) {
@@ -393,18 +604,60 @@
     ).join("");
   }
 
+  function choroplethDisponivel() {
+    return !!(malhaMunicipios && codareaPorNome && codareaPorNome.size);
+  }
+
+  // Única fonte de verdade sobre o que o mapa principal está mostrando quando
+  // nenhum município está selecionado: o choropleth municipal, ou o fallback com
+  // todos os setores (IBGE indisponível). Com município selecionado é sempre "municipio".
+  function modoMapa() {
+    if (estado.municipio) return "municipio";
+    return choroplethDisponivel() ? "choropleth" : "fallback-estado";
+  }
+
+  function modoSetoresVisivel() {
+    return modoMapa() !== "choropleth" ||
+      !!(camadaSetoresTodos && mapa && mapa.hasLayer(camadaSetoresTodos));
+  }
+
+  function conteudoLegenda() {
+    const cores = coresGrau();
+    const linhasSetor = modoSetoresVisivel()
+      ? '<span style="border:2px solid ' + corAtencao() + ';padding:0 4px">Em atenção</span><br>' +
+        '<span style="border:2px dashed ' + corAtencao() + ';padding:0 4px">Alerta previsto</span>'
+      : '<i>Busque um município para ver setores em atenção/alerta previsto</i>';
+    return '<b>Grau de risco</b><br>' +
+      '<span class="amostra" style="background:' + cores["alto"] + '"></span>Alto<br>' +
+      '<span class="amostra" style="background:' + cores["muito alto"] + '"></span>Muito alto<br>' +
+      linhasSetor +
+      (ventoGeoJSON && ventoGeoJSON.features.length
+        ? '<br><b>Vento (rajada 24h)</b><br>' +
+          '<span class="amostra" style="background:' + coresVento()["atencao"] + '"></span>Atenção<br>' +
+          '<span class="amostra" style="background:' + coresVento()["perigo"] + '"></span>Perigo<br>' +
+          '<span class="amostra" style="background:' + coresVento()["grande_perigo"] + '"></span>Grande perigo'
+        : '');
+  }
+
+  function atualizarLegenda() {
+    if (legendaDiv) legendaDiv.innerHTML = conteudoLegenda();
+  }
+
   function corPorGrau(grau) {
     return coresGrau()[(grau || "").toLowerCase()] || corPadrao();
   }
 
-  function renderizarMapa(filtrados, emAtencao, alertaPrevisto) {
+  function rotuloGrau(grau) {
+    return grau ? grau.charAt(0).toUpperCase() + grau.slice(1) : "—";
+  }
+
+  function criarCamadaSetores(filtrados, emAtencao, alertaPrevisto) {
     const codigosAtencao = new Set(emAtencao.map(r => r.f.properties.num_setor));
     const codigosPrevisto = new Set(alertaPrevisto.map(r => r.f.properties.num_setor));
     const quandoPorSetor = new Map(alertaPrevisto.map(r => [r.f.properties.num_setor, r.quando]));
     const colecao = { type: "FeatureCollection", features: filtrados.map(r => r.f) };
 
-    if (camadaSetores) mapa.removeLayer(camadaSetores);
-    camadaSetores = L.geoJSON(colecao, {
+    return L.geoJSON(colecao, {
       style: feature => {
         const numSetor = feature.properties.num_setor;
         const emAtencaoAgora = codigosAtencao.has(numSetor);
@@ -434,9 +687,87 @@
           linhaPrevisao
         );
       },
+    });
+  }
+
+  function renderizarMapa(filtrados, emAtencao, alertaPrevisto) {
+    if (camadaSetores) { mapa.removeLayer(camadaSetores); camadaSetores = null; }
+    const modo = modoMapa();
+
+    if (modo === "choropleth") {
+      // O choropleth não depende de janela/limiar (só de grau_risco) — não reconstrói
+      // à toa a cada tick do slider se ele já está na tela.
+      if (!camadaChoropleth) renderizarChoroplethMunicipios();
+    } else {
+      if (camadaChoropleth) { mapa.removeLayer(camadaChoropleth); camadaChoropleth = null; }
+      camadaSetores = criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(mapa);
+      if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [20, 20] });
+    }
+    atualizarLegenda();
+  }
+
+  function calcularRiscoPorMunicipio() {
+    const rank = { "alto": 1, "muito alto": 2 };
+    const porCodarea = new Map();
+    const semCorrespondencia = new Set();
+    for (const f of setoresGeoJSON.features) {
+      const codarea = codareaPorNome.get(normalizarNome(f.properties.munic));
+      if (!codarea) { semCorrespondencia.add(f.properties.munic); continue; }
+      const atual = porCodarea.get(codarea) || { grauMax: "", nome: f.properties.munic, qtdSetores: 0 };
+      atual.qtdSetores++;
+      const grau = (f.properties.grau_risco || "").toLowerCase();
+      if ((rank[grau] || 0) > (rank[atual.grauMax] || 0)) atual.grauMax = grau;
+      porCodarea.set(codarea, atual);
+    }
+    if (semCorrespondencia.size) {
+      console.warn(
+        "Municípios sem correspondência na malha do IBGE (fora do choropleth):",
+        Array.from(semCorrespondencia)
+      );
+    }
+    return porCodarea;
+  }
+
+  function filtrarMalhaPorCodarea(dadosPorCodarea) {
+    return {
+      type: "FeatureCollection",
+      features: malhaMunicipios.features.filter(f => dadosPorCodarea.has(String(f.properties.codarea))),
+    };
+  }
+
+  function renderizarChoroplethMunicipios() {
+    const riscoPorCodarea = calcularRiscoPorMunicipio();
+    const colecao = filtrarMalhaPorCodarea(riscoPorCodarea);
+
+    camadaChoropleth = L.geoJSON(colecao, {
+      style: feature => {
+        const r = riscoPorCodarea.get(String(feature.properties.codarea));
+        return { fillColor: corPorGrau(r.grauMax), fillOpacity: 0.7, color: corPadrao(), weight: 1 };
+      },
+      onEachFeature: (feature, layer) => {
+        const r = riscoPorCodarea.get(String(feature.properties.codarea));
+        layer.bindTooltip(
+          `<b>${r.nome}</b><br>Grau máximo: ${rotuloGrau(r.grauMax)}<br>` +
+          `Setores mapeados: ${r.qtdSetores}<br><i>Clique para ver o detalhe</i>`
+        );
+        layer.on("click", () => selecionarMunicipio(r.nome));
+      },
     }).addTo(mapa);
 
-    if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [20, 20] });
+    if (colecao.features.length) mapa.fitBounds(camadaChoropleth.getBounds(), { padding: [20, 20] });
+  }
+
+  function renderizarSetoresCompletoEstado() {
+    if (!camadaSetoresTodos || !setoresGeoJSON || !mapa || !mapa.hasLayer(camadaSetoresTodos)) return;
+    camadaSetoresTodos.clearLayers();
+    if (modoMapa() === "fallback-estado") {
+      // O mapa principal já caiu no fallback com todos os setores (choropleth indisponível);
+      // não duplica a mesma camada aqui.
+      return;
+    }
+    // Exclui o município selecionado: seus setores já estão em camadaSetores (visão detalhada).
+    const { filtrados, emAtencao, alertaPrevisto } = calcularRecorte("", estado.municipio);
+    criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(camadaSetoresTodos);
   }
 
   function renderizarVento() {
@@ -448,10 +779,7 @@
       ventoGeoJSON.features.map(f => [String(f.properties.codarea), f.properties])
     );
     const cores = coresVento();
-    const coloridos = {
-      type: "FeatureCollection",
-      features: malhaMunicipios.features.filter(f => porCodarea.has(String(f.properties.codarea))),
-    };
+    const coloridos = filtrarMalhaPorCodarea(porCodarea);
 
     L.geoJSON(coloridos, {
       style: feature => {
@@ -507,6 +835,8 @@
   function renderizarGrafico(codigoEstacao) {
     const dados = series[codigoEstacao];
     if (!dados) return;
+    document.getElementById("grafico").hidden = false;
+    document.getElementById("graficoVazio").hidden = true;
     const ctx = document.getElementById("grafico").getContext("2d");
     const labels = dados.serie.map(p => new Date(p[0]).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", timeZone: "UTC" }));
     const valores = dados.serie.map(p => p[1]);

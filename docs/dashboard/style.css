@@ -142,11 +142,23 @@ header.filtros .marca span { font-size: var(--text-caption); color: var(--tinta-
 
 .campo { display: flex; flex-direction: column; gap: var(--space-1); }
 .campo label { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-micro); color: var(--tinta-muted); text-transform: uppercase; letter-spacing: var(--tracking-wide); }
-select, input[type="range"] {
+select, input[type="range"], .busca-municipio input[type="text"] {
   font-family: var(--font-ui); font-size: var(--text-label); color: var(--tinta);
   background: var(--papel-elevado); border: var(--border-hairline) solid var(--linha);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); height: var(--control-height);
 }
+.campo-busca-municipio { position: relative; min-width: 220px; }
+.busca-municipio { position: relative; }
+.busca-municipio input[type="text"] { width: 100%; }
+.busca-municipio .sugestoes {
+  position: absolute; top: calc(100% + var(--space-1)); left: 0; right: 0; z-index: 50;
+  max-height: 260px; overflow-y: auto; margin: 0; padding: var(--space-1) 0; list-style: none;
+  background: var(--papel-elevado); border: var(--border-hairline) solid var(--linha);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-legend);
+}
+.busca-municipio .sugestoes li { padding: var(--space-2) var(--space-3); font-size: var(--text-label); cursor: pointer; }
+.busca-municipio .sugestoes li:hover, .busca-municipio .sugestoes li.ativo { background: var(--papel-hover); }
+
 .toggle-janela { display: flex; border: var(--border-hairline) solid var(--linha); border-radius: var(--radius-md); overflow: hidden; height: var(--control-height); }
 .toggle-janela button {
   font-family: var(--font-ui); font-size: var(--text-label); border: none; background: var(--papel-elevado);
@@ -195,8 +207,9 @@ tbody tr:hover { background: var(--papel-hover); }
 .vazio { padding: var(--space-6); text-align: center; color: var(--tinta-muted); font-size: var(--text-label); }
 
 .grafico-cabecalho { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
-#estacaoSelect { max-width: 260px; }
+.grafico-rotulo { font-size: var(--text-caption); color: var(--tinta-fraca); }
 .grafico-container { position: relative; height: var(--chart-height, 300px); width: 100%; }
+.grafico-container .vazio { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
 
 footer { padding: var(--space-6); text-align: center; font-size: var(--text-caption); color: var(--tinta-fraca); border-top: var(--border-hairline) solid var(--linha); }
 footer a { display: inline-flex; align-items: center; gap: 4px; }
