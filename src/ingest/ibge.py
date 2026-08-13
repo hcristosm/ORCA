@@ -84,6 +84,11 @@ def fetch_municipios(
         timeout, max_retries, backoff_factor, sess,
     )
     features = payload.get("features", [])
+    if not features:
+        raise IBGEFetchError(
+            f"Malha municipal do IBGE para UF={uf.strip().upper()} veio sem "
+            "nenhuma feature (resposta 200 OK, mas 'features' vazio ou ausente)"
+        )
     codareas = [str(f["properties"]["codarea"]) for f in features]
     geometrias = [shape(f["geometry"]) for f in features]
     return gpd.GeoDataFrame({"codarea": codareas}, geometry=geometrias, crs="EPSG:4326")
@@ -104,4 +109,10 @@ def fetch_nomes_municipios(
         LOCALIDADES_URL_TEMPLATE.format(uf=uf.strip().upper()),
         {}, timeout, max_retries, backoff_factor, sess,
     )
-    return {str(item["id"]): item["nome"] for item in payload}
+    try:
+        return {str(item["id"]): item["nome"] for item in payload}
+    except (TypeError, KeyError) as exc:
+        raise IBGEFetchError(
+            f"Resposta da API de localidades do IBGE para UF={uf.strip().upper()} "
+            f"não tem o formato esperado (lista de objetos com 'id' e 'nome'): {exc}"
+        ) from exc

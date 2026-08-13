@@ -257,8 +257,14 @@
     if (malhaMunicipios) return malhaMunicipios;
     try {
       const resp = await fetch(MALHA_MUNICIPIOS_URL);
-      malhaMunicipios = resp.ok ? await resp.json() : null;
+      if (resp.ok) {
+        malhaMunicipios = await resp.json();
+      } else {
+        console.warn("Falha ao buscar a malha municipal do IBGE: HTTP " + resp.status);
+        malhaMunicipios = null;
+      }
     } catch (e) {
+      console.warn("Falha ao buscar a malha municipal do IBGE", e);
       malhaMunicipios = null;
     }
     return malhaMunicipios;
