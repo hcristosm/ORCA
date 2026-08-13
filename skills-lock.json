@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "gh-pages-deploy": {
+      "source": "aviz85/claude-skills-library",
+      "sourceType": "github",
+      "skillPath": "skills/gh-pages-deploy/SKILL.md",
+      "computedHash": "3784f19f2cc74fce278757e9a4b20d57b59b3d924a662435620062f80b27117c"
+    }
+  }
+}
