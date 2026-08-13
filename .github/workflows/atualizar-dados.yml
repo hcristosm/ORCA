@@ -2,7 +2,7 @@ name: Atualizar dados do ORCA
 
 on:
   schedule:
-    # 09:00 UTC (06:00 em São Paulo) todo dia — CPRM/SGB e INMET raramente mudam
+    # 09:00 UTC (06:00 em São Paulo) todo dia; CPRM/SGB e INMET raramente mudam
     # mais rápido que isso, e o pacote anual do INMET só é atualizado a cada
     # poucos dias.
     - cron: "0 9 * * *"

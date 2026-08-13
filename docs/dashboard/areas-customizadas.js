@@ -219,7 +219,7 @@
 
   function cardAreaHTML(area) {
     const badge = area.classificacao
-      ? `<span class="selo-autodeclarado">Classificação informada pelo usuário (${escaparHtml(area.classificacao)}) — não avaliada pela CPRM/IPT</span>`
+      ? `<span class="selo-autodeclarado">Classificação informada pelo usuário (${escaparHtml(area.classificacao)}), não avaliada pela CPRM/IPT</span>`
       : "";
 
     let corpo;
@@ -327,7 +327,7 @@
     erroEl.hidden = true;
 
     if (file.size > LIMITE_TAMANHO_BYTES) {
-      erroEl.textContent = `Arquivo maior que ${LIMITE_TAMANHO_BYTES / (1024 * 1024)}MB — não foi carregado.`;
+      erroEl.textContent = `Arquivo maior que ${LIMITE_TAMANHO_BYTES / (1024 * 1024)}MB, não foi carregado.`;
       erroEl.hidden = false;
       return;
     }
@@ -355,7 +355,7 @@
       return;
     }
     if (descartadas > 0) {
-      erroEl.textContent = `Só as primeiras ${usadas.length} área(s) foram carregadas — ${descartadas} descartada(s) pelo limite de ${LIMITE_AREAS}.`;
+      erroEl.textContent = `Só as primeiras ${usadas.length} área(s) foram carregadas, ${descartadas} descartada(s) pelo limite de ${LIMITE_AREAS}.`;
       erroEl.hidden = false;
     }
 
@@ -375,7 +375,7 @@
       }
       const area = {
         id: gerarId(),
-        nome: nomePropriedade || (usadas.length > 1 ? `${baseNome} — ${i + 1}` : baseNome),
+        nome: nomePropriedade || (usadas.length > 1 ? `${baseNome} (${i + 1})` : baseNome),
         feature,
         classificacao,
         centroide: centro,

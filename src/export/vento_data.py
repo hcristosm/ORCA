@@ -1,6 +1,6 @@
 """Exportação da camada de vento (rajada por município) do dashboard estático.
 
-Módulo irmão de `dashboard_data.py`, deliberadamente desacoplado dele —
+Módulo irmão de `dashboard_data.py`, deliberadamente desacoplado dele;
 vento não é cruzado com os setores geológicos. Cobre todos os municípios de
 uma UF via a malha do IBGE (não só os que têm setor de risco CPRM
 registrado, ver `src/ingest/ibge.py`), grava `vento_<uf>.geojson` (um ponto
@@ -42,11 +42,11 @@ def exportar_vento(
     IBGE, não só os com setor CPRM) e grava `vento_<uf>.geojson`.
 
     Só municípios com severidade acionável (`classificar_severidade` != `None`)
-    entram no GeoJSON. `ano` e `diretorio_dados` não são usados hoje —
+    entram no GeoJSON. `ano` e `diretorio_dados` não são usados hoje,
     mantidos só por simetria de assinatura com `exportar_dashboard`. `agora`
     é parametrizável para tornar testes determinísticos e para excluir as
     horas de previsão (a série inclui `dias_previsao=1`) da janela de
-    "últimas 24h observadas" — em produção usa o instante atual.
+    "últimas 24h observadas"; em produção usa o instante atual.
     """
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
     uf_norm = uf.strip().upper()

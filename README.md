@@ -40,8 +40,8 @@ visão computacional para monitoramento de encostas, eu queria uma ferramenta
 local, sem backend, sem custo, que juntasse duas fontes públicas que raramente
 aparecem lado a lado.
 
-**Dashboard ao vivo:** [hcristosm.github.io/ORCA/dashboard](https://hcristosm.github.io/ORCA/dashboard/)
-— publicado no GitHub Pages e atualizado todo dia pelo cron (ver
+**Dashboard ao vivo:** [hcristosm.github.io/ORCA/dashboard](https://hcristosm.github.io/ORCA/dashboard/),
+publicado no GitHub Pages e atualizado todo dia pelo cron (ver
 [Atualização automática](#4-atualização-automática)).
 
 <p align="center">
@@ -65,6 +65,7 @@ aparecem lado a lado.
 - [Testes e CI](#testes-e-ci)
 - [Decisões e investigações](#decisões-e-investigações)
 - [Roadmap](#roadmap)
+- [Contribuindo](#contribuindo)
 - [Licença](#licença)
 
 ---
@@ -75,8 +76,8 @@ aparecem lado a lado.
 |---|---|---|
 | [**CPRM/SGB**](https://www.sgb.gov.br/) | Polígonos de setorização de risco geológico (grau de risco, tipologia, nº de moradias/pessoas afetadas) | `https://geoportal.sgb.gov.br/server/rest/services/gestaoterritorial/risco/FeatureServer/0` (ArcGIS REST, GeoJSON) |
 | [**INMET**](https://portal.inmet.gov.br/) | Chuva horária por estação meteorológica automática | `https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` (CSV, pacote público anual) |
-| [**ANA**](https://www.gov.br/ana/pt-br) | Chuva em intervalos de 15min por estação telemétrica (fonte complementar ao INMET; nem toda estação tem dado vivo — ver [Decisões e investigações](#decisões-e-investigações)) | `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP/XML, sem captcha/autenticação) |
-| [**Open-Meteo**](https://open-meteo.com/) | Chuva e rajada de vento horárias por coordenada (consulta direta no centro de cada setor, sem estação) — **fonte padrão do dashboard exportado** | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
+| [**ANA**](https://www.gov.br/ana/pt-br) | Chuva em intervalos de 15min por estação telemétrica (fonte complementar ao INMET; nem toda estação tem dado vivo, ver [Decisões e investigações](#decisões-e-investigações)) | `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP/XML, sem captcha/autenticação) |
+| [**Open-Meteo**](https://open-meteo.com/) | Chuva e rajada de vento horárias por coordenada (consulta direta no centro de cada setor, sem estação; **fonte padrão do dashboard exportado**) | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
 
 A CPRM foi renomeada para **SGB**. Os domínios do enunciado original
 (`geoportal.cprm.gov.br`, `sace.cprm.gov.br`, `arcgisserver.cprm.gov.br`) ainda
@@ -115,15 +116,15 @@ como uma camada fina sobre GeoPackage (setores) e CSV (chuva), usada por
 `ingest`, `processing` e pela exportação estática, sem introduzir dependência
 de banco.
 
-`src/processing/` tem dois módulos: `cruzamento.py` (cruzamento espacial —
-setor → estação mais próxima — e chuva acumulada observada) e `previsao.py`
-(projeção temporal — trajetória do acumulado de 72h combinando chuva
+`src/processing/` tem dois módulos: `cruzamento.py` (cruzamento espacial:
+setor → estação mais próxima, e chuva acumulada observada) e `previsao.py`
+(projeção temporal: trajetória do acumulado de 72h combinando chuva
 observada e prevista pela Open-Meteo). `dashboard_data.py` consome os dois só
 pela interface pública de cada um.
 
 O dashboard já foi um app Streamlit (`src/dashboard/app.py`); foi substituído
 por um site estático (`docs/dashboard/`) para resolver estética, layout e
-distribuição sem processo Python rodando — ver
+distribuição sem processo Python rodando, ver
 [Decisões e investigações](#decisões-e-investigações).
 
 ## Instalação
@@ -163,7 +164,7 @@ mesmo ano reaproveitam o cache.
 
 ### 3. Abrir o dashboard
 
-O dashboard é um site estático — HTML/CSS/JS puro, sem framework, sem build
+O dashboard é um site estático: HTML/CSS/JS puro, sem framework, sem build
 step e sem processo Python rodando pra servir a interface. Ele lê arquivos
 `docs/dashboard/data/*.geojson`/`*.json` gerados pela exportação abaixo.
 
@@ -171,7 +172,7 @@ step e sem processo Python rodando pra servir a interface. Ele lê arquivos
 python -m src.cli exportar-dashboard --uf SP
 # fonte padrão: Open-Meteo, consulta direta por setor (sem estação)
 # -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json
-# (com --fonte openmeteo, também gera previsao_sp.json — trajetória de alerta previsto)
+# (com --fonte openmeteo, também gera previsao_sp.json, trajetória de alerta previsto)
 
 scripts/rodar_dashboard.sh
 # depois abra http://localhost:8000/dashboard/
@@ -188,11 +189,11 @@ papel com tinta escura, tipografia serifada nos títulos (Source Serif 4,
 self-hosted), terracota como única cor de alarme, ícones de linha fina
 (Lucide) e mapa base CARTO nos tons do tema ativo. Tema claro/escuro
 acompanha a preferência do sistema por padrão, com um botão sol/lua no
-header para trocar manualmente — a escolha fica salva no navegador.
+header para trocar manualmente; a escolha fica salva no navegador.
 
 Por padrão a exportação usa a **Open-Meteo** (`--fonte openmeteo`): chuva
 consultada direto no centro de cada setor, sem depender de estação nem de
-`ingest-inmet`/`ingest-ana` terem rodado — só precisa dos setores (CPRM). Pra
+`ingest-inmet`/`ingest-ana` terem rodado, só precisa dos setores (CPRM). Pra
 usar o cruzamento por estação mais próxima (INMET+ANA) como antes, passe
 `--fonte inmet` (precisa de `ingest-inmet` já ter rodado para a UF/ano).
 
@@ -200,13 +201,13 @@ O mapa (Leaflet) mostra os setores coloridos por grau de risco; os filtros de
 município, janela de acumulado (24h/72h) e limiar de atenção ficam numa barra
 fixa no topo e recalculam tudo no navegador, sem nova requisição. Abaixo do
 mapa: cards de contagem, a tabela de setores em atenção e o gráfico (Chart.js)
-de série temporal — por município com a fonte Open-Meteo, por estação
+de série temporal, por município com a fonte Open-Meteo, por estação
 (INMET/ANA) com `--fonte inmet`. Um selo no topo mostra a data de geração dos
 dados, a referência da chuva e qual fonte foi usada.
 
-Sem seletor de UF/Ano por enquanto — os dados de hoje cobrem só SP.
+Sem seletor de UF/Ano por enquanto: os dados de hoje cobrem só SP.
 
-O mapa também traz uma camada de **rajada de vento**, desligada por padrão —
+O mapa também traz uma camada de **rajada de vento**, desligada por padrão;
 liga pelo controle de camadas no canto superior direito ("Rajada de vento").
 Ligada, ela mostra um choropleth: o polígono de cada município de SP que teve
 rajada relevante nas últimas 24h aparece preenchido, colorido pela severidade
@@ -215,19 +216,19 @@ Beaufort simplificada; passar o mouse num polígono mostra o nome do
 município, o valor em km/h e a faixa. A cobertura é todos os 645 municípios
 de SP, não só os que têm setor de risco geológico da CPRM. Os contornos
 municipais vêm da malha territorial pública do IBGE, buscada ao vivo pelo
-navegador na primeira vez que a camada é ligada — não é pré-computada nem
-versionada no repositório. Como o limiar de chuva, essa escala é ilustrativa
-— não é um critério oficial brasileiro calibrado para risco geológico, só uma
+navegador na primeira vez que a camada é ligada, não é pré-computada nem
+versionada no repositório. Como o limiar de chuva, essa escala é ilustrativa:
+não é um critério oficial brasileiro calibrado para risco geológico, só uma
 referência de leitura rápida.
 
 Abaixo do dashboard oficial, a seção **"Minhas áreas"** deixa qualquer visitante carregar um arquivo
 geolocalizado próprio (GeoJSON, KML ou shapefile em `.zip`) e ver chuva acumulada (24h/72h) e a
-trajetória de alerta previsto (72h) calculadas para essa área — útil porque a setorização da
+trajetória de alerta previsto (72h) calculadas para essa área, útil porque a setorização da
 CPRM/SGB não é exaustiva. Tudo roda no navegador do visitante: o arquivo é parseado localmente, o
 centróide da geometria é calculado com Leaflet e a chuva é buscada direto na Open-Meteo, sem passar
-por nenhum servidor do ORCA. Nada do que é enviado é salvo em lugar nenhum — nem em `localStorage`,
+por nenhum servidor do ORCA. Nada do que é enviado é salvo em lugar nenhum, nem em `localStorage`,
 nem no repositório; a página some tudo ao recarregar. Limite de 5 áreas por vez e 10MB por arquivo.
-Como a CPRM não avaliou essas áreas, não há grau de risco geológico inferido — só um campo opcional
+Como a CPRM não avaliou essas áreas, não há grau de risco geológico inferido, só um campo opcional
 para o próprio visitante informar uma classificação (sinalizada como autodeclarada, não oficial).
 
 ### 4. Atualização automática
@@ -251,13 +252,13 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
   é sempre relativa à leitura mais recente **disponível**, não necessariamente
   a "agora". O próprio dashboard mostra essa data de referência.
 - **A ingestão do INMET é incremental, não por data no servidor.** O INMET só
-  oferece o ZIP anual completo — não há como baixar só um intervalo de datas
+  oferece o ZIP anual completo: não há como baixar só um intervalo de datas
   do servidor (confirmado por `HEAD` real: `Range`/`ETag` suportados, mas
   cada estação tem um único arquivo cobrindo o ano inteiro). A partir da
   segunda execução, o download pula quando o ZIP não mudou (GET condicional)
   e o reprocessamento local pula estações sem mudança via CRC32, mesclando
   só os últimos 7 dias das que mudaram (janela de retificação). Retificações
-  do INMET fora dessa janela de 7 dias não são recapturadas — ver
+  do INMET fora dessa janela de 7 dias não são recapturadas, ver
   `src/ingest/inmet.py`.
 - **Densidade de estações é baixa.** SP tem 40 estações automáticas do INMET
   para 904 setores de risco; a distância média até a estação mais próxima
@@ -270,7 +271,7 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
   livremente ajustável.
 - **A camada de vento é observação recente, sem previsão.** Diferente da
   chuva (que tem trajetória de alerta previsto para os próximos 3 dias), a
-  rajada de vento mostrada é só a máxima observada nas últimas 24h — não há
+  rajada de vento mostrada é só a máxima observada nas últimas 24h; não há
   projeção futura de vento no momento. Consumir os avisos oficiais do INMET
   diretamente (em vez de derivar severidade da Open-Meteo) é uma evolução
   possível, fora do escopo desta fase.
@@ -281,19 +282,19 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
   um serviço multiusuário.
 - **O dashboard estático não atualiza sob demanda.** Diferente do antigo botão
   "Baixar/atualizar dados agora" do Streamlit, o site estático só mostra os
-  dados da última exportação — que roda uma vez por dia pelo cron. Pra ver
+  dados da última exportação, que roda uma vez por dia pelo cron. Pra ver
   dados mais recentes na hora, rode `exportar-dashboard` localmente (ver
   [Uso](#3-abrir-o-dashboard)).
 - **A Open-Meteo tem rate limit sensível ao volume de coordenadas × dias
   pedidos, não só à frequência de chamadas.** Testado com requisições reais
   em 10/08/2026: um único `POST` com as ~900 coordenadas de SP funcionou
   isoladamente, mas repetir esse volume (ou pedir 30 dias de histórico de
-  uma vez para todos os setores) gera `HTTP 429` de forma consistente — a
+  uma vez para todos os setores) gera `HTTP 429` de forma consistente: a
   API despacha "tente de novo em um minuto", e às vezes leva mais que isso
   pra liberar de fato. `src/ingest/openmeteo.py` já divide as consultas em
   lotes de 50 pontos com pausa entre eles, usa uma janela de histórico
   menor (4 dias) para o cruzamento por setor, e espera 60s especificamente
-  em `429` — mas uma sessão de testes intensa (como o desenvolvimento desta
+  em `429`, mas uma sessão de testes intensa (como o desenvolvimento desta
   função) pode esgotar a cota do dia/hora e fazer a exportação real falhar
   temporariamente. O cron roda uma vez por dia, bem dentro do uso normal.
 
@@ -307,7 +308,7 @@ pytest
 retry com backoff e fallback para cache local; parsing do CSV do INMET,
 leitura de estação dentro do ZIP anual, GET condicional do ZIP (ETag/304) e
 a ingestão incremental por CRC32 (estação sem mudança pulada, estação
-mudada mesclada, retificação dentro da janela de 7 dias — a fusão em si,
+mudada mesclada, retificação dentro da janela de 7 dias; a fusão em si,
 `_mesclar_serie_estacao`, também é testada isoladamente como função pura,
 sem precisar montar ZIP/HTTP); parsing do XML/SOAP da ANA, retry em HTTP 429
 e o filtro de estações sem dado recente; parsing em lote da Open-Meteo,
@@ -317,8 +318,8 @@ recência) e temporal (chuva acumulada 24h/72h); a trajetória de alerta
 previsto (`src/processing/previsao.py`); e a exportação dos dados do
 dashboard nas duas fontes (GeoJSON de setores, recorte de 30 dias na série
 temporal, metadados). Toda chamada de rede é mockada, então a suíte roda sem
-internet. O dashboard em si (HTML/JS estático) não tem testes automatizados
-— sem framework de teste de frontend no projeto, a validação é manual.
+internet. O dashboard em si (HTML/JS estático) não tem testes automatizados:
+não há framework de teste de frontend no projeto, a validação é manual.
 
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda essa suíte a cada push e
 pull request, separado do cron diário de atualização de dados.
@@ -326,7 +327,7 @@ pull request, separado do cron diário de atualização de dados.
 ## Decisões e investigações
 
 Duas decisões técnicas importantes já foram investigadas com requisições
-reais, não por suposição — histórico completo em
+reais, não por suposição; histórico completo em
 [`docs/investigacoes.md`](docs/investigacoes.md).
 
 **CEMADEN → INMET.** O plano original previa usar o CEMADEN como fonte de
@@ -339,11 +340,11 @@ pacote histórico anual do INMET, usado hoje pelo ORCA. →
 **Investigação da ANA → integração feita.** A rede telemétrica da ANA foi
 avaliada como fonte complementar de chuva em tempo real: das 437 estações
 listadas para SP, 271 (62%) têm dado vivo, com distância mediana de 18,6km
-até o setor de risco mais próximo — cobertura mais densa que o INMET.
+até o setor de risco mais próximo; cobertura mais densa que o INMET.
 Ressalva: as estações com dado vivo são majoritariamente
 hidrelétricas/fluviométricas, não pluviômetros dedicados. A integração foi
 implementada em `src/ingest/ana.py`: o cruzamento (`calcular_cruzamento`)
-agora usa a estação mais próxima entre INMET e ANA combinadas — distância
+agora usa a estação mais próxima entre INMET e ANA combinadas: distância
 manda, com desempate por recência de leitura quando as duas fontes têm uma
 estação a menos de 500m de diferença de distância. →
 [detalhes completos](docs/investigacoes.md#investigação-fontes-de-chuva-em-tempo-real)
@@ -351,7 +352,7 @@ estação a menos de 500m de diferença de distância. →
 **Streamlit → dashboard estático.** O dashboard começou como um app
 Streamlit. Ele resolvia o problema funcional, mas tinha estética genérica
 (chrome padrão do Streamlit), layout pouco customizável e não dava pra
-distribuir como site — precisava de um processo Python rodando. A solução foi
+distribuir como site; precisava de um processo Python rodando. A solução foi
 pré-computar o cruzamento (`src/export/dashboard_data.py`) como
 GeoJSON/JSON estáticos e servir um dashboard em HTML/CSS/JS puro
 (`docs/dashboard/`), publicado no GitHub Pages e atualizado pelo cron diário.
@@ -360,10 +361,10 @@ GeoJSON/JSON estáticos e servir um dashboard em HTML/CSS/JS puro
 **Open-Meteo como fonte padrão do dashboard.** O INMET tem dias de
 defasagem; a proposta foi testar uma fonte de chuva quase em tempo real. A
 Open-Meteo (`https://api.open-meteo.com/v1/forecast`) responde chuva
-horária por coordenada, sem conceito de estação — dá pra consultar
+horária por coordenada, sem conceito de estação; dá pra consultar
 diretamente o centro de cada setor de risco. Testado com requisições reais:
 funciona bem, mas tem rate limit sensível ao volume (coordenadas × dias de
-histórico pedidos), não só à frequência — `src/ingest/openmeteo.py` divide
+histórico pedidos), não só à frequência; `src/ingest/openmeteo.py` divide
 em lotes pequenos e trata `HTTP 429` especificamente. Vira a fonte padrão
 da exportação (`--fonte openmeteo`); o cruzamento por estação (INMET/ANA)
 continua disponível via `--fonte inmet`. →
@@ -372,7 +373,7 @@ continua disponível via `--fonte inmet`. →
 ## Roadmap
 
 - ~~Levantar quais estações da rede telemétrica da ANA têm dado vivo de chuva
-  em SP e integrar como fonte complementar ao INMET~~ — levantamento feito em
+  em SP e integrar como fonte complementar ao INMET~~: levantamento feito em
   08/08/2026, integração (`src/ingest/ana.py` + cruzamento combinado)
   implementada em 09/08/2026 (ver
   [Decisões e investigações](#decisões-e-investigações)).
@@ -381,14 +382,21 @@ continua disponível via `--fonte inmet`. →
 - Cobrir mais UFs além de SP (inclui trazer de volta um seletor de UF no
   dashboard estático, hoje fixo em SP).
 
+## Contribuindo
+
+Issues, PRs e sugestões são bem-vindos. Veja o
+[guia de contribuição](CONTRIBUTING.md) para o fluxo de setup, testes e
+padrão de commits, e o [Código de Conduta](CODE_OF_CONDUCT.md) que rege a
+participação no projeto.
+
 ## Licença
 
-Distribuído sob a licença [BSD 3-Clause](LICENSE) — uso, cópia, modificação e
+Distribuído sob a licença [BSD 3-Clause](LICENSE): uso, cópia, modificação e
 redistribuição são livres, inclusive comerciais, desde que o aviso de
 copyright e a licença sejam mantidos e o crédito ao autor original
 (Mateus Hcristos Leptokarydis) seja preservado.
 
-Os dados públicos usados pertencem aos seus respectivos órgãos/serviços —
+Os dados públicos usados pertencem aos seus respectivos órgãos/serviços:
 [CPRM/SGB](https://www.sgb.gov.br/), [INMET](https://portal.inmet.gov.br/),
-[ANA](https://www.gov.br/ana/pt-br) e [Open-Meteo](https://open-meteo.com/) —
+[ANA](https://www.gov.br/ana/pt-br) e [Open-Meteo](https://open-meteo.com/);
 consulte os termos de uso de cada um antes de redistribuir.

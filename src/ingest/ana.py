@@ -1,7 +1,7 @@
 """Cliente de ingestão da rede telemétrica da ANA (Agência Nacional de Águas),
 fonte complementar de chuva ao INMET.
 
-Web service: https://telemetriaws1.ana.gov.br/ServiceANA.asmx — público, sem
+Web service: https://telemetriaws1.ana.gov.br/ServiceANA.asmx, público, sem
 captcha, sem autenticação. `ListaEstacoesTelemetricas` lista as estações de
 uma UF; `DadosHidrometeorologicos` devolve leituras de chuva em intervalos de
 15 minutos por estação.
@@ -10,7 +10,7 @@ O levantamento em scripts/investigar_ana.py (ver README) mostrou que nem toda
 estação listada como "Ativo" transmite dado recente: de 437 estações
 cadastradas em SP, 271 (62%) tinham leitura de chuva nas últimas 48h. A
 maioria das estações com dado vivo são hidrelétricas/fluviométricas (nomes
-como "UHE ... BARRAMENTO/JUSANTE"), não pluviômetros dedicados — o campo
+como "UHE ... BARRAMENTO/JUSANTE"), não pluviômetros dedicados; o campo
 `Chuva` existe e responde, mas a rede não foi desenhada como uma rede
 pluviométrica dedicada. Essa é uma limitação conhecida da fonte, não um bug
 desta ingestão: o filtro de qualidade abaixo (`janela_horas`) só garante que
@@ -73,7 +73,7 @@ def fetch_estacoes(
     """Lista as estações telemétricas da ANA cadastradas numa UF.
 
     Faz retry com backoff em erro de rede/HTTP (o serviço retorna 429 com
-    facilidade sob concorrência — ver módulo docstring), levantando
+    facilidade sob concorrência, ver módulo docstring), levantando
     ANAFetchError se todas as tentativas falharem.
     """
     sess = session or requests.Session()
@@ -136,7 +136,7 @@ def fetch_serie_estacao(
     """Busca a série de chuva de uma estação nos últimos `dias_historico` dias.
 
     Faz retry com backoff em erro de rede/HTTP (inclusive 429 Too Many
-    Requests, que o serviço da ANA devolve com facilidade sob concorrência —
+    Requests, que o serviço da ANA devolve com facilidade sob concorrência;
     lógica validada com requisições reais em scripts/investigar_ana.py) para
     não confundir "rate limit" com "estação sem dado".
 
@@ -293,7 +293,7 @@ def ingerir_uf(
                 return ler_chuva(saida)
             raise ANAFetchError(
                 f"Falha ao consultar dados da ANA para UF={uf_norm}: {falhas_series}/{total} "
-                "estações sem resposta válida — possível instabilidade do serviço, não "
+                "estações sem resposta válida, possível instabilidade do serviço, não "
                 "necessariamente falta de dado vivo."
             )
         raise ANAFetchError(f"Nenhuma estação da ANA com dado vivo encontrada para UF={uf_norm}")

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ORCA — Dashboard</title>
+<title>ORCA: Dashboard</title>
 <meta name="description" content="Setores de risco geológico (CPRM/SGB) cruzados com chuva recente (INMET/ANA).">
 
 <link rel="stylesheet" href="style.css">
@@ -41,7 +41,7 @@
   </div>
 
   <div class="campo campo-limiar">
-    <label>Limiar de atenção — <span class="valor" id="limiarValor">100</span>mm</label>
+    <label>Limiar de atenção: <span class="valor" id="limiarValor">100</span>mm</label>
     <input type="range" id="limiarSlider" min="0" max="300" step="5" value="100">
   </div>
 </header>
@@ -96,7 +96,7 @@
       <svg class="icone"><use href="icons/sprite.svg#icon-info"></use></svg>
       Carregue um arquivo com sua área (GeoJSON, KML ou shapefile em .zip) e veja chuva acumulada e
       alerta previsto nela, calculados na hora pelo seu navegador. Nada que você envia é salvo em
-      lugar nenhum — some ao recarregar a página. Limite de 5 áreas por vez, até 10MB por arquivo.
+      lugar nenhum, some ao recarregar a página. Limite de 5 áreas por vez, até 10MB por arquivo.
     </p>
 
     <div class="upload-area">
@@ -124,7 +124,7 @@
 </main>
 
 <footer>
-  ORCA — dados públicos da CPRM/SGB, INMET e ANA. Site estático, atualizado
+  ORCA: dados públicos da CPRM/SGB, INMET e ANA. Site estático, atualizado
   diariamente. <a href="https://github.com/hcristosm/ORCA#readme">Sobre o projeto</a> ·
   <a href="https://github.com/hcristosm/ORCA">GitHub <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg></a>
 </footer>
@@ -256,7 +256,7 @@
     renderizarTudo();
 
     // Malha/nomes do IBGE não bloqueiam o primeiro render (cards/tabela/mapa já saem
-    // com os dados locais) — quando chegam, promovem o mapa para o choropleth municipal.
+    // com os dados locais); quando chegam, promovem o mapa para o choropleth municipal.
     Promise.all([garantirMalhaMunicipios(), garantirNomesMunicipios()]).then(() => {
       if (!estado.municipio && choroplethDisponivel() && !camadaChoropleth) renderizarTudo();
     });
@@ -390,7 +390,7 @@
         ev.preventDefault();
         clearTimeout(debounceId);
         // Só recalcula se a lista visível estiver atrasada (debounce de 120ms) em
-        // relação ao texto atual — preserva indiceAtivo/realce de seta-cima/seta-baixo
+        // relação ao texto atual; preserva indiceAtivo/realce de seta-cima/seta-baixo
         // quando a lista já está em dia.
         if (ultimoFiltro !== input.value) renderSugestoes(input.value);
         if (lista.children.length) {
@@ -477,7 +477,7 @@
       rotulo.textContent = `Sem série de chuva disponível para ${nome}.`;
       return;
     }
-    rotulo.textContent = `${series[codigo].nome} — ${series[codigo].fonte.toUpperCase()}`;
+    rotulo.textContent = `${series[codigo].nome}: ${series[codigo].fonte.toUpperCase()}`;
     renderizarGrafico(codigo);
   }
 
@@ -695,7 +695,7 @@
     const modo = modoMapa();
 
     if (modo === "choropleth") {
-      // O choropleth não depende de janela/limiar (só de grau_risco) — não reconstrói
+      // O choropleth não depende de janela/limiar (só de grau_risco); não reconstrói
       // à toa a cada tick do slider se ele já está na tela.
       if (!camadaChoropleth) renderizarChoroplethMunicipios();
     } else {

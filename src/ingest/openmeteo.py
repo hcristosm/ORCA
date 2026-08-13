@@ -1,4 +1,4 @@
-"""Cliente da API Open-Meteo — chuva horária por coordenada, quase em tempo real.
+"""Cliente da API Open-Meteo, chuva horária por coordenada, quase em tempo real.
 
 Diferente do INMET (ZIP anual, dias de defasagem) e da ANA (rede de estações
 telemétricas, cobertura parcial), a Open-Meteo (https://open-meteo.com/) não
@@ -8,7 +8,7 @@ cada setor de risco, sem precisar de "estação mais próxima" (ver
 src/export/dashboard_data.py).
 
 Investigação em 10/08/2026 (requisições reais): `POST` com `latitude`/
-`longitude` como arrays no corpo é obrigatório — `GET` com muitas
+`longitude` como arrays no corpo é obrigatório; `GET` com muitas
 coordenadas na query string esbarra em `HTTP 414 URI Too Long` bem antes de
 chegar a centenas de pontos. O parâmetro `timezone` não pode ser enviado
 como string simples nesse modo (a API exige um array, um valor por
@@ -18,7 +18,7 @@ fins deste projeto.
 Um único `POST` com as ~900 coordenadas dos setores de SP chegou a responder
 em ~2s numa primeira tentativa isolada, mas testes seguintes (e uma
 exportação real) esbarraram em `HTTP 429 Minutely API request limit
-exceeded` de forma consistente, mesmo aguardando um minuto inteiro — o
+exceeded` de forma consistente, mesmo aguardando um minuto inteiro. O
 limite prático parece ser sobre o *tamanho* do lote, não só sobre a
 frequência de chamadas. Testado e confirmado estável: lotes de até 100
 pontos, inclusive em sequência rápida (1s de intervalo). Por isso este
@@ -26,7 +26,7 @@ cliente divide `pontos` em lotes de `tamanho_lote` (padrão 100) e faz uma
 chamada por lote, com uma pequena pausa entre elas.
 
 Sem cache/armazenamento local: cada exportação consulta a API ao vivo, o que
-é viável porque o custo por chamada é baixo — não há aqui o problema de
+é viável porque o custo por chamada é baixo; não há aqui o problema de
 "baixar o ano inteiro de novo" que motivou a ingestão incremental do INMET.
 """
 
@@ -78,7 +78,7 @@ def _post_lote(
             break
         except requests.RequestException as exc:
             last_exc = exc
-            # HTTP 429 da Open-Meteo é "Minutely API request limit exceeded" — a
+            # HTTP 429 da Open-Meteo é "Minutely API request limit exceeded"; a
             # própria API pede pra tentar de novo em um minuto; o backoff
             # exponencial normal (poucos segundos) não é suficiente para isso.
             if exc.response is not None and exc.response.status_code == 429:
@@ -118,7 +118,7 @@ def _fetch_variavel_batch(
     """Busca uma variável horária da Open-Meteo para uma lista de pontos, em lotes.
 
     Compartilhada por `fetch_precipitacao_batch` (variavel="precipitation") e
-    `fetch_vento_batch` (variavel="windgusts_10m") — mesma paginação, retry e
+    `fetch_vento_batch` (variavel="windgusts_10m"), mesma paginação, retry e
     tratamento de 429, só muda qual campo é pedido/lido da resposta.
     """
     if not pontos:
@@ -165,7 +165,7 @@ def fetch_precipitacao_batch(
     Retorna uma lista de DataFrames (`data_hora, chuva_mm`), um por ponto, na
     mesma ordem de `pontos`. `dias_historico` controla quantos dias para trás
     são pedidos e `dias_previsao` quantos dias de previsão para frente (a
-    API aceita até 92 e 16 respectivamente) — filtrar por "é passado" ou
+    API aceita até 92 e 16 respectivamente); filtrar por "é passado" ou
     "é futuro" é responsabilidade de quem consome o DataFrame, não deste
     cliente.
 
@@ -192,7 +192,7 @@ def fetch_vento_batch(
 ) -> list[pd.DataFrame]:
     """Busca rajada de vento (`windgusts_10m`) horária para uma lista de pontos `(lat, lon)`.
 
-    Mesmo cliente/lote/retry de `fetch_precipitacao_batch` — reaproveita
+    Mesmo cliente/lote/retry de `fetch_precipitacao_batch`, reaproveita
     `_fetch_variavel_batch`. Retorna uma lista de DataFrames
     (`data_hora, vento_rajada_kmh`), um por ponto, na mesma ordem de `pontos`.
     """

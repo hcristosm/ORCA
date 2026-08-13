@@ -1,7 +1,7 @@
 """Exportação dos dados do dashboard estático a partir do cruzamento.
 
 O dashboard (`docs/dashboard/`) é um site estático em HTML/CSS/JS puro, sem
-backend — este módulo pré-computa o que ele precisa como arquivos estáticos:
+backend, este módulo pré-computa o que ele precisa como arquivos estáticos:
 setores com a estação mais próxima (INMET+ANA combinados, via
 `calcular_cruzamento`) e chuva acumulada em GeoJSON, série temporal recente
 por estação em JSON, e metadados de geração. Ver
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 JANELA_SERIE_DIAS = 30
 
-# A chuva acumulada por setor (mapa/tabela) só precisa de ~72h + folga — pedir
+# A chuva acumulada por setor (mapa/tabela) só precisa de ~72h + folga; pedir
 # 30 dias de histórico para todos os ~900 setores de uma vez esbarrou em
 # HTTP 429 (rate limit) na Open-Meteo em testes reais (ver
 # src/ingest/openmeteo.py). O gráfico por município (bem menos pontos) ainda
@@ -63,7 +63,7 @@ def _exportar_setores(cruzado: pd.DataFrame, caminho: Path) -> None:
 def _recortar_series(chuva_df: pd.DataFrame, referencia: pd.Timestamp) -> dict:
     """Monta `{codigo_estacao: {nome, fonte, serie: [[iso, mm], ...]}}`.
 
-    Recortado aos últimos `JANELA_SERIE_DIAS` dias a partir de `referencia` —
+    Recortado aos últimos `JANELA_SERIE_DIAS` dias a partir de `referencia`,
     sem isso o payload cresceria sem limite agora que o INMET acumula o ano
     inteiro (ingestão incremental, ver src/ingest/inmet.py).
     """
@@ -95,13 +95,13 @@ def _calcular_chuva_openmeteo(
 
     Sem estação: `distancia_km` é sempre 0.0; `codigo_estacao`/`nome_estacao`
     identificam a fonte, não uma estação real. `agora` é parametrizável para
-    tornar testes determinísticos — em produção usa o instante atual.
+    tornar testes determinísticos, em produção usa o instante atual.
 
     Retorna `(resultado, previsao)`: `resultado` é o GeoDataFrame de sempre
     (chuva observada em `janelas`); `previsao` é
-    `{num_setor: [[iso, mm], ...]}` — a trajetória do acumulado de 72h nas
+    `{num_setor: [[iso, mm], ...]}`, a trajetória do acumulado de 72h nas
     próximas horas (ver `src.processing.previsao.trajetoria_chuva_72h`), calculada a partir da
-    mesma série já buscada — sem uma segunda consulta à API.
+    mesma série já buscada, sem uma segunda consulta à API.
     """
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
 
@@ -164,7 +164,7 @@ def _series_openmeteo_por_municipio(
 def _exportar_openmeteo(setores: gpd.GeoDataFrame) -> tuple[pd.DataFrame, dict, dict, dict]:
     """Estratégia `fonte="openmeteo"`: consulta direto no centroide de cada setor.
 
-    Retorna `(cruzado, series, previsao, meta)` prontos para gravação —
+    Retorna `(cruzado, series, previsao, meta)` prontos para gravação;
     `meta` já traz todos os campos específicos desta fonte, exceto
     `gerado_em` (adicionado por `exportar_dashboard`, comum às duas fontes).
     """
@@ -190,7 +190,7 @@ def _exportar_inmet(
 ) -> tuple[pd.DataFrame, dict, None, dict]:
     """Estratégia `fonte="inmet"`: cruzamento por estação mais próxima (INMET + ANA).
 
-    Retorna `(cruzado, series, previsao, meta)` — `previsao` é sempre `None`
+    Retorna `(cruzado, series, previsao, meta)`. `previsao` é sempre `None`
     (INMET não tem previsão), mantido na tupla só para simetria com
     `_exportar_openmeteo`.
     """
@@ -234,8 +234,8 @@ def exportar_dashboard(
 
     `fonte="openmeteo"` (padrão): consulta a Open-Meteo direto no centroide
     de cada setor (sem estação, sem depender de INMET/ANA terem sido
-    ingeridos) — só precisa dos setores (CPRM). `fonte="inmet"`: comportamento
-    idêntico ao anterior a este parâmetro — cruzamento por estação mais
+    ingeridos), só precisa dos setores (CPRM). `fonte="inmet"`: comportamento
+    idêntico ao anterior a este parâmetro, cruzamento por estação mais
     próxima combinando INMET e, se existir localmente, ANA.
 
     Grava em `saida_dir`: `setores_<uf>.geojson`, `series_<uf>.json`

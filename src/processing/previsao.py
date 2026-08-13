@@ -14,10 +14,10 @@ import pandas as pd
 from src.processing.cruzamento import chuva_acumulada
 
 # Horizonte da previsão de "alerta previsto": até 3 dias (72h) à frente,
-# amostrado de 3 em 3 horas — depois desse prazo a previsão de chuva fica
+# amostrado de 3 em 3 horas; depois desse prazo a previsão de chuva fica
 # pouco confiável pra esse tipo de sinalização antecipada. O valor abaixo é
 # 4 (não 3): a Open-Meteo entrega `forecast_days` em dias-calendário GMT
-# inteiros, não em horas a partir do instante da consulta — com 3 dias a
+# inteiros, não em horas a partir do instante da consulta; com 3 dias a
 # cobertura real pode cair pra ~25h dependendo da hora do dia em que a
 # exportação roda. O dia extra é folga pra garantir cobertura de 72h
 # completos independente do horário de execução.
@@ -35,13 +35,13 @@ def trajetoria_chuva_72h(
     """Acumulado de 72h em cada ponto futuro, combinando chuva já caída + prevista.
 
     Reaproveita `chuva_acumulada` (mesma função usada pro acumulado
-    observado) chamada em cada ponto futuro `t` — ela soma `chuva_mm` na
+    observado) chamada em cada ponto futuro `t`, ela soma `chuva_mm` na
     janela `(t - 72h, t]` independente de os pontos serem passados ou
     futuros, já que a série da Open-Meteo já vem contínua (observado +
     previsto misturados na mesma sequência de `data_hora`).
 
     Pontos além do último dado disponível na série (`serie["data_hora"].max()`)
-    recebem `None` em vez de um valor calculado — sem essa checagem,
+    recebem `None` em vez de um valor calculado; sem essa checagem,
     `chuva_acumulada` soma só a parte da janela que ainda tem dado e o
     valor decai silenciosamente rumo a zero conforme `t` avança além do
     horizonte real da previsão, em vez de sinalizar "sem dado aqui".

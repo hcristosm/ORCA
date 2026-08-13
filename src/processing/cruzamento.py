@@ -2,7 +2,7 @@
 
 Para cada setor de risco (polígono da CPRM/SGB), encontra a estação
 pluviométrica do INMET mais próxima e calcula a chuva acumulada nas últimas
-24h e 72h *em relação à leitura mais recente disponível na série* — que, por
+24h e 72h *em relação à leitura mais recente disponível na série*, que, por
 causa da defasagem do pacote histórico do INMET (ver src/ingest/inmet.py),
 pode ser de alguns dias atrás, não necessariamente "agora".
 """
@@ -16,7 +16,7 @@ from shapely.geometry import Point
 from src.config import JANELAS_CHUVA as JANELAS_PADRAO
 from src.config import LIMIAR_ATENCAO_MM_PADRAO
 
-CRS_METRICO = "EPSG:5880"  # SIRGAS 2000 / Brasil Polícônica — boa para distâncias em todo o país
+CRS_METRICO = "EPSG:5880"  # SIRGAS 2000 / Brasil Polícônica, boa para distâncias em todo o país
 
 
 def centroides_metricos(setores: gpd.GeoDataFrame) -> gpd.GeoSeries:
@@ -32,7 +32,7 @@ def centroides_4326(setores: gpd.GeoDataFrame) -> gpd.GeoSeries:
 def centroides_municipio(setores: gpd.GeoDataFrame) -> tuple[list[str], list[tuple[float, float]]]:
     """Um ponto representativo por município: centroide médio (métrico) dos setores daquele município.
 
-    Não é dissolve de geometria — a média dos centroides dos setores já é
+    Não é dissolve de geometria, a média dos centroides dos setores já é
     suficiente para escolher um ponto de consulta razoável para APIs por
     coordenada (Open-Meteo). Retorna `(municipios, pontos)` em
     correspondência posicional, `pontos` já em `(lat, lon)`.
@@ -58,7 +58,7 @@ def centroides_ibge(municipios: gpd.GeoDataFrame) -> tuple[list[str], list[tuple
     """Centroide de cada polígono municipal da malha do IBGE.
 
     Espelha `centroides_municipio` (que usa a média dos centroides dos
-    setores CPRM), mas a partir da malha oficial do IBGE — usado só pela
+    setores CPRM), mas a partir da malha oficial do IBGE, usado só pela
     camada de vento (`src/export/vento_data.py`), que cobre todos os
     municípios de uma UF, não só os que têm setor de risco geológico
     registrado. Retorna `(codareas, pontos)` em correspondência posicional,
@@ -122,13 +122,13 @@ def encontrar_estacao_mais_proxima_combinada(
 
     Regra de prioridade (ver
     docs/superpowers/specs/2026-08-09-ingestao-ana-design.md): a distância
-    manda — a estação mais próxima do centróide do setor vence, seja ela
+    manda: a estação mais próxima do centróide do setor vence, seja ela
     INMET ou ANA. O desempate por recência de leitura só entra em jogo
     quando as duas fontes têm uma estação a uma distância praticamente igual
     (diferença menor que `limiar_empate_m`, padrão 500m); nesse caso a
     estação com leitura mais recente vence. Na prática isso quase sempre
     favorece a ANA (granularidade de 15min) sobre o INMET (defasagem de
-    dias) nesses empates — mas a regra não é hardcoded para nenhuma fonte
+    dias) nesses empates, mas a regra não é hardcoded para nenhuma fonte
     específica, só para a leitura mais recente.
     """
     if chuva_ana is None or chuva_ana.empty:
@@ -187,13 +187,13 @@ def calcular_cruzamento(
     janelas: tuple[int, ...] = JANELAS_PADRAO,
 ) -> gpd.GeoDataFrame:
     """Cruza setores de risco com chuva: acha a estação mais próxima de cada setor
-    (combinando INMET e, se fornecida, a ANA como fonte complementar — ver
+    (combinando INMET e, se fornecida, a ANA como fonte complementar, ver
     `encontrar_estacao_mais_proxima_combinada`) e calcula a chuva acumulada nas
     janelas de tempo pedidas (em horas).
 
     Se `referencia` for informada, é usada como fim da janela para todas as
     estações igualmente. Se não (caso padrão, usado pelo dashboard), cada
-    estação usa sua própria leitura mais recente como referência — INMET e ANA
+    estação usa sua própria leitura mais recente como referência: INMET e ANA
     têm granularidades e defasagens muito diferentes (leituras horárias com
     dias de atraso vs. 15min quase em tempo real), então uma referência global
     ancorada no INMET deixaria os setores atendidos pela ANA com janela de
@@ -246,7 +246,7 @@ def sinalizar_atencao(
 
     O valor padrão (100mm/72h) é uma referência ilustrativa comum na literatura de
     risco de deslizamento, não um limiar oficial calibrado para os setores da
-    CPRM/SGB — ajuste conforme a fonte técnica disponível para cada região.
+    CPRM/SGB, ajuste conforme a fonte técnica disponível para cada região.
     """
     resultado = setores_cruzados.copy()
     resultado["em_atencao"] = resultado[coluna_chuva] >= limiar_mm

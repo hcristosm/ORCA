@@ -13,7 +13,7 @@ Uso:
     python scripts/investigar_ana.py --uf SP
     python scripts/investigar_ana.py --uf SP --janela-horas 48 --max-workers 10
 
-Não faz parte do pipeline de ingestão do ORCA (ainda) — é uma ferramenta de
+Não faz parte do pipeline de ingestão do ORCA (ainda), é uma ferramenta de
 investigação avulsa. Se a cobertura resultante compensar, o próximo passo é
 promover isso a um cliente em `src/ingest/ana.py`.
 """

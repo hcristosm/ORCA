@@ -2,7 +2,7 @@
 
 O pedido original previa usar o CEMADEN para chuva, mas a investigação (ver
 README) mostrou que as únicas fontes do CEMADEN sem captcha que encontramos
-são espelhos estáticos de 2017/2019 — não uma fonte viva. A API dinâmica do
+são espelhos estáticos de 2017/2019, não uma fonte viva. A API dinâmica do
 INMET (`apitempo.inmet.gov.br/estacao/...`) também não é viável sem navegador:
 está atrás de um WAF (cookies `TS...`, indicativo de F5 Bot Defense) que
 devolve HTTP 204 vazio para clientes não-navegador em vez de um erro claro.
@@ -12,19 +12,19 @@ publica como ZIP público, sem captcha nem bloqueio de bot:
 https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip
 
 Cada ZIP contém um CSV por estação automática, com leituras horárias (incluindo
-precipitação) desde 1º de janeiro do ano até poucos dias antes do download —
+precipitação) desde 1º de janeiro do ano até poucos dias antes do download,
 ou seja, não é "tempo real" no sentido estrito, mas é a chuva real mais recente
 disponível publicamente sem intervenção manual. Essa defasagem é documentada
 no README como limitação conhecida.
 
 A cada execução, buscar o ano inteiro do zero seria caro sem necessidade: um
 `HEAD` real no ZIP confirmou que o servidor suporta `Range`/`ETag`, mas cada
-estação tem um único arquivo cobrindo o ano inteiro — não há como pedir só
+estação tem um único arquivo cobrindo o ano inteiro; não há como pedir só
 "os últimos N dias" de uma estação ao servidor. A otimização é inteiramente
 local (ver docs/superpowers/specs/2026-08-09-ingestao-inmet-incremental-design.md):
 o ZIP é baixado com GET condicional (pula a transferência se não mudou desde
 a última execução) e, por estação, o CRC32 da entrada no ZIP é comparado a
-um manifesto local (`data/inmet_manifest_<uf>_<ano>.json`) — sem mudança,
+um manifesto local (`data/inmet_manifest_<uf>_<ano>.json`); sem mudança,
 pula o reprocessamento; com mudança, mescla só os últimos 7 dias (janela de
 retificação) no CSV acumulado em vez de reparsear o ano inteiro.
 
@@ -278,7 +278,7 @@ def _mesclar_serie_estacao(
     Antes de `cutoff`, os dados existentes são tratados como estáveis e
     preservados; a partir de `cutoff` (inclusive), a leitura mais recente
     baixada prevalece em caso de retificação (mesmo `data_hora`, `chuva_mm`
-    diferente) — ver docstring do módulo para a estratégia incremental.
+    diferente), ver docstring do módulo para a estratégia incremental.
     """
     antigas_estaveis = serie_existente[serie_existente["data_hora"] < cutoff]
     recentes_novas = serie_nova[serie_nova["data_hora"] >= cutoff]
