@@ -92,3 +92,29 @@ def test_fetch_nomes_municipios_falha_persistente_levanta_erro():
 
     with pytest.raises(IBGEFetchError):
         fetch_nomes_municipios("SP", max_retries=2, backoff_factor=0.01)
+
+
+@responses.activate
+def test_fetch_municipios_features_vazio_levanta_erro():
+    responses.add(
+        responses.GET,
+        MALHAS_URL_TEMPLATE.format(uf="SP"),
+        json={"type": "FeatureCollection", "features": []},
+        status=200,
+    )
+
+    with pytest.raises(IBGEFetchError):
+        fetch_municipios("SP")
+
+
+@responses.activate
+def test_fetch_nomes_municipios_formato_inesperado_levanta_ibge_fetch_error():
+    responses.add(
+        responses.GET,
+        LOCALIDADES_URL_TEMPLATE.format(uf="SP"),
+        json={"error": "something went wrong"},
+        status=200,
+    )
+
+    with pytest.raises(IBGEFetchError):
+        fetch_nomes_municipios("SP")
