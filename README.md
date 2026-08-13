@@ -208,12 +208,17 @@ Sem seletor de UF/Ano por enquanto — os dados de hoje cobrem só SP.
 
 O mapa também traz uma camada de **rajada de vento**, desligada por padrão —
 liga pelo controle de camadas no canto superior direito ("Rajada de vento").
-Ligada, ela mostra um círculo por município que teve rajada relevante nas
-últimas 24h, colorido pela severidade em três faixas (atenção, perigo, grande
-perigo) derivadas de uma escala Beaufort simplificada; passar o mouse num
-círculo mostra o valor em km/h e a faixa. Como o limiar de chuva, essa escala
-é ilustrativa — não é um critério oficial brasileiro calibrado para risco
-geológico, só uma referência de leitura rápida.
+Ligada, ela mostra um choropleth: o polígono de cada município de SP que teve
+rajada relevante nas últimas 24h aparece preenchido, colorido pela severidade
+em três faixas (atenção, perigo, grande perigo) derivadas de uma escala
+Beaufort simplificada; passar o mouse num polígono mostra o nome do
+município, o valor em km/h e a faixa. A cobertura é todos os 645 municípios
+de SP, não só os que têm setor de risco geológico da CPRM. Os contornos
+municipais vêm da malha territorial pública do IBGE, buscada ao vivo pelo
+navegador na primeira vez que a camada é ligada — não é pré-computada nem
+versionada no repositório. Como o limiar de chuva, essa escala é ilustrativa
+— não é um critério oficial brasileiro calibrado para risco geológico, só uma
+referência de leitura rápida.
 
 Abaixo do dashboard oficial, a seção **"Minhas áreas"** deixa qualquer visitante carregar um arquivo
 geolocalizado próprio (GeoJSON, KML ou shapefile em `.zip`) e ver chuva acumulada (24h/72h) e a
