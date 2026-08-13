@@ -5,7 +5,6 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 import responses
-from shapely.geometry import Polygon
 
 from src.export.dashboard_data import ExportacaoDashboardError
 from src.export.vento_data import exportar_vento
