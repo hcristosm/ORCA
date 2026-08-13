@@ -165,6 +165,7 @@
   let series = {};
   let previsao = null;
   let ventoGeoJSON = null;
+  let malhaMunicipios = null;
   let camadaSetores = null;
   let camadaVento = null;
   let mapa = null;
@@ -248,6 +249,27 @@
     }
   }
 
+  const MALHA_MUNICIPIOS_URL =
+    `https://servicodados.ibge.gov.br/api/v3/malhas/estados/${UF.toUpperCase()}` +
+    `?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio`;
+
+  async function garantirMalhaMunicipios() {
+    if (malhaMunicipios) return malhaMunicipios;
+    try {
+      const resp = await fetch(MALHA_MUNICIPIOS_URL);
+      if (resp.ok) {
+        malhaMunicipios = await resp.json();
+      } else {
+        console.warn("Falha ao buscar a malha municipal do IBGE: HTTP " + resp.status);
+        malhaMunicipios = null;
+      }
+    } catch (e) {
+      console.warn("Falha ao buscar a malha municipal do IBGE", e);
+      malhaMunicipios = null;
+    }
+    return malhaMunicipios;
+  }
+
   function popularMunicipios() {
     const select = document.getElementById("municipioSelect");
     const municipios = Array.from(new Set(setoresGeoJSON.features.map(f => f.properties.munic))).sort();
@@ -303,10 +325,15 @@
       return div;
     };
     legenda.addTo(mapa);
-    renderizarVento();
+
+    camadaVento = L.layerGroup();
     if (ventoGeoJSON && ventoGeoJSON.features.length) {
       L.control.layers(null, { "Rajada de vento": camadaVento }, { position: "topright", collapsed: false }).addTo(mapa);
     }
+    mapa.on("overlayadd", ev => {
+      if (ev.name !== "Rajada de vento") return;
+      garantirMalhaMunicipios().then(renderizarVento);
+    });
   }
 
   function setoresFiltrados() {
@@ -413,26 +440,37 @@
   }
 
   function renderizarVento() {
-    if (camadaVento) { mapa.removeLayer(camadaVento); camadaVento = null; }
-    if (!ventoGeoJSON || !ventoGeoJSON.features.length) return;
+    if (!camadaVento) return;
+    camadaVento.clearLayers();
+    if (!malhaMunicipios || !ventoGeoJSON || !ventoGeoJSON.features.length) return;
 
+    const porCodarea = new Map(
+      ventoGeoJSON.features.map(f => [String(f.properties.codarea), f.properties])
+    );
     const cores = coresVento();
-    camadaVento = L.geoJSON(ventoGeoJSON, {
-      pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
-        radius: 8,
-        fillColor: cores[feature.properties.severidade] || corPadrao(),
-        fillOpacity: 0.85,
-        color: corAtencao(),
-        weight: 1,
-      }),
+    const coloridos = {
+      type: "FeatureCollection",
+      features: malhaMunicipios.features.filter(f => porCodarea.has(String(f.properties.codarea))),
+    };
+
+    L.geoJSON(coloridos, {
+      style: feature => {
+        const p = porCodarea.get(String(feature.properties.codarea));
+        return {
+          fillColor: cores[p.severidade] || corPadrao(),
+          fillOpacity: 0.65,
+          color: corAtencao(),
+          weight: 1,
+        };
+      },
       onEachFeature: (feature, layer) => {
-        const p = feature.properties;
+        const p = porCodarea.get(String(feature.properties.codarea));
         layer.bindTooltip(
           `<b>${p.munic}</b><br>Rajada (24h): ${p.rajada_kmh_24h.toFixed(1)} km/h<br>` +
           `Severidade: ${rotuloSeveridade(p.severidade)}`
         );
       },
-    });
+    }).addTo(camadaVento);
   }
 
   function renderizarTabela(emAtencao, alertaPrevisto) {
