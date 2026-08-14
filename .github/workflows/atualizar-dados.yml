@@ -8,10 +8,10 @@ on:
     - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
-      uf:
-        description: "UF a atualizar"
+      ufs:
+        description: "UFs a atualizar, separadas por vírgula (vazio = todas as 27)"
         required: false
-        default: "SP"
+        default: ""
       ano:
         description: "Ano dos dados históricos do INMET"
         required: false
@@ -33,17 +33,17 @@ jobs:
       - name: Instalar dependências
         run: pip install -e .
 
-      - name: Rodar atualização
+      - name: Rodar atualização nacional
         run: >
           python scripts/atualizar_dados.py
-          --uf "${{ github.event.inputs.uf || 'SP' }}"
+          --ufs "${{ github.event.inputs.ufs || '' }}"
           --ano "${{ github.event.inputs.ano || '2026' }}"
 
       - name: Publicar dados como artefato
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dados-orca-${{ github.event.inputs.uf || 'SP' }}
+          name: dados-orca-nacional
           path: |
             data/*.gpkg
             data/*.csv
