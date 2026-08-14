@@ -171,6 +171,12 @@
     select.value = UF;
     select.addEventListener("change", () => {
       UF = select.value;
+      // Limpa a malha/nomes do IBGE em cache: pertencem à UF anterior e não podem
+      // ser usados (nem transitoriamente, antes do novo fetch terminar) para a nova UF.
+      malhaMunicipios = null;
+      malhaMunicipiosUf = null;
+      codareaPorNome = null;
+      codareaPorNomeUf = null;
       carregarDados();
     });
   }
@@ -201,7 +207,9 @@
   let previsao = null;
   let ventoGeoJSON = null;
   let malhaMunicipios = null;
+  let malhaMunicipiosUf = null;
   let codareaPorNome = null;
+  let codareaPorNomeUf = null;
   let opcoesMunicipios = [];
   let camadaSetores = null;
   let camadaChoropleth = null;
@@ -313,21 +321,23 @@
     }
   }
 
-  const MALHA_MUNICIPIOS_URL =
-    `https://servicodados.ibge.gov.br/api/v3/malhas/estados/${UF.toUpperCase()}` +
-    `?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio`;
+  function malhaMunicipiosUrl() {
+    return `https://servicodados.ibge.gov.br/api/v3/malhas/estados/${UF.toUpperCase()}` +
+      `?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio`;
+  }
 
   let promessaMalha = null;
   async function garantirMalhaMunicipios() {
-    if (malhaMunicipios) return malhaMunicipios;
+    if (malhaMunicipios && malhaMunicipiosUf === UF) return malhaMunicipios;
     if (!promessaMalha) {
       // Evita disparar fetches duplicados se dois gatilhos (load inicial + toggle do
       // vento) chamarem isso antes do primeiro terminar.
       promessaMalha = (async () => {
         try {
-          const resp = await fetchComTimeout(MALHA_MUNICIPIOS_URL);
+          const resp = await fetchComTimeout(malhaMunicipiosUrl());
           if (resp.ok) {
             malhaMunicipios = await resp.json();
+            malhaMunicipiosUf = UF;
           } else {
             console.warn("Falha ao buscar a malha municipal do IBGE: HTTP " + resp.status);
           }
@@ -342,21 +352,23 @@
     return malhaMunicipios;
   }
 
-  const NOMES_MUNICIPIOS_URL =
-    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${UF.toUpperCase()}/municipios`;
+  function nomesMunicipiosUrl() {
+    return `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${UF.toUpperCase()}/municipios`;
+  }
 
   let promessaNomes = null;
   async function garantirNomesMunicipios() {
-    if (codareaPorNome) return codareaPorNome;
+    if (codareaPorNome && codareaPorNomeUf === UF) return codareaPorNome;
     if (!promessaNomes) {
       promessaNomes = (async () => {
         try {
-          const resp = await fetchComTimeout(NOMES_MUNICIPIOS_URL);
+          const resp = await fetchComTimeout(nomesMunicipiosUrl());
           if (resp.ok) {
             const lista = await resp.json();
             const indice = new Map();
             for (const m of lista) indice.set(normalizarNome(m.nome), String(m.id));
             codareaPorNome = indice;
+            codareaPorNomeUf = UF;
           } else {
             console.warn("Falha ao buscar os nomes de município do IBGE: HTTP " + resp.status);
           }
