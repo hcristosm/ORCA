@@ -47,3 +47,7 @@ def caminho_zip_inmet(ano: int, data_dir: Path = DATA_DIR) -> Path:
 
 def caminho_manifesto_inmet(uf: str, ano: int, data_dir: Path = DATA_DIR) -> Path:
     return data_dir / f"inmet_manifest_{uf.lower()}_{ano}.json"
+
+
+def caminho_manifesto_cprm(uf: str, data_dir: Path = DATA_DIR) -> Path:
+    return data_dir / f"cprm_manifest_{uf.lower()}.json"
