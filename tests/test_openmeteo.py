@@ -31,6 +31,28 @@ def test_fetch_precipitacao_batch_lista_vazia_retorna_vazio():
 
 
 @responses.activate
+def test_fetch_precipitacao_batch_lote_de_1_ponto_resposta_e_objeto_nao_lista():
+    # A Open-Meteo devolve um objeto único (não envolto em lista) quando o
+    # POST tem só 1 coordenada, diferente do array que devolve para lotes
+    # maiores (ver test_fetch_precipitacao_batch_parseia_lista_na_ordem_dos_pontos).
+    # Reproduzido em produção: lote de 1 ponto (sobra de divisão de lote, ou
+    # UF com só 1 município/setor) quebrava com
+    # "AttributeError: 'str' object has no attribute 'get'" porque
+    # `dados.extend(dict)` iterava as chaves do dict como strings.
+    horas = ["2026-08-10T00:00", "2026-08-10T01:00"]
+    resposta_objeto = {
+        "latitude": -23.5, "longitude": -46.6,
+        "hourly": {"time": horas, "precipitation": [0.0, 1.2]},
+    }
+    responses.add(responses.POST, FORECAST_URL, json=resposta_objeto, status=200)
+
+    series = fetch_precipitacao_batch([(-23.5, -46.6)])
+
+    assert len(series) == 1
+    assert list(series[0]["chuva_mm"]) == [0.0, 1.2]
+
+
+@responses.activate
 def test_fetch_precipitacao_batch_retry_recupera_apos_falha_transitoria():
     responses.add(responses.POST, FORECAST_URL, status=500)
     resposta = _resposta(["2026-08-10T00:00"], [[3.0]])

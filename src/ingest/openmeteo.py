@@ -99,7 +99,12 @@ def _post_lote(
             f"(lote de {len(pontos)} pontos)"
         ) from last_exc
 
-    return resposta_ok.json()
+    payload = resposta_ok.json()
+    # A API devolve um objeto único (não uma lista) quando o lote tem só 1
+    # coordenada, diferente do array que devolve para lotes maiores; sem
+    # normalizar aqui, `_fetch_variavel_batch` (que sempre espera uma lista
+    # de objetos) quebra iterando as chaves do dict como se fossem itens.
+    return payload if isinstance(payload, list) else [payload]
 
 
 def _fetch_variavel_batch(
