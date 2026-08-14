@@ -13,8 +13,9 @@ from pathlib import Path
 
 import typer
 
-from src.config import DASHBOARD_DATA_DIR, DATA_DIR, caminho_setores
+from src.config import DASHBOARD_DATA_DIR, DATA_DIR, UFS_VALIDAS, caminho_setores
 from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
+from src.export.nacional import ORCAMENTO_ALVO_PADRAO, exportar_nacional
 from src.export.vento_data import exportar_vento
 from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
 from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
@@ -179,6 +180,46 @@ def atualizar(
         )
     else:
         typer.echo("Atualização concluída com sucesso.")
+
+
+@app.command("atualizar-nacional")
+def atualizar_nacional_cmd(
+    ufs: str = typer.Option(
+        ",".join(sorted(UFS_VALIDAS)), "--ufs",
+        help="Lista de UFs separada por vírgula, ex.: SP,RJ,MG. Padrão: todas as 27.",
+    ),
+    ano: int = typer.Option(
+        datetime.now(timezone.utc).year, "--ano", help="Ano dos dados do INMET (não usado pela fonte openmeteo)"
+    ),
+    orcamento_alvo: int = typer.Option(
+        ORCAMENTO_ALVO_PADRAO, "--orcamento-alvo",
+        help="Teto de chamadas à Open-Meteo por execução, para calibrar a grade espacial",
+    ),
+    diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
+    saida: Path = typer.Option(DASHBOARD_DATA_DIR, "--saida", help="Diretório de saída do dashboard"),
+) -> None:
+    """Ingere setores da CPRM (incremental) e exporta o dashboard para várias UFs de uma vez,
+    compartilhando 1 grade espacial nacional para caber no rate limit da Open-Meteo.
+
+    Não ingere INMET/ANA/vento (essas fontes continuam por UF, via `atualizar`);
+    esta é a via nacional só para setores + chuva Open-Meteo, ver
+    docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+    """
+    lista_ufs = [u.strip().upper() for u in ufs.split(",") if u.strip()]
+    falhas_cprm = []
+    for uf in lista_ufs:
+        try:
+            ingerir_cprm(uf, caminho_setores(uf, diretorio))
+        except (CPRMFetchError, ValueError) as exc:
+            typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc}", err=True)
+            falhas_cprm.append(uf)
+
+    resultados = exportar_nacional(lista_ufs, ano, diretorio, saida, orcamento_alvo=orcamento_alvo)
+    typer.echo(f"{len(resultados)}/{len(lista_ufs)} UF(s) exportada(s) para {saida}.")
+    if falhas_cprm:
+        typer.echo(f"Falha na ingestão CPRM: {', '.join(falhas_cprm)}", err=True)
+    if len(resultados) < len(lista_ufs):
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
