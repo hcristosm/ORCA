@@ -50,7 +50,9 @@ def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # SP município
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # RJ setores
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # RJ município
-        resultados = exportar_nacional(["SP", "RJ"], 2026, tmp_path, saida, orcamento_alvo=1000)
+        resultados = exportar_nacional(
+            ["SP", "RJ"], 2026, tmp_path, saida, orcamento_alvo=1000, pausa_entre_ufs=0
+        )
 
     assert set(resultados.keys()) == {"SP", "RJ"}
     assert (saida / "setores_sp.geojson").exists()
@@ -62,6 +64,15 @@ def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
     for meta in resultados.values():
         assert "tamanho_celula_grade_graus" in meta
         assert "total_celulas_grade" in meta
+
+    # O sinal de que houve UMA grade nacional compartilhada (e não 27 grades
+    # independentes, uma por UF) é que as duas UFs reportam exatamente o mesmo
+    # tamanho de célula e o mesmo total de células.
+    assert (
+        resultados["SP"]["tamanho_celula_grade_graus"]
+        == resultados["RJ"]["tamanho_celula_grade_graus"]
+    )
+    assert resultados["SP"]["total_celulas_grade"] == resultados["RJ"]["total_celulas_grade"]
 
 
 def test_exportar_nacional_pula_uf_sem_setores_ingeridos(tmp_path: Path):

@@ -14,8 +14,6 @@ UFS_VALIDAS = {
     "SP", "SE", "TO",
 }
 
-UFS_DISPONIVEIS = ["SP"]
-
 CAMADA_SETORES = "setores_risco"
 
 JANELAS_CHUVA = (24, 72)

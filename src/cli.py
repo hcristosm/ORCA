@@ -15,7 +15,11 @@ import typer
 
 from src.config import DASHBOARD_DATA_DIR, DATA_DIR, UFS_VALIDAS, caminho_setores
 from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
-from src.export.nacional import ORCAMENTO_ALVO_PADRAO, exportar_nacional
+from src.export.nacional import (
+    ORCAMENTO_ALVO_PADRAO,
+    PAUSA_ENTRE_UFS_PADRAO,
+    exportar_nacional,
+)
 from src.export.vento_data import exportar_vento
 from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
 from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
@@ -193,17 +197,30 @@ def atualizar_nacional_cmd(
     ),
     orcamento_alvo: int = typer.Option(
         ORCAMENTO_ALVO_PADRAO, "--orcamento-alvo",
-        help="Teto de chamadas à Open-Meteo por execução, para calibrar a grade espacial",
+        help=(
+            "Teto de pontos de grade distintos para os setores "
+            "(não inclui a série por município nem retries)"
+        ),
+    ),
+    pausa_entre_ufs: float = typer.Option(
+        PAUSA_ENTRE_UFS_PADRAO, "--pausa-entre-ufs",
+        help="Pausa em segundos entre a exportação de uma UF e a seguinte, para espalhar a rajada",
     ),
     diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
     saida: Path = typer.Option(DASHBOARD_DATA_DIR, "--saida", help="Diretório de saída do dashboard"),
 ) -> None:
-    """Ingere setores da CPRM (incremental) e exporta o dashboard para várias UFs de uma vez,
-    compartilhando 1 grade espacial nacional para caber no rate limit da Open-Meteo.
+    """Ingere setores da CPRM (incremental) e exporta o dashboard + camada de vento para
+    várias UFs de uma vez, compartilhando 1 grade espacial nacional para caber no rate
+    limit da Open-Meteo.
 
-    Não ingere INMET/ANA/vento (essas fontes continuam por UF, via `atualizar`);
-    esta é a via nacional só para setores + chuva Open-Meteo, ver
+    Não ingere INMET/ANA (essas fontes continuam por UF, via `atualizar`);
+    esta é a via nacional para setores + chuva Open-Meteo + vento, ver
     docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+
+    `--orcamento-alvo` calibra só os pontos de grade dos setores; a série por
+    município não entra nessa conta. `--pausa-entre-ufs` é uma mitigação
+    best-effort de rate limit: não modela precisamente os tetos de
+    hora/minuto da Open-Meteo, apenas espalha a rajada no tempo.
     """
     lista_ufs = [u.strip().upper() for u in ufs.split(",") if u.strip()]
     falhas_cprm = []
@@ -214,11 +231,33 @@ def atualizar_nacional_cmd(
             typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc}", err=True)
             falhas_cprm.append(uf)
 
-    resultados = exportar_nacional(lista_ufs, ano, diretorio, saida, orcamento_alvo=orcamento_alvo)
+    try:
+        resultados = exportar_nacional(
+            lista_ufs, ano, diretorio, saida,
+            orcamento_alvo=orcamento_alvo, pausa_entre_ufs=pausa_entre_ufs,
+        )
+    except ValueError as exc:
+        typer.echo(f"FALHA na exportação nacional: {exc}", err=True)
+        raise typer.Exit(code=1)
+
     typer.echo(f"{len(resultados)}/{len(lista_ufs)} UF(s) exportada(s) para {saida}.")
+
+    falhas_vento = []
+    for uf in resultados:
+        try:
+            exportar_vento(uf, ano, diretorio, saida)
+        except (ExportacaoDashboardError, ValueError) as exc:
+            typer.echo(f"  FALHA na exportação de vento ({uf}): {exc}", err=True)
+            falhas_vento.append(uf)
+    if falhas_vento:
+        typer.echo(f"Falha na exportação de vento: {', '.join(falhas_vento)}", err=True)
+
     if falhas_cprm:
         typer.echo(f"Falha na ingestão CPRM: {', '.join(falhas_cprm)}", err=True)
-    if len(resultados) < len(lista_ufs):
+    ufs_com_falha = [uf for uf in lista_ufs if uf not in resultados]
+    if ufs_com_falha:
+        typer.echo(f"Falha na exportação do dashboard: {', '.join(ufs_com_falha)}", err=True)
+    if not resultados:
         raise typer.Exit(code=1)
 
 

@@ -313,6 +313,72 @@ def test_calcular_chuva_openmeteo_deduplica_pontos_repetidos(tmp_path: Path, set
     assert resultado.iloc[1]["chuva_24h"] == pytest.approx(24.0)
 
 
+def test_calcular_chuva_openmeteo_grade_reporta_distancia_real_ate_a_celula(
+    tmp_path: Path, setores
+):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+
+    agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
+    horas = pd.date_range("2026-08-08 00:00", periods=61, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+    # Os dois setores caem na mesma célula de grade, ancorada no centroide do
+    # PRIMEIRO setor: o segundo setor (centroide em -24.00, -47.00) fica a
+    # ~0,5° de latitude + ~0,4° de longitude de distância, ou seja, dezenas de
+    # km -- não 0,0 como o código antigo reportava.
+    pontos_grade = [(-23.50, -46.60), (-23.50, -46.60)]
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(
+            responses.POST, FORECAST_URL,
+            json=[{
+                "latitude": -23.5, "longitude": -46.6,
+                "hourly": {"time": horas_iso, "precipitation": [1.0] * 61},
+            }],
+            status=200,
+        )
+        resultado, _ = _calcular_chuva_openmeteo(
+            setores, janelas=(24, 72), agora=agora, pontos=pontos_grade
+        )
+
+    assert set(resultado["nome_estacao"]) == {"Open-Meteo (célula de grade)"}
+    # setor 1: o ponto de grade É o seu próprio centroide
+    assert resultado.iloc[0]["distancia_km"] == pytest.approx(0.0, abs=0.05)
+    # setor 2: distância real, ordem de ~69 km (0,5° lat + 0,4° lon nessa latitude)
+    assert 60.0 < resultado.iloc[1]["distancia_km"] < 80.0
+    # arredondado a 2 casas, como o resto do módulo
+    assert resultado.iloc[1]["distancia_km"] == round(resultado.iloc[1]["distancia_km"], 2)
+
+
+def test_calcular_chuva_openmeteo_sem_pontos_mantem_centro_do_setor(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+
+    agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
+    horas = pd.date_range("2026-08-08 00:00", periods=61, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(
+            responses.POST, FORECAST_URL,
+            json=[
+                {"latitude": -23.5, "longitude": -46.6,
+                 "hourly": {"time": horas_iso, "precipitation": [1.0] * 61}}
+                for _ in range(2)
+            ],
+            status=200,
+        )
+        resultado, _ = _calcular_chuva_openmeteo(setores, janelas=(24, 72), agora=agora)
+
+    assert set(resultado["nome_estacao"]) == {"Open-Meteo (centro do setor)"}
+    assert set(resultado["distancia_km"]) == {0.0}
+
+
+def test_calcular_chuva_openmeteo_pontos_de_tamanho_diferente_levanta_erro(setores):
+    with pytest.raises(ValueError, match="mesmo tamanho"):
+        _calcular_chuva_openmeteo(setores, pontos=[(-23.5, -46.6)])
+
+
 def test_exportar_dashboard_pontos_grade_com_fonte_inmet_levanta_erro(tmp_path: Path, setores):
     salvar_setores(setores, caminho_setores("SP", tmp_path))
     with pytest.raises(ValueError):

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 
 from src.config import caminho_setores
@@ -34,7 +35,16 @@ from src.storage import ler_setores
 
 logger = logging.getLogger(__name__)
 
-ORCAMENTO_ALVO_PADRAO = 8000
+# O orçamento cobre só os pontos de grade distintos dos setores. A série por
+# município (`_series_openmeteo_por_municipio`, um ponto por município com
+# setor de risco) e eventuais retries ficam FORA dessa conta. 6000 é uma
+# reserva conservadora, não um cálculo preciso: deixa ~4000 de folga no teto
+# de 10.000 chamadas/dia da Open-Meteo para essas duas parcelas não
+# contabilizadas. Ver
+# docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+ORCAMENTO_ALVO_PADRAO = 6000
+
+PAUSA_ENTRE_UFS_PADRAO = 5.0
 
 
 def exportar_nacional(
@@ -43,6 +53,7 @@ def exportar_nacional(
     diretorio_dados: Path,
     saida_dir: Path,
     orcamento_alvo: int = ORCAMENTO_ALVO_PADRAO,
+    pausa_entre_ufs: float = PAUSA_ENTRE_UFS_PADRAO,
 ) -> dict[str, dict]:
     """Exporta o dashboard (fonte Open-Meteo) para várias UFs, com 1 grade nacional.
 
@@ -52,6 +63,19 @@ def exportar_nacional(
     para aquele lote). Grava `ufs_disponiveis.json` em `saida_dir` com as
     UFs exportadas com sucesso (ordem alfabética), para o front-end popular
     o seletor. Retorna `{uf: meta}` só das UFs exportadas com sucesso.
+
+    `orcamento_alvo` calibra APENAS a quantidade de pontos de grade distintos
+    usados para os setores. A série por município
+    (`_series_openmeteo_por_municipio`, buscada por UF dentro de
+    `exportar_dashboard`) NÃO é coberta por esse orçamento e soma centenas a
+    milhares de consultas extras no total nacional; o padrão conservador de
+    `ORCAMENTO_ALVO_PADRAO` existe justamente para deixar folga para ela.
+
+    `pausa_entre_ufs` é uma pausa (em segundos) entre a exportação de uma UF
+    e a seguinte. É uma mitigação best-effort: não modela precisamente os
+    tetos de hora/minuto da Open-Meteo (5.000/hora, 600/minuto), apenas
+    espalha a rajada de requisições no tempo; ver
+    docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
     """
     setores_por_uf = {}
     for uf in ufs:
@@ -76,13 +100,15 @@ def exportar_nacional(
     total_celulas = len(set(pontos_grade))
 
     resultados: dict[str, dict] = {}
-    for uf, (inicio, fim) in fatias.items():
+    for posicao, (uf, (inicio, fim)) in enumerate(fatias.items()):
+        if posicao > 0 and pausa_entre_ufs > 0:
+            time.sleep(pausa_entre_ufs)
         try:
             meta = exportar_dashboard(
                 uf, ano, diretorio_dados, saida_dir,
                 fonte="openmeteo", pontos_grade=pontos_grade[inicio:fim],
             )
-        except ExportacaoDashboardError as exc:
+        except (ExportacaoDashboardError, OSError, ValueError) as exc:
             logger.warning("Falha ao exportar %s: %s", uf, exc)
             continue
         meta["tamanho_celula_grade_graus"] = tamanho_celula

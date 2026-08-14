@@ -17,10 +17,17 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+from shapely.geometry import Point
 
 from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_precipitacao_batch
-from src.processing.cruzamento import calcular_cruzamento, centroides_4326, centroides_municipio, chuva_acumulada
+from src.processing.cruzamento import (
+    CRS_METRICO,
+    calcular_cruzamento,
+    centroides_4326,
+    centroides_municipio,
+    chuva_acumulada,
+)
 from src.processing.previsao import (
     DIAS_PREVISAO_ALERTA,
     HORIZONTE_PREVISAO_HORAS,
@@ -84,6 +91,23 @@ def _recortar_series(chuva_df: pd.DataFrame, referencia: pd.Timestamp) -> dict:
     return series
 
 
+def _distancias_km(
+    centroides: gpd.GeoSeries, pontos: list[tuple[float, float]]
+) -> list[float]:
+    """Distância (km) entre cada centroide de setor e o ponto `(lat, lon)` consultado.
+
+    Correspondência posicional (mesmo tamanho nas duas listas). Reprojeta os
+    dois lados para `CRS_METRICO` e divide por 1000, mesma convenção de
+    `src.processing.cruzamento.encontrar_estacao_mais_proxima`.
+    """
+    consultados = gpd.GeoSeries(
+        [Point(lon, lat) for lat, lon in pontos], crs="EPSG:4326"
+    ).to_crs(CRS_METRICO)
+    origem = centroides.to_crs(CRS_METRICO)
+    distancias_m = origem.reset_index(drop=True).distance(consultados.reset_index(drop=True))
+    return [round(float(d) / 1000, 2) for d in distancias_m]
+
+
 def _calcular_chuva_openmeteo(
     setores: gpd.GeoDataFrame,
     janelas: tuple[int, ...] = (24, 72),
@@ -102,9 +126,14 @@ def _calcular_chuva_openmeteo(
     reaproveitada por todos os setores que compartilham o ponto, o que é o
     mecanismo real de economia de chamadas da grade.
 
-    Sem estação: `distancia_km` é sempre 0.0; `codigo_estacao`/`nome_estacao`
-    identificam a fonte, não uma estação real. `agora` é parametrizável para
-    tornar testes determinísticos, em produção usa o instante atual.
+    Sem estação: `codigo_estacao`/`nome_estacao` identificam a fonte, não uma
+    estação real. Sem `pontos` (consulta no próprio centroide do setor),
+    `distancia_km` é 0.0 por construção. Com `pontos` (modo grade), o ponto
+    consultado pode estar a quilômetros do centroide real do setor, então
+    `distancia_km` traz a distância real centroide-do-setor → ponto de grade
+    e `nome_estacao` deixa claro que a leitura veio de uma célula de grade.
+    `agora` é parametrizável para tornar testes determinísticos, em produção
+    usa o instante atual.
 
     Retorna `(resultado, previsao)`: `resultado` é o GeoDataFrame de sempre
     (chuva observada em `janelas`); `previsao` é
@@ -114,7 +143,15 @@ def _calcular_chuva_openmeteo(
     """
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
 
-    pontos = pontos if pontos is not None else [(pt.y, pt.x) for pt in centroides_4326(setores)]
+    modo_grade = pontos is not None
+    centroides = centroides_4326(setores)
+    pontos = pontos if modo_grade else [(pt.y, pt.x) for pt in centroides]
+
+    if len(pontos) != len(setores):
+        raise ValueError(
+            f"pontos tem {len(pontos)} itens, mas setores tem {len(setores)}; "
+            "devem ter o mesmo tamanho."
+        )
 
     pontos_unicos = list(dict.fromkeys(pontos))
     indice_por_ponto = {ponto: i for i, ponto in enumerate(pontos_unicos)}
@@ -128,9 +165,13 @@ def _calcular_chuva_openmeteo(
     referencia = validas["data_hora"].max() if not validas.empty else agora
 
     resultado = setores.copy()
-    resultado["distancia_km"] = 0.0
+    if modo_grade:
+        resultado["distancia_km"] = _distancias_km(centroides, pontos)
+        resultado["nome_estacao"] = "Open-Meteo (célula de grade)"
+    else:
+        resultado["distancia_km"] = 0.0
+        resultado["nome_estacao"] = "Open-Meteo (centro do setor)"
     resultado["codigo_estacao"] = "openmeteo"
-    resultado["nome_estacao"] = "Open-Meteo (centro do setor)"
     resultado["fonte_estacao"] = "openmeteo"
 
     for horas in janelas:
