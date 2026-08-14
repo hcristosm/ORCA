@@ -61,6 +61,7 @@ publicado no GitHub Pages e atualizado todo dia pelo cron (ver
   - [2. Baixar a chuva (INMET)](#2-baixar-a-chuva-inmet)
   - [3. Abrir o dashboard](#3-abrir-o-dashboard)
   - [4. Atualização automática](#4-atualização-automática)
+  - [5. Cobertura nacional (27 UFs)](#5-cobertura-nacional-27-ufs)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Testes e CI](#testes-e-ci)
 - [Decisões e investigações](#decisões-e-investigações)
@@ -88,7 +89,7 @@ respondem parcialmente, mas a camada de setorização de risco hoje mora em
 
 ```mermaid
 flowchart LR
-    CPRM[("CPRM/SGB<br/>ArcGIS REST")] --> ING1["src/ingest/cprm.py"]
+    CPRM[("CPRM/SGB<br/>ArcGIS REST")] --> ING1["src/ingest/cprm.py<br/>incremental por objectid/data_setor"]
     INMET[("INMET<br/>ZIP anual")] --> ING2["src/ingest/inmet.py"]
     ANA[("ANA<br/>rede telemétrica")] --> ING3["src/ingest/ana.py"]
     OM[("Open-Meteo<br/>por coordenada")] --> ING4["src/ingest/openmeteo.py"]
@@ -96,16 +97,21 @@ flowchart LR
     ING2 --> STORE
     ING3 --> STORE
     STORE --> PROC["src/processing/cruzamento.py<br/>estação mais próxima (INMET+ANA) + chuva 24h/72h"]
+    STORE --> GRADE["src/processing/grade_espacial.py<br/>grade nacional calibrada por orçamento"]
+    GRADE --> NAC["src/export/nacional.py<br/>1 grade compartilhada, várias UFs"]
     PROC --> PREV["src/processing/previsao.py<br/>trajetória de alerta previsto (72h)"]
     PROC --> EXPORT["src/export/dashboard_data.py<br/>fonte openmeteo (padrão) ou inmet"]
+    NAC --> EXPORT
     PREV --> EXPORT
     ING4 --> EXPORT
-    EXPORT --> DASH["docs/dashboard/<br/>HTML/JS estático (Leaflet + Chart.js)"]
+    EXPORT --> DASH["docs/dashboard/<br/>HTML/JS estático (Leaflet + Chart.js), seletor de UF"]
 ```
 
-`src/cli.py` expõe os comandos de ingestão e exportação (`ingest-cprm`,
-`ingest-inmet`, `ingest-ana`, `exportar-dashboard`, `atualizar`) usados
-manualmente ou pelo cron diário
+`src/cli.py` expõe os comandos de ingestão e exportação por UF (`ingest-cprm`,
+`ingest-inmet`, `ingest-ana`, `exportar-dashboard`, `atualizar`) e o comando
+nacional (`atualizar-nacional`, ver
+[Cobertura nacional](#5-cobertura-nacional-27-ufs)), usados manualmente ou
+pelo cron diário
 ([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml)), que também
 comita os dados exportados de volta no repositório para o GitHub Pages
 publicar. `tests/` cobre cada módulo com HTTP mockado, sem depender de rede.
@@ -205,7 +211,10 @@ de série temporal, por município com a fonte Open-Meteo, por estação
 (INMET/ANA) com `--fonte inmet`. Um selo no topo mostra a data de geração dos
 dados, a referência da chuva e qual fonte foi usada.
 
-Sem seletor de UF/Ano por enquanto: os dados de hoje cobrem só SP.
+Um seletor de UF no topo troca entre as UFs com dados exportados (lidas de
+`data/ufs_disponiveis.json`, gerado pela exportação nacional, ver
+[Cobertura nacional](#5-cobertura-nacional-27-ufs)); sem esse manifesto, o
+dashboard cai de volta para mostrar só SP.
 
 O mapa também traz uma camada de **rajada de vento**, desligada por padrão;
 liga pelo controle de camadas no canto superior direito ("Rajada de vento").
@@ -245,6 +254,35 @@ grava `data/ultima_atualizacao.txt`. É o mesmo script que
 artefato do GitHub Actions **e** comita `docs/dashboard/data/*` de volta no
 repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
 
+### 5. Cobertura nacional (27 UFs)
+
+```bash
+python -m src.cli atualizar-nacional --ufs SP,RJ,MG --ano 2026
+# --ufs vazio/omitido = todas as 27 UFs (padrão)
+```
+
+Ingere os setores da CPRM de cada UF pedida (incrementalmente, só o que
+mudou desde a última sincronização, ver
+[Decisões e investigações](#decisões-e-investigações)) e exporta o
+dashboard (fonte Open-Meteo) para todas de uma vez, calculando **uma única
+grade espacial nacional** antes de exportar UF por UF: setores próximos
+(inclusive entre UFs vizinhas) compartilham o mesmo ponto de consulta à
+Open-Meteo, mantendo o total de pontos distintos dentro de
+`--orcamento-alvo` (padrão 6.000, teto do plano gratuito é 10.000/dia) em
+vez de estourar o rate limit ao consultar um ponto por setor em escala
+nacional. `--pausa-entre-ufs` (padrão 5s) espalha as chamadas entre UFs;
+isso é uma mitigação best-effort para os tetos de hora/minuto da Open-Meteo,
+não um agendador preciso. Gera `data/ufs_disponiveis.json`, que o dashboard
+usa para popular o seletor de UF.
+
+Ingestão de INMET/ANA e a camada de vento continuam por UF (`ingest-inmet`,
+`ingest-ana`, `exportar-vento`, ou o comando `atualizar` de sempre) —
+`atualizar-nacional` só ingere CPRM e exporta pela fonte Open-Meteo (que não
+depende de estação), mas exporta a camada de vento por UF depois do export
+nacional. O cron diário ([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml))
+roda `atualizar-nacional` para todas as UFs; uma UF falhando (CPRM fora do
+ar, Open-Meteo com 429) não derruba a publicação das demais.
+
 ## Limitações conhecidas
 
 - **A chuva do INMET tem alguns dias de defasagem.** O pacote histórico anual
@@ -275,9 +313,25 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
   projeção futura de vento no momento. Consumir os avisos oficiais do INMET
   diretamente (em vez de derivar severidade da Open-Meteo) é uma evolução
   possível, fora do escopo desta fase.
-- **Cobertura nacional é parcial por design.** O MVP cobre SP; a arquitetura
-  já generaliza para qualquer UF (ambos os clientes aceitam `--uf`), mas
-  cobrir o Brasil inteiro de uma vez não fazia parte do escopo desta fase.
+- **A camada de vento ainda não tem orçamento reservado na exportação
+  nacional.** `atualizar-nacional` exporta vento por UF depois do export
+  principal (ver [Cobertura nacional](#5-cobertura-nacional-27-ufs)), mas
+  essa chamada consulta todos os municípios do IBGE de cada UF (não só os
+  que têm setor de risco), sem passar pela grade nem pela pausa entre UFs —
+  em dias de pico isso pode consumir mais do teto diário da Open-Meteo do
+  que o previsto por `--orcamento-alvo`. Falha de forma graciosa (a UF
+  daquele dia fica sem camada de vento atualizada, o resto do dashboard não
+  é afetado), mas é um ponto conhecido a corrigir (reservar orçamento e
+  aplicar `--pausa-entre-ufs` também nessa chamada).
+- **INMET/ANA continuam por UF mesmo na cobertura nacional.**
+  `atualizar-nacional` só ingere CPRM e exporta pela fonte Open-Meteo, que
+  não depende de estação; `--fonte inmet` nacionalmente exigiria rodar
+  `ingest-inmet`/`ingest-ana` fonte por fonte, UF por UF (via `atualizar`),
+  não é automatizado pelo cron nacional.
+- **O cron nacional comita os dados de até 27 UFs no repositório todo dia.**
+  Ainda não há estratégia de compactação/poda (gzip, Git LFS, branch órfã
+  com force-push, ou publicar só como artefato) para o crescimento do
+  histórico do repositório; por enquanto ele cresce sem limite.
 - **Sem autenticação/multiusuário.** É uma ferramenta local de portfólio, não
   um serviço multiusuário.
 - **O dashboard estático não atualiza sob demanda.** Diferente do antigo botão
@@ -304,8 +358,13 @@ repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
 pytest
 ```
 
-73 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
-retry com backoff e fallback para cache local; parsing do CSV do INMET,
+122 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
+ingestão incremental por marcador d'água (`objectid`/`data_setor`) e fusão
+com o GeoPackage local, retry com backoff e fallback para cache local;
+calibração da grade espacial nacional por busca binária e o compartilhamento
+de ponto de consulta entre setores próximos; a orquestração de exportação
+multi-UF (`src/export/nacional.py`) com grade compartilhada e manifesto de
+UFs disponíveis; parsing do CSV do INMET,
 leitura de estação dentro do ZIP anual, GET condicional do ZIP (ETag/304) e
 a ingestão incremental por CRC32 (estação sem mudança pulada, estação
 mudada mesclada, retificação dentro da janela de 7 dias; a fusão em si,
@@ -370,6 +429,21 @@ da exportação (`--fonte openmeteo`); o cruzamento por estação (INMET/ANA)
 continua disponível via `--fonte inmet`. →
 [detalhes completos](docs/investigacoes.md#open-meteo-como-fonte-padrão-do-dashboard)
 
+**Cobertura nacional (27 UFs).** Escalar de SP para o Brasil inteiro
+esbarrava em dois limites reais: rebaixar a camada inteira da CPRM a cada
+sincronização é desnecessário (setores mudam pouco) e consultar 1 ponto por
+setor na Open-Meteo em escala nacional estoura o teto gratuito de
+10.000 chamadas/dia (confirmado em
+[open-meteo.com/en/pricing](https://open-meteo.com/en/pricing)). A solução:
+ingestão incremental da CPRM por marcador d'água (`objectid`/`data_setor`,
+já que a API não expõe campo de edição nem Sync) e uma grade espacial
+calibrada por busca binária que agrupa setores próximos num único ponto de
+consulta, em vez de limiares de densidade escolhidos à mão. Detalhes
+completos e as decisões tomadas durante a implementação (inclusive um
+achado tardio: a exportação da camada de vento não estava coberta pelo
+orçamento, ver [Limitações conhecidas](#limitações-conhecidas)) estão em
+[`docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md`](docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md).
+
 ## Roadmap
 
 - ~~Levantar quais estações da rede telemétrica da ANA têm dado vivo de chuva
@@ -377,10 +451,20 @@ continua disponível via `--fonte inmet`. →
   08/08/2026, integração (`src/ingest/ana.py` + cruzamento combinado)
   implementada em 09/08/2026 (ver
   [Decisões e investigações](#decisões-e-investigações)).
+- ~~Cobrir mais UFs além de SP (inclui trazer de volta um seletor de UF no
+  dashboard estático, hoje fixo em SP)~~: implementado em 14/08/2026 —
+  ingestão incremental da CPRM, grade espacial nacional compartilhada,
+  comando `atualizar-nacional` e seletor de UF no dashboard (ver
+  [Cobertura nacional](#5-cobertura-nacional-27-ufs)).
+- Reservar orçamento (e aplicar `--pausa-entre-ufs`) para a exportação da
+  camada de vento em `atualizar-nacional`, hoje fora do teto de chamadas à
+  Open-Meteo (ver [Limitações conhecidas](#limitações-conhecidas)).
+- Estratégia de compactação/poda para o crescimento do repositório com os
+  dados de até 27 UFs comitados diariamente pelo cron nacional.
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
-  reescrever o pipeline de ingestão.
-- Cobrir mais UFs além de SP (inclui trazer de volta um seletor de UF no
-  dashboard estático, hoje fixo em SP).
+  reescrever o pipeline de ingestão. Investigado em 14/08/2026 para
+  Itaquaquecetuba/SP: sem endpoint público confirmado, pendente de um
+  município piloto com dado aberto.
 
 ## Contribuindo
 
