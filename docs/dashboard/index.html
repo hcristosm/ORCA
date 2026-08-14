@@ -177,6 +177,13 @@
       malhaMunicipiosUf = null;
       codareaPorNome = null;
       codareaPorNomeUf = null;
+      // Zera também as promessas em andamento: se um fetch da UF anterior ainda não
+      // terminou, isso libera garantirMalhaMunicipios()/garantirNomesMunicipios() para
+      // disparar um novo fetch já para a UF atual em vez de aguardar o antigo (que,
+      // mesmo assim, não conseguirá gravar em cache sob a UF errada -- ver guarda de
+      // "ufAlvo === UF" dentro dessas funções).
+      promessaMalha = null;
+      promessaNomes = null;
       carregarDados();
     });
   }
@@ -332,21 +339,34 @@
     if (!promessaMalha) {
       // Evita disparar fetches duplicados se dois gatilhos (load inicial + toggle do
       // vento) chamarem isso antes do primeiro terminar.
-      promessaMalha = (async () => {
+      // Captura a UF alvo no início do fetch: se a UF mudar antes deste resolver (o
+      // usuário trocou de seletor), o resultado não pode ser gravado sob a UF nova.
+      const ufAlvo = UF;
+      const minhaPromessa = (async () => {
         try {
           const resp = await fetchComTimeout(malhaMunicipiosUrl());
           if (resp.ok) {
-            malhaMunicipios = await resp.json();
-            malhaMunicipiosUf = UF;
+            const dados = await resp.json();
+            if (ufAlvo === UF) {
+              malhaMunicipios = dados;
+              malhaMunicipiosUf = ufAlvo;
+            }
+            // Se a UF já mudou, descarta: outro fetch (para a UF atual) é quem deve
+            // preencher o cache.
           } else {
             console.warn("Falha ao buscar a malha municipal do IBGE: HTTP " + resp.status);
           }
         } catch (e) {
           console.warn("Falha ao buscar a malha municipal do IBGE", e);
         } finally {
-          promessaMalha = null;
+          // Só limpa a promessa em andamento se ela ainda for esta: uma troca de UF
+          // pode já ter zerado promessaMalha e iniciado um fetch mais novo enquanto
+          // este ainda estava pendente -- nesse caso não podemos apagar a referência
+          // do fetch mais novo.
+          if (promessaMalha === minhaPromessa) promessaMalha = null;
         }
       })();
+      promessaMalha = minhaPromessa;
     }
     await promessaMalha;
     return malhaMunicipios;
@@ -360,24 +380,30 @@
   async function garantirNomesMunicipios() {
     if (codareaPorNome && codareaPorNomeUf === UF) return codareaPorNome;
     if (!promessaNomes) {
-      promessaNomes = (async () => {
+      // Mesma lógica de captura/descarte de garantirMalhaMunicipios(), aplicada aqui
+      // para o índice de nomes de município.
+      const ufAlvo = UF;
+      const minhaPromessa = (async () => {
         try {
           const resp = await fetchComTimeout(nomesMunicipiosUrl());
           if (resp.ok) {
             const lista = await resp.json();
             const indice = new Map();
             for (const m of lista) indice.set(normalizarNome(m.nome), String(m.id));
-            codareaPorNome = indice;
-            codareaPorNomeUf = UF;
+            if (ufAlvo === UF) {
+              codareaPorNome = indice;
+              codareaPorNomeUf = ufAlvo;
+            }
           } else {
             console.warn("Falha ao buscar os nomes de município do IBGE: HTTP " + resp.status);
           }
         } catch (e) {
           console.warn("Falha ao buscar os nomes de município do IBGE", e);
         } finally {
-          promessaNomes = null;
+          if (promessaNomes === minhaPromessa) promessaNomes = null;
         }
       })();
+      promessaNomes = minhaPromessa;
     }
     await promessaNomes;
     return codareaPorNome;
