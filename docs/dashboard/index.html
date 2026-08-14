@@ -24,6 +24,11 @@
     <svg class="icone icone-lua"><use href="icons/sprite.svg#icon-moon"></use></svg>
   </button>
 
+  <div class="campo campo-uf">
+    <label for="ufSelect">UF</label>
+    <select id="ufSelect"></select>
+  </div>
+
   <div class="campo campo-busca-municipio">
     <label for="buscaMunicipio">Município</label>
     <div class="busca-municipio">
@@ -142,7 +147,33 @@
 (function () {
   "use strict";
 
-  const UF = "sp";
+  let UF = "sp";
+  let ufsDisponiveis = ["sp"];
+
+  async function carregarUfsDisponiveis() {
+    try {
+      const resp = await fetch("data/ufs_disponiveis.json");
+      if (resp.ok) {
+        const lista = await resp.json();
+        if (Array.isArray(lista) && lista.length > 0) {
+          ufsDisponiveis = lista.map((uf) => uf.toLowerCase());
+        }
+      }
+    } catch (e) {
+      // manifesto ainda não existe (deploy antigo/dev local só com SP) -- mantém o padrão.
+    }
+    if (!ufsDisponiveis.includes(UF)) UF = ufsDisponiveis[0];
+
+    const select = document.getElementById("ufSelect");
+    select.innerHTML = ufsDisponiveis
+      .map((uf) => `<option value="${uf}">${uf.toUpperCase()}</option>`)
+      .join("");
+    select.value = UF;
+    select.addEventListener("change", () => {
+      UF = select.value;
+      carregarDados();
+    });
+  }
 
   function token(nome) {
     return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
@@ -870,7 +901,7 @@
   aplicarTema(temaAtual());
   document.getElementById("botaoTema").addEventListener("click", alternarTema);
 
-  carregarDados();
+  carregarUfsDisponiveis().then(carregarDados);
 })();
 </script>
 </body>
