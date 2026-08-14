@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ORCA: Dashboard</title>
 <meta name="description" content="Setores de risco geológico (CPRM/SGB) cruzados com chuva recente (INMET/ANA).">
+<!-- 'unsafe-inline' em script-src/style-src é necessário porque o dashboard
+     usa <script>/style="" inline (site estático sem build step, sem
+     nonce/hash); a CSP ainda restringe de onde scripts/estilos/conexões
+     externas podem vir. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
+  style-src 'self' 'unsafe-inline' https://unpkg.com;
+  img-src 'self' data: https://*.basemaps.cartocdn.com;
+  font-src 'self';
+  connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com;
+  object-src 'none';
+  base-uri 'self';
+  frame-ancestors 'none';
+">
 
 <link rel="stylesheet" href="style.css">
 
