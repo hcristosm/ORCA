@@ -10,14 +10,16 @@ esta camada.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import requests
 
-from src.config import validar_uf as _validar_uf
+from src.config import caminho_manifesto_cprm, validar_uf as _validar_uf
 from src.storage import ler_setores, salvar_setores
 
 logger = logging.getLogger(__name__)
@@ -35,7 +37,7 @@ class CPRMFetchError(RuntimeError):
 
 
 def _query_pagina(
-    uf: str,
+    where: str,
     offset: int,
     session: requests.Session,
     timeout: float,
@@ -43,7 +45,7 @@ def _query_pagina(
     backoff_factor: float,
 ) -> dict:
     params = {
-        "where": f"uf='{uf}'",
+        "where": where,
         "outFields": "*",
         "outSR": "4326",
         "f": "geojson",
@@ -82,19 +84,27 @@ def fetch_setores_risco(
     max_retries: int = 3,
     backoff_factor: float = 1.0,
     session: requests.Session | None = None,
+    where_extra: str | None = None,
 ) -> gpd.GeoDataFrame:
     """Baixa os setores de risco geológico de uma UF via ArcGIS REST (GeoJSON).
 
     Pagina automaticamente usando resultOffset/resultRecordCount até esgotar
     os registros, seguindo exceededTransferLimit da resposta.
+
+    `where_extra`, se informado, é combinado com `AND` ao filtro de UF (usado
+    pela ingestão incremental para pedir só `objectid`/`data_setor` acima do
+    marcador d'água salvo, ver `ingerir_uf`).
     """
     uf_norm = _validar_uf(uf)
+    where = f"uf='{uf_norm}'"
+    if where_extra:
+        where = f"{where} AND ({where_extra})"
     sess = session or requests.Session()
 
     features: list[dict] = []
     offset = 0
     while True:
-        payload = _query_pagina(uf_norm, offset, sess, timeout, max_retries, backoff_factor)
+        payload = _query_pagina(where, offset, sess, timeout, max_retries, backoff_factor)
         pagina_features = payload.get("features", [])
         features.extend(pagina_features)
 
@@ -104,30 +114,110 @@ def fetch_setores_risco(
         offset += len(pagina_features)
 
     if not features:
-        logger.warning("Nenhum setor de risco encontrado para UF=%s", uf_norm)
+        logger.warning("Nenhum setor de risco encontrado para UF=%s (where_extra=%r)", uf_norm, where_extra)
 
     gdf = gpd.GeoDataFrame.from_features(features, crs="EPSG:4326")
     return gdf
 
 
+def _carregar_manifesto(caminho: Path) -> dict:
+    if not caminho.exists():
+        return {"last_objectid": None, "last_data_setor": None}
+    try:
+        return json.loads(caminho.read_text())
+    except json.JSONDecodeError:
+        logger.warning("Manifesto de marcador d'água corrompido em %s; tratando como inexistente.", caminho)
+        return {"last_objectid": None, "last_data_setor": None}
+
+
+def _salvar_manifesto(caminho: Path, manifesto: dict) -> None:
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    caminho.write_text(json.dumps(manifesto, indent=2, ensure_ascii=False))
+
+
+def _where_incremental(manifesto: dict) -> str | None:
+    """Monta o filtro incremental a partir do marcador d'água salvo.
+
+    Retorna `None` quando não há marcador (primeira ingestão da UF): nesse
+    caso `fetch_setores_risco` busca a UF inteira, como hoje.
+    """
+    condicoes = []
+    if manifesto.get("last_objectid") is not None:
+        condicoes.append(f"objectid > {manifesto['last_objectid']}")
+    if manifesto.get("last_data_setor"):
+        condicoes.append(f"data_setor > TIMESTAMP '{manifesto['last_data_setor']} 00:00:00'")
+    if not condicoes:
+        return None
+    return " OR ".join(condicoes)
+
+
+def _mesclar_setores(existente: gpd.GeoDataFrame | None, novos: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Funde os setores recém-buscados com os já salvos, por `objectid`.
+
+    Registros com o mesmo `objectid` são substituídos pela versão nova
+    (edição/resurvey); os demais registros existentes são preservados.
+    """
+    if existente is None or existente.empty:
+        return novos
+    if novos.empty:
+        return existente
+
+    combinado = pd.concat([existente, novos], ignore_index=True)
+    combinado = combinado.drop_duplicates(subset="objectid", keep="last")
+    return gpd.GeoDataFrame(combinado, geometry="geometry", crs=existente.crs)
+
+
+def _atualizar_marcador_dagua(manifesto: dict, setores: gpd.GeoDataFrame) -> dict:
+    if setores.empty or "objectid" not in setores.columns:
+        return manifesto
+    novo = dict(manifesto)
+    novo["last_objectid"] = int(setores["objectid"].max())
+    if "data_setor" in setores.columns:
+        datas = pd.to_datetime(setores["data_setor"], errors="coerce")
+        if datas.notna().any():
+            novo["last_data_setor"] = datas.max().strftime("%Y-%m-%d")
+    return novo
+
+
 def ingerir_uf(
     uf: str,
     output: Path,
+    manifesto_path: Path | None = None,
     timeout: float = 30.0,
     max_retries: int = 3,
     backoff_factor: float = 1.0,
 ) -> gpd.GeoDataFrame:
-    """Busca os setores de risco de uma UF e salva em GeoPackage.
+    """Busca (incrementalmente) os setores de risco de uma UF e salva em GeoPackage.
 
-    Se a busca remota falhar e já existir um GeoPackage em cache local (`output`),
-    usa o cache e avisa, em vez de quebrar a ingestão inteira.
+    A partir da segunda execução, consulta só `objectid`/`data_setor` acima
+    do marcador d'água salvo em `manifesto_path` (padrão:
+    `caminho_manifesto_cprm(uf, output.parent)`), mescla com o GeoPackage
+    existente e atualiza o marcador. Uma edição de atributo que não altera
+    `data_setor` não é capturada por este filtro — ver
+    docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+
+    Se a busca remota falhar e já existir um GeoPackage em cache local
+    (`output`), usa o cache e avisa, em vez de quebrar a ingestão inteira.
     """
+    uf_norm = _validar_uf(uf)
+    caminho_manifesto = manifesto_path or caminho_manifesto_cprm(uf_norm, output.parent)
+    manifesto = _carregar_manifesto(caminho_manifesto)
+    where_extra = _where_incremental(manifesto)
+
+    existente = ler_setores(output) if output.exists() else None
+
     try:
-        gdf = fetch_setores_risco(
-            uf, timeout=timeout, max_retries=max_retries, backoff_factor=backoff_factor
+        novos = fetch_setores_risco(
+            uf, timeout=timeout, max_retries=max_retries,
+            backoff_factor=backoff_factor, where_extra=where_extra,
         )
+        gdf = _mesclar_setores(existente, novos)
         salvar_setores(gdf, output)
-        logger.info("Salvos %d setores de risco de %s em %s", len(gdf), uf, output)
+        _salvar_manifesto(caminho_manifesto, _atualizar_marcador_dagua(manifesto, novos))
+        logger.info(
+            "Salvos %d setores de risco de %s em %s (%d novos/atualizados)",
+            len(gdf), uf, output, len(novos),
+        )
         return gdf
     except CPRMFetchError:
         if output.exists():

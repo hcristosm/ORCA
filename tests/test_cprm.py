@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ from src.ingest.cprm import (
 from src.storage import salvar_setores
 
 
-def _feature(objectid: int, grau_risco: str = "Alto") -> dict:
+def _feature(objectid: int, grau_risco: str = "Alto", data_setor: str | None = None) -> dict:
     return {
         "type": "Feature",
         "geometry": {
@@ -26,6 +27,7 @@ def _feature(objectid: int, grau_risco: str = "Alto") -> dict:
             "munic": "RIO DAS PEDRAS",
             "grau_risco": grau_risco,
             "num_setor": f"SP_TEST_{objectid}",
+            "data_setor": data_setor,
         },
     }
 
@@ -135,3 +137,101 @@ def test_ingerir_uf_usa_cache_local_quando_fonte_remota_falha(tmp_path: Path):
     gdf_cache = ingerir_uf("SP", output, max_retries=1, backoff_factor=0.01)
 
     assert len(gdf_cache) == 2
+
+
+@responses.activate
+def test_ingerir_uf_grava_manifesto_apos_primeira_ingestao(tmp_path: Path):
+    output = tmp_path / "risco_sp.gpkg"
+    responses.add(
+        responses.GET,
+        FEATURE_LAYER_URL,
+        json={
+            "type": "FeatureCollection",
+            "features": [_feature(1, data_setor="2020-01-01"), _feature(2, data_setor="2021-06-15")],
+            "properties": {"exceededTransferLimit": False},
+        },
+        status=200,
+    )
+
+    ingerir_uf("SP", output)
+
+    manifesto_path = tmp_path / "cprm_manifest_sp.json"
+    assert manifesto_path.exists()
+    manifesto = json.loads(manifesto_path.read_text())
+    assert manifesto["last_objectid"] == 2
+    assert manifesto["last_data_setor"] == "2021-06-15"
+
+
+@responses.activate
+def test_ingerir_uf_segunda_chamada_usa_where_incremental_e_mescla(tmp_path: Path):
+    output = tmp_path / "risco_sp.gpkg"
+    responses.add(
+        responses.GET,
+        FEATURE_LAYER_URL,
+        json={
+            "type": "FeatureCollection",
+            "features": [_feature(1, data_setor="2020-01-01"), _feature(2, data_setor="2021-06-15")],
+            "properties": {"exceededTransferLimit": False},
+        },
+        status=200,
+    )
+    ingerir_uf("SP", output)
+    responses.reset()
+
+    capturado = {}
+
+    def _callback(request):
+        from urllib.parse import parse_qs, urlparse
+        capturado["where"] = parse_qs(urlparse(request.url).query)["where"][0]
+        payload = {
+            "type": "FeatureCollection",
+            "features": [_feature(3, grau_risco="Muito alto", data_setor="2026-08-01")],
+            "properties": {"exceededTransferLimit": False},
+        }
+        return (200, {}, json.dumps(payload))
+
+    responses.add_callback(responses.GET, FEATURE_LAYER_URL, callback=_callback)
+
+    resultado = ingerir_uf("SP", output)
+
+    assert "objectid > 2" in capturado["where"]
+    assert "data_setor > TIMESTAMP '2021-06-15" in capturado["where"]
+    assert len(resultado) == 3
+    assert set(resultado["objectid"]) == {1, 2, 3}
+
+    manifesto = json.loads((tmp_path / "cprm_manifest_sp.json").read_text())
+    assert manifesto["last_objectid"] == 3
+    assert manifesto["last_data_setor"] == "2026-08-01"
+
+
+@responses.activate
+def test_ingerir_uf_atualiza_registro_existente_sem_duplicar(tmp_path: Path):
+    output = tmp_path / "risco_sp.gpkg"
+    responses.add(
+        responses.GET,
+        FEATURE_LAYER_URL,
+        json={
+            "type": "FeatureCollection",
+            "features": [_feature(1, grau_risco="Alto", data_setor="2020-01-01")],
+            "properties": {"exceededTransferLimit": False},
+        },
+        status=200,
+    )
+    ingerir_uf("SP", output)
+    responses.reset()
+
+    responses.add(
+        responses.GET,
+        FEATURE_LAYER_URL,
+        json={
+            "type": "FeatureCollection",
+            "features": [_feature(1, grau_risco="Muito alto", data_setor="2026-08-01")],
+            "properties": {"exceededTransferLimit": False},
+        },
+        status=200,
+    )
+
+    resultado = ingerir_uf("SP", output)
+
+    assert len(resultado) == 1
+    assert resultado.iloc[0]["grau_risco"] == "Muito alto"
