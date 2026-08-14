@@ -90,8 +90,17 @@ def _calcular_chuva_openmeteo(
     dias_historico: int = DIAS_HISTORICO_CRUZAMENTO,
     dias_previsao: int = DIAS_PREVISAO_ALERTA,
     agora: pd.Timestamp | None = None,
+    pontos: list[tuple[float, float]] | None = None,
 ) -> tuple[gpd.GeoDataFrame, dict]:
-    """Consulta a Open-Meteo direto no centroide de cada setor e calcula a chuva acumulada.
+    """Consulta a Open-Meteo e calcula a chuva acumulada por setor.
+
+    `pontos`, se informado, é usado no lugar do centroide de cada setor
+    (uma tupla `(lat, lon)` por setor, mesma ordem) — é como a grade
+    espacial nacional (`src/processing/grade_espacial.py`) injeta pontos
+    compartilhados entre setores próximos. Pontos repetidos (mesma tupla)
+    são deduplicados antes da chamada à Open-Meteo e a série resultante é
+    reaproveitada por todos os setores que compartilham o ponto, o que é o
+    mecanismo real de economia de chamadas da grade.
 
     Sem estação: `distancia_km` é sempre 0.0; `codigo_estacao`/`nome_estacao`
     identificam a fonte, não uma estação real. `agora` é parametrizável para
@@ -105,9 +114,12 @@ def _calcular_chuva_openmeteo(
     """
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
 
-    pontos = [(pt.y, pt.x) for pt in centroides_4326(setores)]
+    pontos = pontos if pontos is not None else [(pt.y, pt.x) for pt in centroides_4326(setores)]
 
-    series = fetch_precipitacao_batch(pontos, dias_historico=dias_historico, dias_previsao=dias_previsao)
+    pontos_unicos = list(dict.fromkeys(pontos))
+    indice_por_ponto = {ponto: i for i, ponto in enumerate(pontos_unicos)}
+    series_unicas = fetch_precipitacao_batch(pontos_unicos, dias_historico=dias_historico, dias_previsao=dias_previsao)
+    series = [series_unicas[indice_por_ponto[ponto]] for ponto in pontos]
 
     validas = pd.concat(
         [s[(s["data_hora"] <= agora) & s["chuva_mm"].notna()] for s in series],
@@ -161,15 +173,18 @@ def _series_openmeteo_por_municipio(
     return series
 
 
-def _exportar_openmeteo(setores: gpd.GeoDataFrame) -> tuple[pd.DataFrame, dict, dict, dict]:
-    """Estratégia `fonte="openmeteo"`: consulta direto no centroide de cada setor.
+def _exportar_openmeteo(
+    setores: gpd.GeoDataFrame, pontos: list[tuple[float, float]] | None = None
+) -> tuple[pd.DataFrame, dict, dict, dict]:
+    """Estratégia `fonte="openmeteo"`: consulta direto no centroide de cada setor
+    (ou nos pontos de grade compartilhados, se `pontos` for informado).
 
     Retorna `(cruzado, series, previsao, meta)` prontos para gravação;
     `meta` já traz todos os campos específicos desta fonte, exceto
     `gerado_em` (adicionado por `exportar_dashboard`, comum às duas fontes).
     """
     try:
-        cruzado, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72))
+        cruzado, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72), pontos=pontos)
         series = _series_openmeteo_por_municipio(setores)
     except OpenMeteoFetchError as exc:
         raise ExportacaoDashboardError(f"Falha ao consultar a Open-Meteo: {exc}") from exc
@@ -229,6 +244,7 @@ def exportar_dashboard(
     diretorio_dados: Path,
     saida_dir: Path,
     fonte: str = "openmeteo",
+    pontos_grade: list[tuple[float, float]] | None = None,
 ) -> dict:
     """Pré-computa a chuva por setor e grava os arquivos estáticos do dashboard.
 
@@ -238,12 +254,18 @@ def exportar_dashboard(
     idêntico ao anterior a este parâmetro, cruzamento por estação mais
     próxima combinando INMET e, se existir localmente, ANA.
 
+    `pontos_grade`, se informado, substitui o centroide de cada setor pelo
+    ponto de grade compartilhado (ver `src/processing/grade_espacial.py` e
+    `src/export/nacional.py`); só é válido com `fonte="openmeteo"`.
+
     Grava em `saida_dir`: `setores_<uf>.geojson`, `series_<uf>.json`
     (por estação com `fonte="inmet"`, por município com `fonte="openmeteo"`)
     e `meta_<uf>.json`. Retorna o conteúdo de `meta_<uf>.json`.
     """
     if fonte not in ("openmeteo", "inmet"):
         raise ValueError(f"fonte inválida: {fonte!r}. Use 'openmeteo' ou 'inmet'.")
+    if pontos_grade is not None and fonte != "openmeteo":
+        raise ValueError("pontos_grade só é válido com fonte='openmeteo'.")
 
     uf_norm = uf.strip().upper()
     caminho_setores_path = caminho_setores(uf_norm, diretorio_dados)
@@ -256,7 +278,7 @@ def exportar_dashboard(
     saida_dir.mkdir(parents=True, exist_ok=True)
 
     if fonte == "openmeteo":
-        cruzado, series, previsao, meta = _exportar_openmeteo(setores)
+        cruzado, series, previsao, meta = _exportar_openmeteo(setores, pontos=pontos_grade)
     else:
         cruzado, series, previsao, meta = _exportar_inmet(setores, uf_norm, ano, diretorio_dados)
     meta["gerado_em"] = datetime.now(timezone.utc).isoformat()

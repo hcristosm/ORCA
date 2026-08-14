@@ -278,3 +278,45 @@ def test_exportar_dashboard_preserva_bloco_vento_existente_no_meta(tmp_path: Pat
     assert meta["vento"] == bloco_vento
     assert meta["total_setores"] == 2
     assert meta["total_estacoes_inmet"] == 2
+
+
+def test_calcular_chuva_openmeteo_deduplica_pontos_repetidos(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+
+    agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
+    horas = pd.date_range("2026-08-08 00:00", periods=61, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+    # os dois setores recebem o MESMO ponto de consulta (grade grossa) --
+    # só deve sair 1 ponto no corpo da chamada, não 2.
+    pontos_grade = [(-23.5, -46.6), (-23.5, -46.6)]
+
+    corpo_capturado = {}
+
+    def _callback(request):
+        import json as _json
+        corpo_capturado.update(_json.loads(request.body))
+        resposta = [{
+            "latitude": -23.5, "longitude": -46.6,
+            "hourly": {"time": horas_iso, "precipitation": [1.0] * 61},
+        }]
+        return (200, {}, _json.dumps(resposta))
+
+    with responses.RequestsMock() as rsps:
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)
+        resultado, _ = _calcular_chuva_openmeteo(setores, janelas=(24, 72), agora=agora, pontos=pontos_grade)
+
+    assert len(corpo_capturado["latitude"]) == 1
+    assert set(resultado["fonte_estacao"]) == {"openmeteo"}
+    assert len(resultado) == 2
+    assert resultado.iloc[0]["chuva_24h"] == pytest.approx(24.0)
+    assert resultado.iloc[1]["chuva_24h"] == pytest.approx(24.0)
+
+
+def test_exportar_dashboard_pontos_grade_com_fonte_inmet_levanta_erro(tmp_path: Path, setores):
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    with pytest.raises(ValueError):
+        exportar_dashboard(
+            "SP", 2026, tmp_path, tmp_path / "export",
+            fonte="inmet", pontos_grade=[(-23.5, -46.6), (-23.5, -46.6)],
+        )
