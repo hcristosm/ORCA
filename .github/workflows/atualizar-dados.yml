@@ -59,4 +59,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/dashboard/data
           git diff --cached --quiet || git commit -m "chore(dashboard): atualizar dados exportados [skip ci]"
-          git push
+          # A exportação nacional demora minutos; um push manual/outro commit
+          # na main enquanto o job roda faz `git push` falhar por non-fast-
+          # forward. `git pull --rebase` antes de cada tentativa reaplica o
+          # commit de dados sobre o que chegou de novo; algumas tentativas
+          # cobrem o caso raro de a main mudar de novo entre o rebase e o
+          # push.
+          sucesso=false
+          for tentativa in 1 2 3; do
+            if git pull --rebase origin main && git push; then
+              sucesso=true
+              break
+            fi
+            echo "Push falhou (tentativa $tentativa/3), tentando de novo..."
+            sleep 5
+          done
+          "$sucesso"
