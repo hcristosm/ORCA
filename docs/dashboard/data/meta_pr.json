@@ -1,8 +1,8 @@
 {
   "fonte": "openmeteo",
-  "referencia": "2026-08-15T00:00:00+00:00",
+  "referencia": "2026-08-15T09:00:00+00:00",
   "total_setores": 244,
   "total_municipios": 38,
   "horizonte_previsao_horas": 72,
-  "gerado_em": "2026-08-15T00:48:06.673858+00:00"
+  "gerado_em": "2026-08-15T09:52:00.316662+00:00"
 }
