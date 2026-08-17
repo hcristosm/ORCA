@@ -1,12 +1,12 @@
 {
   "fonte": "openmeteo",
-  "referencia": "2026-08-16T10:00:00+00:00",
+  "referencia": "2026-08-17T10:00:00+00:00",
   "total_setores": 115,
   "total_municipios": 32,
   "horizonte_previsao_horas": 72,
-  "gerado_em": "2026-08-16T10:01:26.173558+00:00",
+  "gerado_em": "2026-08-17T10:10:58.693843+00:00",
   "vento": {
-    "referencia": "2026-08-15T10:00:00+00:00",
-    "total_municipios_sinalizados": 0
+    "referencia": "2026-08-17T11:00:00+00:00",
+    "total_municipios_sinalizados": 2
   }
 }
