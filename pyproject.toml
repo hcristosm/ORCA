@@ -16,7 +16,7 @@ orca = "src.cli:app"
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1.1",
-    "responses>=0.25",
+    "responses>=0.26.2",
 ]
 
 [tool.pytest.ini_options]
