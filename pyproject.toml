@@ -4,7 +4,7 @@ version = "0.3.0"
 description = "Dashboard estático que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (INMET/ANA)"
 requires-python = ">=3.11"
 dependencies = [
-    "geopandas>=1.0",
+    "geopandas>=1.1.4",
     "shapely>=2.0",
     "requests>=2.34.2",
     "typer>=0.12",
