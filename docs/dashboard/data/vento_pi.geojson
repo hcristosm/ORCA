@@ -1,9 +1,0 @@
-{
-"type": "FeatureCollection",
-"name": "vento_pi",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "codarea": "2202091", "munic": "Caldeirão Grande do Piauí", "rajada_kmh_24h": 65.5, "severidade": "atencao" }, "geometry": { "type": "Point", "coordinates": [ -40.624650410095434, -7.308199347767123 ] } },
-{ "type": "Feature", "properties": { "codarea": "2210706", "munic": "Simões", "rajada_kmh_24h": 65.2, "severidade": "atencao" }, "geometry": { "type": "Point", "coordinates": [ -40.741647311995031, -7.671293345775883 ] } }
-]
-}

@@ -1,8 +1,0 @@
-{
-"type": "FeatureCollection",
-"name": "vento_ce",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "codarea": "2309805", "munic": "Pacoti", "rajada_kmh_24h": 69.5, "severidade": "atencao" }, "geometry": { "type": "Point", "coordinates": [ -38.902359712913714, -4.199062247641561 ] } }
-]
-}

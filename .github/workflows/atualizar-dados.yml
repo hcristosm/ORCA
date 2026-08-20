@@ -50,28 +50,19 @@ jobs:
             data/ultima_atualizacao.txt
           retention-days: 14
 
-      - name: Comitar dados exportados do dashboard estático
+      - name: Publicar dashboard no GitHub Pages
         # Uma UF que falhe faz o passo anterior sair com código != 0; sem
         # `always()` as demais UFs exportadas com sucesso seriam descartadas.
+        # `force_orphan: true` reseta a branch gh-pages a cada deploy (um
+        # único commit), em vez de acumular histórico como fazíamos antes
+        # commitando os dados na main.
         if: always()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/dashboard/data
-          git diff --cached --quiet || git commit -m "chore(dashboard): atualizar dados exportados [skip ci]"
-          # A exportação nacional demora minutos; um push manual/outro commit
-          # na main enquanto o job roda faz `git push` falhar por non-fast-
-          # forward. `git pull --rebase` antes de cada tentativa reaplica o
-          # commit de dados sobre o que chegou de novo; algumas tentativas
-          # cobrem o caso raro de a main mudar de novo entre o rebase e o
-          # push.
-          sucesso=false
-          for tentativa in 1 2 3; do
-            if git pull --rebase origin main && git push; then
-              sucesso=true
-              break
-            fi
-            echo "Push falhou (tentativa $tentativa/3), tentando de novo..."
-            sleep 5
-          done
-          "$sucesso"
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/dashboard
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "chore(dashboard): publicar dados atualizados"
