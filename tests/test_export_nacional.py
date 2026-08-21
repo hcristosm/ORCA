@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 import geopandas as gpd
@@ -50,9 +51,7 @@ def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # SP município
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # RJ setores
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # RJ município
-        resultados = exportar_nacional(
-            ["SP", "RJ"], 2026, tmp_path, saida, orcamento_alvo=1000, pausa_entre_ufs=0
-        )
+        resultados = exportar_nacional(["SP", "RJ"], 2026, tmp_path, saida, orcamento_alvo=1000)
 
     assert set(resultados.keys()) == {"SP", "RJ"}
     assert (saida / "setores_sp.geojson").exists()
@@ -92,3 +91,31 @@ def test_exportar_nacional_pula_uf_sem_setores_ingeridos(tmp_path: Path):
 def test_exportar_nacional_nenhuma_uf_ingerida_levanta_erro(tmp_path: Path):
     with pytest.raises(ValueError):
         exportar_nacional(["SP", "RJ"], 2026, tmp_path, tmp_path / "export")
+
+
+def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path):
+    """As UFs não esperam 5s uma pela outra: são exportadas em paralelo.
+
+    Cada resposta simulada demora 0.1s; exportar_dashboard faz 2 POSTs por UF
+    (setores + série por município), então sequencial daria >= 3 * 2 * 0.1s.
+    Concorrente, fica bem abaixo disso.
+    """
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
+    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
+    salvar_setores(_setores_uf("MG", "MG1", -44.00, -19.90), caminho_setores("MG", tmp_path))
+
+    def callback(request):
+        time.sleep(0.1)
+        return (200, {}, json.dumps(_resposta_openmeteo(1)[0]))
+
+    saida = tmp_path / "export"
+    with responses.RequestsMock() as rsps:
+        for _ in range(6):
+            rsps.add_callback(responses.POST, FORECAST_URL, callback=callback, content_type="application/json")
+
+        inicio = time.monotonic()
+        resultados = exportar_nacional(["SP", "RJ", "MG"], 2026, tmp_path, saida, orcamento_alvo=1000)
+        decorrido = time.monotonic() - inicio
+
+    assert set(resultados.keys()) == {"SP", "RJ", "MG"}
+    assert decorrido < 0.5

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
-import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from src.config import caminho_setores
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 # docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
 ORCAMENTO_ALVO_PADRAO = 6000
 
-PAUSA_ENTRE_UFS_PADRAO = 5.0
+UF_WORKERS_PADRAO = 4
 
 
 def exportar_nacional(
@@ -53,7 +53,7 @@ def exportar_nacional(
     diretorio_dados: Path,
     saida_dir: Path,
     orcamento_alvo: int = ORCAMENTO_ALVO_PADRAO,
-    pausa_entre_ufs: float = PAUSA_ENTRE_UFS_PADRAO,
+    max_workers_uf: int = UF_WORKERS_PADRAO,
 ) -> dict[str, dict]:
     """Exporta o dashboard (fonte Open-Meteo) para várias UFs, com 1 grade nacional.
 
@@ -71,11 +71,11 @@ def exportar_nacional(
     milhares de consultas extras no total nacional; o padrão conservador de
     `ORCAMENTO_ALVO_PADRAO` existe justamente para deixar folga para ela.
 
-    `pausa_entre_ufs` é uma pausa (em segundos) entre a exportação de uma UF
-    e a seguinte. É uma mitigação best-effort: não modela precisamente os
-    tetos de hora/minuto da Open-Meteo (5.000/hora, 600/minuto), apenas
-    espalha a rajada de requisições no tempo; ver
-    docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+    `max_workers_uf` UFs são exportadas concorrentemente (thread pool); quem
+    garante não estourar os tetos de hora/minuto da Open-Meteo (5.000/hora,
+    600/minuto) é `LIMITER_PADRAO` em `src/ingest/openmeteo.py`, compartilhado
+    por todo o processo (entre UFs e entre lotes dentro de cada UF), não uma
+    pausa fixa aqui; ver docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
     """
     setores_por_uf = {}
     for uf in ufs:
@@ -99,10 +99,8 @@ def exportar_nacional(
     pontos_grade = mapear_para_grade(todos_pontos, tamanho_celula)
     total_celulas = len(set(pontos_grade))
 
-    resultados: dict[str, dict] = {}
-    for posicao, (uf, (inicio, fim)) in enumerate(fatias.items()):
-        if posicao > 0 and pausa_entre_ufs > 0:
-            time.sleep(pausa_entre_ufs)
+    def _exportar_uf(uf: str) -> tuple[str, dict | None]:
+        inicio, fim = fatias[uf]
         try:
             meta = exportar_dashboard(
                 uf, ano, diretorio_dados, saida_dir,
@@ -110,10 +108,16 @@ def exportar_nacional(
             )
         except (ExportacaoDashboardError, OSError, ValueError) as exc:
             logger.warning("Falha ao exportar %s: %s", uf, exc)
-            continue
+            return uf, None
         meta["tamanho_celula_grade_graus"] = tamanho_celula
         meta["total_celulas_grade"] = total_celulas
-        resultados[uf] = meta
+        return uf, meta
+
+    resultados: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=max_workers_uf) as executor:
+        for uf, meta in executor.map(_exportar_uf, fatias.keys()):
+            if meta is not None:
+                resultados[uf] = meta
 
     (saida_dir / "ufs_disponiveis.json").write_text(
         json.dumps(sorted(resultados.keys()), ensure_ascii=False, indent=2)

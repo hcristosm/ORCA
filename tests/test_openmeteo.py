@@ -1,7 +1,11 @@
+import json as json_module
+import time
+
 import pandas as pd
 import pytest
 import responses
 
+import src.ingest.openmeteo as openmeteo
 from src.ingest.openmeteo import FORECAST_URL, OpenMeteoFetchError, fetch_precipitacao_batch
 
 
@@ -74,16 +78,63 @@ def test_fetch_precipitacao_batch_falha_persistente_levanta_erro():
 
 @responses.activate
 def test_fetch_precipitacao_batch_divide_em_lotes_e_preserva_ordem():
+    # Os 2 lotes são disparados concorrentemente, então a resposta de cada um
+    # precisa depender do CONTEÚDO do request (quantos pontos pediu), não da
+    # ordem de chegada — daí o callback, em vez de `responses.add()` em fila.
     horas = ["2026-08-10T00:00"]
     pontos = [(-23.0 - i * 0.01, -46.0) for i in range(5)]
 
-    responses.add(responses.POST, FORECAST_URL, json=_resposta(horas, [[1.0], [2.0], [3.0]]), status=200)
-    responses.add(responses.POST, FORECAST_URL, json=_resposta(horas, [[4.0], [5.0]]), status=200)
+    def callback(request):
+        corpo = json_module.loads(request.body)
+        n = len(corpo["latitude"])
+        valores = [1.0, 2.0, 3.0] if n == 3 else [4.0, 5.0]
+        return (200, {}, json_module.dumps(_resposta(horas, [[v] for v in valores])))
 
-    series = fetch_precipitacao_batch(pontos, tamanho_lote=3, pausa_entre_lotes=0)
+    responses.add_callback(responses.POST, FORECAST_URL, callback=callback, content_type="application/json")
+
+    series = fetch_precipitacao_batch(pontos, tamanho_lote=3)
 
     assert len(responses.calls) == 2
     assert [s["chuva_mm"].iloc[0] for s in series] == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+@responses.activate
+def test_fetch_precipitacao_batch_busca_lotes_concorrentemente():
+    """Os lotes são disparados em paralelo (thread pool), não um a um com pausa.
+
+    Cada resposta simulada demora 0.1s pra "chegar"; se os 4 lotes fossem
+    buscados um a um, o total seria >= 0.4s. Concorrente, fica bem abaixo.
+    """
+    horas = ["2026-08-10T00:00"]
+    pontos = [(-23.0 - i * 0.01, -46.0) for i in range(4)]
+
+    def callback(request):
+        time.sleep(0.1)
+        return (200, {}, json_module.dumps(_resposta(horas, [[1.0]])[0]))
+
+    for _ in range(4):
+        responses.add_callback(responses.POST, FORECAST_URL, callback=callback, content_type="application/json")
+
+    inicio = time.monotonic()
+    fetch_precipitacao_batch(pontos, tamanho_lote=1)
+    decorrido = time.monotonic() - inicio
+
+    assert decorrido < 0.35
+
+
+@responses.activate
+def test_fetch_precipitacao_batch_usa_rate_limiter_compartilhado(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "acquire", lambda: chamadas.append(1))
+
+    horas = ["2026-08-10T00:00"]
+    pontos = [(-23.0 - i * 0.01, -46.0) for i in range(3)]
+    for valor in [[1.0], [2.0], [3.0]]:
+        responses.add(responses.POST, FORECAST_URL, json=_resposta(horas, [valor]), status=200)
+
+    fetch_precipitacao_batch(pontos, tamanho_lote=1)
+
+    assert len(chamadas) == 3
 
 
 @responses.activate

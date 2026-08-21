@@ -15,11 +15,7 @@ import typer
 
 from src.config import DASHBOARD_DATA_DIR, DATA_DIR, UFS_VALIDAS, caminho_setores
 from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
-from src.export.nacional import (
-    ORCAMENTO_ALVO_PADRAO,
-    PAUSA_ENTRE_UFS_PADRAO,
-    exportar_nacional,
-)
+from src.export.nacional import ORCAMENTO_ALVO_PADRAO, exportar_nacional
 from src.export.vento_data import exportar_vento
 from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
 from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
@@ -202,10 +198,6 @@ def atualizar_nacional_cmd(
             "(não inclui a série por município nem retries)"
         ),
     ),
-    pausa_entre_ufs: float = typer.Option(
-        PAUSA_ENTRE_UFS_PADRAO, "--pausa-entre-ufs",
-        help="Pausa em segundos entre a exportação de uma UF e a seguinte, para espalhar a rajada",
-    ),
     diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
     saida: Path = typer.Option(DASHBOARD_DATA_DIR, "--saida", help="Diretório de saída do dashboard"),
 ) -> None:
@@ -218,9 +210,9 @@ def atualizar_nacional_cmd(
     docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
 
     `--orcamento-alvo` calibra só os pontos de grade dos setores; a série por
-    município não entra nessa conta. `--pausa-entre-ufs` é uma mitigação
-    best-effort de rate limit: não modela precisamente os tetos de
-    hora/minuto da Open-Meteo, apenas espalha a rajada no tempo.
+    município não entra nessa conta. As UFs são exportadas concorrentemente;
+    quem garante não estourar os tetos de hora/minuto da Open-Meteo é o rate
+    limiter compartilhado em `src/ingest/openmeteo.py`, não uma pausa fixa.
     """
     lista_ufs = [u.strip().upper() for u in ufs.split(",") if u.strip()]
     falhas_cprm = []
@@ -234,7 +226,7 @@ def atualizar_nacional_cmd(
     try:
         resultados = exportar_nacional(
             lista_ufs, ano, diretorio, saida,
-            orcamento_alvo=orcamento_alvo, pausa_entre_ufs=pausa_entre_ufs,
+            orcamento_alvo=orcamento_alvo,
         )
     except ValueError as exc:
         typer.echo(f"FALHA na exportação nacional: {exc}", err=True)

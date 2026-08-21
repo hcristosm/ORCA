@@ -34,15 +34,25 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 import requests
+
+from src.ingest.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 TAMANHO_LOTE_PADRAO = 50
-PAUSA_ENTRE_LOTES_PADRAO = 2.0
+LOTE_WORKERS_PADRAO = 5
+
+# Tetos documentados da Open-Meteo são 600/min e 5.000/hora; ficamos abaixo
+# disso de propósito porque o cliente já observou 429 mesmo em cadência
+# conservadora (ver docstring do módulo). O limiter é compartilhado por todo
+# o processo, então cobre tanto a concorrência entre lotes de uma UF quanto
+# entre UFs (ver `src/export/nacional.py`).
+LIMITER_PADRAO = RateLimiter(max_por_minuto=500, max_por_hora=4500)
 
 
 class OpenMeteoFetchError(RuntimeError):
@@ -58,6 +68,7 @@ def _post_lote(
     max_retries: int,
     backoff_factor: float,
     session: requests.Session,
+    limiter: RateLimiter = LIMITER_PADRAO,
 ) -> list[dict]:
     """Um único POST para um lote de pontos. Retorna a lista de objetos da resposta (um por ponto)."""
     corpo = {
@@ -72,6 +83,7 @@ def _post_lote(
     last_exc: Exception | None = None
     for tentativa in range(1, max_retries + 1):
         try:
+            limiter.acquire()
             resp = session.post(FORECAST_URL, json=corpo, timeout=timeout)
             resp.raise_for_status()
             resposta_ok = resp
@@ -118,29 +130,34 @@ def _fetch_variavel_batch(
     backoff_factor: float,
     session: requests.Session | None,
     tamanho_lote: int,
-    pausa_entre_lotes: float,
+    max_workers_lote: int = LOTE_WORKERS_PADRAO,
 ) -> list[pd.DataFrame]:
     """Busca uma variável horária da Open-Meteo para uma lista de pontos, em lotes.
 
     Compartilhada por `fetch_precipitacao_batch` (variavel="precipitation") e
     `fetch_vento_batch` (variavel="windgusts_10m"), mesma paginação, retry e
     tratamento de 429, só muda qual campo é pedido/lido da resposta.
+
+    Os lotes são disparados concorrentemente (thread pool), não um a um com
+    pausa fixa: quem espaça as chamadas de verdade é `LIMITER_PADRAO`
+    (compartilhado por todo o processo, inclusive entre UFs em
+    `src/export/nacional.py`), não este laço.
     """
     if not pontos:
         return []
 
     sess = session or requests.Session()
-    dados: list[dict] = []
-    for inicio in range(0, len(pontos), tamanho_lote):
-        lote = pontos[inicio:inicio + tamanho_lote]
-        dados.extend(
-            _post_lote(
+    lotes = [pontos[inicio:inicio + tamanho_lote] for inicio in range(0, len(pontos), tamanho_lote)]
+
+    with ThreadPoolExecutor(max_workers=max_workers_lote) as executor:
+        resultados = list(executor.map(
+            lambda lote: _post_lote(
                 lote, [variavel_hourly], dias_historico, dias_previsao,
                 timeout, max_retries, backoff_factor, sess,
-            )
-        )
-        if inicio + tamanho_lote < len(pontos):
-            time.sleep(pausa_entre_lotes)
+            ),
+            lotes,
+        ))
+    dados: list[dict] = [item for resultado_lote in resultados for item in resultado_lote]
 
     series = []
     for item in dados:
@@ -163,7 +180,7 @@ def fetch_precipitacao_batch(
     backoff_factor: float = 2.0,
     session: requests.Session | None = None,
     tamanho_lote: int = TAMANHO_LOTE_PADRAO,
-    pausa_entre_lotes: float = PAUSA_ENTRE_LOTES_PADRAO,
+    max_workers_lote: int = LOTE_WORKERS_PADRAO,
 ) -> list[pd.DataFrame]:
     """Busca chuva horária para uma lista de pontos `(lat, lon)`.
 
@@ -175,12 +192,12 @@ def fetch_precipitacao_batch(
     cliente.
 
     Internamente, `pontos` é dividido em lotes de `tamanho_lote` (padrão 100,
-    ver docstring do módulo sobre o limite prático da API), com uma pausa de
-    `pausa_entre_lotes` segundos entre as chamadas.
+    ver docstring do módulo sobre o limite prático da API), buscados em
+    paralelo (`max_workers_lote` threads) e pautados por `LIMITER_PADRAO`.
     """
     return _fetch_variavel_batch(
         pontos, "precipitation", "chuva_mm", dias_historico, dias_previsao,
-        timeout, max_retries, backoff_factor, session, tamanho_lote, pausa_entre_lotes,
+        timeout, max_retries, backoff_factor, session, tamanho_lote, max_workers_lote,
     )
 
 
@@ -193,7 +210,7 @@ def fetch_vento_batch(
     backoff_factor: float = 2.0,
     session: requests.Session | None = None,
     tamanho_lote: int = TAMANHO_LOTE_PADRAO,
-    pausa_entre_lotes: float = PAUSA_ENTRE_LOTES_PADRAO,
+    max_workers_lote: int = LOTE_WORKERS_PADRAO,
 ) -> list[pd.DataFrame]:
     """Busca rajada de vento (`windgusts_10m`) horária para uma lista de pontos `(lat, lon)`.
 
@@ -203,5 +220,5 @@ def fetch_vento_batch(
     """
     return _fetch_variavel_batch(
         pontos, "windgusts_10m", "vento_rajada_kmh", dias_historico, dias_previsao,
-        timeout, max_retries, backoff_factor, session, tamanho_lote, pausa_entre_lotes,
+        timeout, max_retries, backoff_factor, session, tamanho_lote, max_workers_lote,
     )
