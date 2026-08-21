@@ -40,7 +40,7 @@ visão computacional para monitoramento de encostas, eu queria uma ferramenta
 local, sem backend, sem custo, que juntasse duas fontes públicas que raramente
 aparecem lado a lado.
 
-**Dashboard ao vivo:** [hcristosm.github.io/ORCA/dashboard](https://hcristosm.github.io/ORCA/dashboard/),
+**Dashboard ao vivo:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/),
 publicado no GitHub Pages e atualizado todo dia pelo cron (ver
 [Atualização automática](#4-atualização-automática)).
 
