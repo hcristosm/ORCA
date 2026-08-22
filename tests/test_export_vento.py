@@ -133,6 +133,23 @@ def test_exportar_vento_levanta_erro_se_ibge_falha(tmp_path: Path):
             exportar_vento("SP", 2026, tmp_path, tmp_path / "export")
 
 
+def test_exportar_vento_aceita_cache_openmeteo(tmp_path: Path):
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    horas = pd.date_range("2026-08-10 00:00", periods=24, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+    resposta_vento = _resposta_vento(horas_iso, [[70.0] * 24, [30.0] * 24])
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+
+    saida = tmp_path / "export"
+    with responses.RequestsMock() as rsps:
+        _mockar_ibge(rsps)
+        rsps.add(responses.POST, FORECAST_URL, json=resposta_vento, status=200)
+        resultado = exportar_vento("SP", 2026, tmp_path, saida, cache_openmeteo=cache)
+
+    assert resultado is not None
+
+
 def test_exportar_vento_ignora_rajadas_futuras_na_janela_de_24h(tmp_path: Path):
     agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
     horas = pd.date_range(agora - pd.Timedelta(hours=23), periods=48, freq="h", tz="UTC")

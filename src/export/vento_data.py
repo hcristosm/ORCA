@@ -25,6 +25,7 @@ from src.ingest.ibge import IBGEFetchError, fetch_municipios, fetch_nomes_munici
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_vento_batch
 from src.processing.cruzamento import centroides_ibge
 from src.processing.vento import classificar_severidade, rajada_max
+from src.storage_cache_openmeteo import CacheOpenMeteo
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ def exportar_vento(
     diretorio_dados: Path,
     saida_dir: Path,
     agora: pd.Timestamp | None = None,
+    cache_openmeteo: CacheOpenMeteo | None = None,
 ) -> dict:
     """Consulta a rajada de vento recente por município (todos os da malha do
     IBGE, não só os com setor CPRM) e grava `vento_<uf>.geojson`.
@@ -47,6 +49,8 @@ def exportar_vento(
     é parametrizável para tornar testes determinísticos e para excluir as
     horas de previsão (a série inclui `dias_previsao=1`) da janela de
     "últimas 24h observadas"; em produção usa o instante atual.
+    `cache_openmeteo`, se informado, reduz o histórico de fato pedido à
+    Open-Meteo (ver `src/storage_cache_openmeteo.py`).
     """
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
     uf_norm = uf.strip().upper()
@@ -60,7 +64,9 @@ def exportar_vento(
 
     codareas, pontos = centroides_ibge(municipios_gdf)
     try:
-        series = fetch_vento_batch(pontos, dias_historico=4, dias_previsao=1)
+        series = fetch_vento_batch(
+            pontos, dias_historico=4, dias_previsao=1, cache=cache_openmeteo, agora=agora
+        )
     except OpenMeteoFetchError as exc:
         raise ExportacaoDashboardError(f"Falha ao consultar vento na Open-Meteo: {exc}") from exc
 
