@@ -7,6 +7,7 @@ import responses
 
 import src.ingest.openmeteo as openmeteo
 from src.ingest.openmeteo import FORECAST_URL, OpenMeteoFetchError, fetch_precipitacao_batch
+from src.storage_cache_openmeteo import CacheOpenMeteo
 
 
 def _resposta(horas: list[str], series_chuva: list[list]) -> list[dict]:
@@ -380,3 +381,20 @@ def test_fetch_variavel_batch_sem_cache_comportamento_identico_a_hoje():
 
     assert len(series) == 1
     assert list(series[0]["chuva_mm"]) == [1.0]
+
+
+@responses.activate
+def test_fetch_precipitacao_batch_aceita_cache_e_agora(tmp_path):
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    horas = ["2026-08-10T00:00"]
+    responses.add(
+        responses.POST, FORECAST_URL, status=200,
+        json={"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas, "precipitation": [1.0]}},
+    )
+
+    series = fetch_precipitacao_batch(
+        [(-23.5, -46.6)], cache=cache, agora=pd.Timestamp("2026-08-10T05:00", tz="UTC"),
+    )
+
+    assert list(series[0]["chuva_mm"]) == [1.0]
+    assert cache.ler([(-23.5, -46.6)], "precipitation", horas) != {}

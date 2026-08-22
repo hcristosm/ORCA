@@ -291,6 +291,8 @@ def fetch_precipitacao_batch(
     session: requests.Session | None = None,
     tamanho_lote: int = TAMANHO_LOTE_PADRAO,
     max_workers_lote: int = LOTE_WORKERS_PADRAO,
+    cache: CacheOpenMeteo | None = None,
+    agora: pd.Timestamp | None = None,
 ) -> list[pd.DataFrame]:
     """Busca chuva horária para uma lista de pontos `(lat, lon)`.
 
@@ -304,10 +306,14 @@ def fetch_precipitacao_batch(
     Internamente, `pontos` é dividido em lotes de `tamanho_lote` (padrão 100,
     ver docstring do módulo sobre o limite prático da API), buscados em
     paralelo (`max_workers_lote` threads) e pautados por `LIMITER_PADRAO`.
+    `cache`, se informado, reduz o histórico de fato pedido à API (ver
+    `_fetch_variavel_batch`); `agora` é parametrizável para testes
+    determinísticos, em produção usa o instante atual.
     """
     return _fetch_variavel_batch(
         pontos, "precipitation", "chuva_mm", dias_historico, dias_previsao,
         timeout, max_retries, backoff_factor, session, tamanho_lote, max_workers_lote,
+        cache, agora,
     )
 
 
@@ -321,6 +327,8 @@ def fetch_vento_batch(
     session: requests.Session | None = None,
     tamanho_lote: int = TAMANHO_LOTE_PADRAO,
     max_workers_lote: int = LOTE_WORKERS_PADRAO,
+    cache: CacheOpenMeteo | None = None,
+    agora: pd.Timestamp | None = None,
 ) -> list[pd.DataFrame]:
     """Busca rajada de vento (`windgusts_10m`) horária para uma lista de pontos `(lat, lon)`.
 
@@ -331,4 +339,5 @@ def fetch_vento_batch(
     return _fetch_variavel_batch(
         pontos, "windgusts_10m", "vento_rajada_kmh", dias_historico, dias_previsao,
         timeout, max_retries, backoff_factor, session, tamanho_lote, max_workers_lote,
+        cache, agora,
     )
