@@ -53,17 +53,18 @@ LOTE_WORKERS_PADRAO = 5
 # o processo, então cobre tanto a concorrência entre lotes de uma UF quanto
 # entre UFs (ver `src/export/nacional.py`).
 #
-# `intervalo_minimo_segundos=0.15` (~6,7 req/s) evita que várias threads
-# liberadas pela janela de contagem disparem a requisição no mesmo instante.
-# Isso sozinho não bastou em produção: uma requisição pode ficar em voo por
-# vários segundos (ou até 60s esperando um 429), então dezenas continuam
-# abertas ao mesmo tempo mesmo começando escalonadas. `max_concorrentes=4`
-# põe um teto real em quantas ficam simultaneamente em voo — ver
-# `src/ingest/rate_limiter.py` e `_post_lote` abaixo (que faz acquire/release
-# por tentativa, não só uma vez por lote).
+# `max_concorrentes=1`: confirmado por um mantenedor da Open-Meteo (issue
+# open-meteo/open-meteo#1650, 22/08/2026) que a camada gratuita permite
+# só 1 requisição EM VOO por IP — acima disso, a requisição fica na fila
+# interna deles e, com mais de 5 na fila, vira erro "Too many concurrent
+# requests". Testamos com `max_concorrentes=4` em produção e o resultado
+# não melhorou sobre o baseline sem limiter algum — bate com esse limite
+# real ser 1, não um número maior que dava pra tunar. `intervalo_minimo_
+# segundos=0.15` continua útil para não haver duas concessões no mesmo
+# instante quando o slot único libera.
 LIMITER_PADRAO = RateLimiter(
     max_por_minuto=500, max_por_hora=4500,
-    intervalo_minimo_segundos=0.15, max_concorrentes=4,
+    intervalo_minimo_segundos=0.15, max_concorrentes=1,
 )
 
 

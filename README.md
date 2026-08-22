@@ -465,6 +465,19 @@ orçamento, ver [Limitações conhecidas](#limitações-conhecidas)) estão em
   reescrever o pipeline de ingestão. Investigado em 14/08/2026 para
   Itaquaquecetuba/SP: sem endpoint público confirmado, pendente de um
   município piloto com dado aberto.
+- Camada de cache/persistência local (com TTL) para o caminho Open-Meteo,
+  hoje 100% ao vivo sem armazenamento (diferente do INMET/ANA, que já
+  cacheiam via `src/storage.py`). Serve de fallback quando uma UF esgota os
+  retries (ver [Limitações conhecidas](#limitações-conhecidas)) e, se o TTL
+  for incremental (só rebuscar horas ainda não vistas), reduz o volume de
+  chamadas por execução. Em design a partir de 22/08/2026 (ver
+  `docs/superpowers/specs/`). Funciona tanto no deploy do GitHub Pages
+  quanto para quem roda o projeto localmente.
+- Orquestração mais robusta de requisições à Open-Meteo: paginação
+  inteligente, backoff exponencial mais completo e possivelmente uma fila de
+  jobs para espaçar o envio ao longo do tempo, evitando estouros de cota.
+  Depende da camada de cache acima (decisão de decompor tomada em
+  22/08/2026); desenhado como subprojeto separado depois dela.
 
 ## Contribuindo
 
