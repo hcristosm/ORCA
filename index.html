@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORCA: Dashboard</title>
+<meta name="description" content="Setores de risco geológico (CPRM/SGB) cruzados com chuva recente (INMET/ANA).">
+<!-- 'unsafe-inline' em script-src/style-src é necessário porque o dashboard
+     usa <script>/style="" inline (site estático sem build step, sem
+     nonce/hash); a CSP ainda restringe de onde scripts/estilos/conexões
+     externas podem vir. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
+  style-src 'self' 'unsafe-inline' https://unpkg.com;
+  img-src 'self' data: https://*.basemaps.cartocdn.com;
+  font-src 'self';
+  connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com;
+  object-src 'none';
+  base-uri 'self';
+  frame-ancestors 'none';
+">
+
+<link rel="stylesheet" href="style.css">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+</head>
+<body>
+
+<header class="filtros">
+  <div class="marca">
+    <img id="logoImg" src="../logo/orca-logo-claro.png" alt="Logo do ORCA" height="32">
+    <div class="texto"><b>ORCA</b><span>risco geológico × chuva</span></div>
+  </div>
+
+  <button class="botao-tema" id="botaoTema" type="button" aria-label="Alternar tema claro/escuro">
+    <svg class="icone icone-sol"><use href="icons/sprite.svg#icon-sun"></use></svg>
+    <svg class="icone icone-lua"><use href="icons/sprite.svg#icon-moon"></use></svg>
+  </button>
+
+  <div class="campo campo-uf">
+    <label for="ufSelect">UF</label>
+    <select id="ufSelect"></select>
+  </div>
+
+  <div class="campo campo-busca-municipio">
+    <label for="buscaMunicipio">Município</label>
+    <div class="busca-municipio">
+      <input type="text" id="buscaMunicipio" autocomplete="off" placeholder="Todos (buscar município…)">
+      <ul class="sugestoes" id="buscaMunicipioSugestoes" role="listbox" hidden></ul>
+    </div>
+  </div>
+
+  <div class="campo">
+    <label><svg class="icone"><use href="icons/sprite.svg#icon-clock"></use></svg>Janela de chuva acumulada</label>
+    <div class="toggle-janela" id="janelaToggle">
+      <button data-janela="24">24h</button>
+      <button data-janela="72" class="ativo">72h</button>
+    </div>
+  </div>
+
+  <div class="campo campo-limiar">
+    <label>Limiar de atenção: <span class="valor" id="limiarValor">100</span>mm</label>
+    <input type="range" id="limiarSlider" min="0" max="300" step="5" value="100">
+  </div>
+</header>
+
+<main>
+  <p class="selo" id="selo">Carregando dados…</p>
+
+  <div class="cards" id="cards"></div>
+
+  <div id="mapa"></div>
+
+  <div class="painel-inferior">
+    <div>
+      <h2 id="tituloTabela">Setores em atenção</h2>
+      <div class="tabela-scroll">
+        <table>
+          <thead>
+            <tr><th>Município</th><th>Setor</th><th>Grau</th><th>Chuva (mm)</th><th>Fonte</th></tr>
+          </thead>
+          <tbody id="tabelaCorpo"></tbody>
+        </table>
+        <div class="vazio" id="tabelaVazia" hidden>Nenhum setor ultrapassa o limiar configurado.</div>
+      </div>
+
+      <div id="blocoAlertaPrevisto" hidden style="margin-top: var(--space-6)">
+        <h2><svg class="icone"><use href="icons/sprite.svg#icon-triangle-alert"></use></svg>Alerta previsto (próximos 3 dias)</h2>
+        <div class="tabela-scroll">
+          <table>
+            <thead>
+              <tr><th>Município</th><th>Setor</th><th>Grau</th><th>Quando</th></tr>
+            </thead>
+            <tbody id="tabelaPrevistoCorpo"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="grafico-cabecalho">
+        <h2>Série temporal de chuva</h2>
+        <span class="grafico-rotulo" id="estacaoRotulo">Busque um município acima</span>
+      </div>
+      <div class="grafico-container">
+        <canvas id="grafico" hidden></canvas>
+        <p class="vazio" id="graficoVazio">Busque um município no filtro acima para ver o histórico de chuva.</p>
+      </div>
+    </div>
+  </div>
+
+  <section class="areas-customizadas" id="areasCustomizadas">
+    <h2><svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>Minhas áreas</h2>
+    <p class="aviso-privacidade">
+      <svg class="icone"><use href="icons/sprite.svg#icon-info"></use></svg>
+      Carregue um arquivo com sua área (GeoJSON, KML ou shapefile em .zip) e veja chuva acumulada e
+      alerta previsto nela, calculados na hora pelo seu navegador. Nada que você envia é salvo em
+      lugar nenhum, some ao recarregar a página. Limite de 5 áreas por vez, até 10MB por arquivo.
+    </p>
+
+    <div class="upload-area">
+      <label for="uploadArquivo" class="botao-upload">
+        <svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>
+        Carregar arquivo (.geojson, .kml, .zip)
+      </label>
+      <input type="file" id="uploadArquivo" accept=".geojson,.json,.kml,.zip" hidden>
+      <div class="campo campo-classificacao">
+        <label for="classificacaoSelect">Classificação de risco (opcional, autodeclarada)</label>
+        <select id="classificacaoSelect">
+          <option value="">Não informado</option>
+          <option value="alto">Alto</option>
+          <option value="muito alto">Muito alto</option>
+        </select>
+      </div>
+    </div>
+
+    <p class="upload-erro" id="uploadErro" hidden></p>
+
+    <div id="mapaAreas" hidden></div>
+
+    <div class="cards-areas" id="cardsAreas"></div>
+  </section>
+</main>
+
+<footer>
+  ORCA: dados públicos da CPRM/SGB, INMET e ANA. Site estático, atualizado
+  diariamente. <a href="https://github.com/hcristosm/ORCA#readme">Sobre o projeto</a> ·
+  <a href="https://github.com/hcristosm/ORCA">GitHub <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg></a>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.min.js"
+        integrity="sha384-All+uTLkqRBeyGd6OkVGJGbq2ChIKDWUrewcZ+uQDZzF11/b9sgw5p714836LTKO" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"
+        integrity="sha384-4a+9x4ql6wch9epMfqnC3bSjASMJDDqpSuVblbNd6thkfnwdBucHgePPyl0exaFY" crossorigin="anonymous"></script>
+<script src="areas-customizadas.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  let UF = "sp";
+  let ufsDisponiveis = ["sp"];
+
+  async function carregarUfsDisponiveis() {
+    try {
+      const resp = await fetch("data/ufs_disponiveis.json");
+      if (resp.ok) {
+        const lista = await resp.json();
+        if (Array.isArray(lista) && lista.length > 0) {
+          ufsDisponiveis = lista.map((uf) => uf.toLowerCase());
+        }
+      }
+    } catch (e) {
+      // manifesto ainda não existe (deploy antigo/dev local só com SP) -- mantém o padrão.
+    }
+    if (!ufsDisponiveis.includes(UF)) UF = ufsDisponiveis[0];
+
+    const select = document.getElementById("ufSelect");
+    select.innerHTML = ufsDisponiveis
+      .map((uf) => `<option value="${uf}">${uf.toUpperCase()}</option>`)
+      .join("");
+    select.value = UF;
+    select.addEventListener("change", () => {
+      UF = select.value;
+      // Limpa a malha/nomes do IBGE em cache: pertencem à UF anterior e não podem
+      // ser usados (nem transitoriamente, antes do novo fetch terminar) para a nova UF.
+      malhaMunicipios = null;
+      malhaMunicipiosUf = null;
+      codareaPorNome = null;
+      codareaPorNomeUf = null;
+      // Zera também as promessas em andamento: se um fetch da UF anterior ainda não
+      // terminou, isso libera garantirMalhaMunicipios()/garantirNomesMunicipios() para
+      // disparar um novo fetch já para a UF atual em vez de aguardar o antigo (que,
+      // mesmo assim, não conseguirá gravar em cache sob a UF errada -- ver guarda de
+      // "ufAlvo === UF" dentro dessas funções).
+      promessaMalha = null;
+      promessaNomes = null;
+      // O município filtrado pertence à UF anterior: mantê-lo faria
+      // setoresFiltrados() filtrar por um município inexistente na nova UF
+      // (mapa/cards/tabela vazios) e ainda bloquearia a promoção para o
+      // choropleth, que é guardada por !estado.municipio.
+      estado.municipio = "";
+      const inputBusca = document.getElementById("buscaMunicipio");
+      if (inputBusca) inputBusca.value = "";
+      limparGrafico();
+      carregarDados();
+    });
+  }
+
+  function token(nome) {
+    return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+  }
+  function coresGrau() {
+    return { "alto": token("--risco-alto"), "muito alto": token("--risco-muito-alto") };
+  }
+  function corPadrao() { return token("--risco-padrao"); }
+  function corAtencao() { return token("--contorno-atencao"); }
+  function corSerie() { return token("--serie-chuva"); }
+  function coresVento() {
+    return {
+      "atencao": token("--vento-atencao"),
+      "perigo": token("--vento-perigo"),
+      "grande_perigo": token("--vento-grande-perigo"),
+    };
+  }
+  function rotuloSeveridade(sev) {
+    return { "atencao": "Atenção", "perigo": "Perigo", "grande_perigo": "Grande perigo" }[sev] || sev;
+  }
+
+  const estado = { janela: 72, limiar: 100, municipio: "" };
+  let setoresGeoJSON = null;
+  let series = {};
+  let previsao = null;
+  let ventoGeoJSON = null;
+  let malhaMunicipios = null;
+  let malhaMunicipiosUf = null;
+  let codareaPorNome = null;
+  let codareaPorNomeUf = null;
+  let opcoesMunicipios = [];
+  let camadaSetores = null;
+  let camadaChoropleth = null;
+  let camadaSetoresTodos = null;
+  let camadaVento = null;
+  let mapa = null;
+  let legendaDiv = null;
+  let grafico = null;
+
+  function normalizarNome(s) {
+    return (s || "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  const CHAVE_TEMA = "orca-tema";
+
+  function temaAtual() {
+    const salvo = localStorage.getItem(CHAVE_TEMA);
+    if (salvo === "claro" || salvo === "escuro") return salvo;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro";
+  }
+
+  function aplicarTema(tema) {
+    document.documentElement.setAttribute("data-tema", tema);
+    document.getElementById("logoImg").src =
+      tema === "escuro" ? "../logo/orca-logo-escuro.png" : "../logo/orca-logo-claro.png";
+  }
+
+  function alternarTema() {
+    const novo = temaAtual() === "escuro" ? "claro" : "escuro";
+    localStorage.setItem(CHAVE_TEMA, novo);
+    aplicarTema(novo);
+    if (setoresGeoJSON) {
+      inicializarMapa();
+      renderizarTudo();
+    }
+    if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
+    if (window.ORCA_atualizarTemaAreas) window.ORCA_atualizarTemaAreas();
+  }
+
+  async function carregarDados() {
+    // Mesma guarda de "UF alvo" usada em garantirMalhaMunicipios()/garantirNomesMunicipios():
+    // se o usuário trocar de UF (ou voltar para a anterior) antes desta carga terminar,
+    // esta chamada foi superada por uma mais nova e NÃO pode gravar nada no estado --
+    // senão a UI reverteria silenciosamente para os dados da UF errada.
+    const ufAlvo = UF;
+    const [setoresResp, seriesResp, metaResp] = await Promise.all([
+      fetch(`data/setores_${ufAlvo}.geojson`),
+      fetch(`data/series_${ufAlvo}.json`),
+      fetch(`data/meta_${ufAlvo}.json`),
+    ]);
+    if (UF !== ufAlvo) return;
+    if (!setoresResp.ok || !seriesResp.ok || !metaResp.ok) {
+      document.getElementById("selo").textContent =
+        "Não foi possível carregar os dados. Rode `python -m src.cli exportar-dashboard --uf SP` primeiro.";
+      return;
+    }
+    const setoresCarregados = await setoresResp.json();
+    const seriesCarregadas = await seriesResp.json();
+    const meta = await metaResp.json();
+
+    let previsaoCarregada = null;
+    try {
+      const previsaoResp = await fetch(`data/previsao_${ufAlvo}.json`);
+      previsaoCarregada = previsaoResp.ok ? await previsaoResp.json() : null;
+    } catch (e) {
+      previsaoCarregada = null;
+    }
+
+    let ventoCarregado = null;
+    try {
+      const ventoResp = await fetch(`data/vento_${ufAlvo}.geojson`);
+      ventoCarregado = ventoResp.ok ? await ventoResp.json() : null;
+    } catch (e) {
+      ventoCarregado = null;
+    }
+
+    // Commit atômico do estado: só depois de tudo buscado, e só se ainda somos a
+    // carga mais recente.
+    if (UF !== ufAlvo) return;
+    setoresGeoJSON = setoresCarregados;
+    series = seriesCarregadas;
+    previsao = previsaoCarregada;
+    ventoGeoJSON = ventoCarregado;
+
+    const detalheFonte = meta.fonte === "openmeteo"
+      ? "Fonte: Open-Meteo (consulta direta por setor)"
+      : `${meta.total_estacoes_inmet} estações INMET, ${meta.total_estacoes_ana} estações ANA`;
+    document.getElementById("selo").innerHTML =
+      `<b>Referência da chuva:</b> ${formatarData(meta.referencia)} · ` +
+      `<b>Dados gerados em:</b> ${formatarData(meta.gerado_em)} · ` +
+      detalheFonte;
+
+    popularBuscaMunicipios();
+    inicializarMapa();
+    renderizarTudo();
+
+    // Malha/nomes do IBGE não bloqueiam o primeiro render (cards/tabela/mapa já saem
+    // com os dados locais); quando chegam, promovem o mapa para o choropleth municipal.
+    Promise.all([garantirMalhaMunicipios(), garantirNomesMunicipios()]).then(() => {
+      if (UF !== ufAlvo) return;
+      if (!estado.municipio && choroplethDisponivel() && !camadaChoropleth) renderizarTudo();
+    });
+  }
+
+  function formatarData(iso) {
+    try {
+      return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "UTC" }) + " UTC";
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  const TIMEOUT_IBGE_MS = 6000;
+
+  async function fetchComTimeout(url, ms = TIMEOUT_IBGE_MS) {
+    const controlador = new AbortController();
+    const idTimeout = setTimeout(() => controlador.abort(), ms);
+    try {
+      return await fetch(url, { signal: controlador.signal });
+    } finally {
+      clearTimeout(idTimeout);
+    }
+  }
+
+  function malhaMunicipiosUrl() {
+    return `https://servicodados.ibge.gov.br/api/v3/malhas/estados/${UF.toUpperCase()}` +
+      `?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio`;
+  }
+
+  let promessaMalha = null;
+  async function garantirMalhaMunicipios() {
+    if (malhaMunicipios && malhaMunicipiosUf === UF) return malhaMunicipios;
+    if (!promessaMalha) {
+      // Evita disparar fetches duplicados se dois gatilhos (load inicial + toggle do
+      // vento) chamarem isso antes do primeiro terminar.
+      // Captura a UF alvo no início do fetch: se a UF mudar antes deste resolver (o
+      // usuário trocou de seletor), o resultado não pode ser gravado sob a UF nova.
+      const ufAlvo = UF;
+      const minhaPromessa = (async () => {
+        try {
+          const resp = await fetchComTimeout(malhaMunicipiosUrl());
+          if (resp.ok) {
+            const dados = await resp.json();
+            if (ufAlvo === UF) {
+              malhaMunicipios = dados;
+              malhaMunicipiosUf = ufAlvo;
+            }
+            // Se a UF já mudou, descarta: outro fetch (para a UF atual) é quem deve
+            // preencher o cache.
+          } else {
+            console.warn("Falha ao buscar a malha municipal do IBGE: HTTP " + resp.status);
+          }
+        } catch (e) {
+          console.warn("Falha ao buscar a malha municipal do IBGE", e);
+        } finally {
+          // Só limpa a promessa em andamento se ela ainda for esta: uma troca de UF
+          // pode já ter zerado promessaMalha e iniciado um fetch mais novo enquanto
+          // este ainda estava pendente -- nesse caso não podemos apagar a referência
+          // do fetch mais novo.
+          if (promessaMalha === minhaPromessa) promessaMalha = null;
+        }
+      })();
+      promessaMalha = minhaPromessa;
+    }
+    await promessaMalha;
+    return malhaMunicipios;
+  }
+
+  function nomesMunicipiosUrl() {
+    return `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${UF.toUpperCase()}/municipios`;
+  }
+
+  let promessaNomes = null;
+  async function garantirNomesMunicipios() {
+    if (codareaPorNome && codareaPorNomeUf === UF) return codareaPorNome;
+    if (!promessaNomes) {
+      // Mesma lógica de captura/descarte de garantirMalhaMunicipios(), aplicada aqui
+      // para o índice de nomes de município.
+      const ufAlvo = UF;
+      const minhaPromessa = (async () => {
+        try {
+          const resp = await fetchComTimeout(nomesMunicipiosUrl());
+          if (resp.ok) {
+            const lista = await resp.json();
+            const indice = new Map();
+            for (const m of lista) indice.set(normalizarNome(m.nome), String(m.id));
+            if (ufAlvo === UF) {
+              codareaPorNome = indice;
+              codareaPorNomeUf = ufAlvo;
+            }
+          } else {
+            console.warn("Falha ao buscar os nomes de município do IBGE: HTTP " + resp.status);
+          }
+        } catch (e) {
+          console.warn("Falha ao buscar os nomes de município do IBGE", e);
+        } finally {
+          if (promessaNomes === minhaPromessa) promessaNomes = null;
+        }
+      })();
+      promessaNomes = minhaPromessa;
+    }
+    await promessaNomes;
+    return codareaPorNome;
+  }
+
+  // Atualização de DADOS da busca: roda a cada carregarDados(), ou seja, uma vez
+  // por troca de UF. Só troca a lista de opções -- os listeners são registrados
+  // uma única vez, em configurarBuscaMunicipios(), porque registrá-los aqui
+  // acumularia uma cópia de cada handler (inclusive um no `document`) por troca
+  // de UF, com disparo duplicado e vazamento permanente.
+  function popularBuscaMunicipios() {
+    opcoesMunicipios = Array.from(new Set(setoresGeoJSON.features.map(f => f.properties.munic))).sort();
+  }
+
+  // Registro ÚNICO dos listeners da busca de município. Os elementos
+  // (#buscaMunicipio / #buscaMunicipioSugestoes) são estáticos no HTML e nunca
+  // são recriados, então basta ligar os handlers uma vez no boot; eles leem
+  // `opcoesMunicipios` (variável de módulo) no momento do disparo, portanto já
+  // enxergam a lista da UF atual.
+  function configurarBuscaMunicipios() {
+    const input = document.getElementById("buscaMunicipio");
+    const lista = document.getElementById("buscaMunicipioSugestoes");
+    let indiceAtivo = -1;
+    let ultimoFiltro = null;
+
+    function renderSugestoes(filtro) {
+      ultimoFiltro = filtro;
+      const termo = normalizarNome(filtro);
+      const opcoes = termo ? opcoesMunicipios.filter(m => normalizarNome(m).includes(termo)).slice(0, 8) : [];
+      indiceAtivo = -1;
+      lista.innerHTML = "";
+      if (!opcoes.length) { lista.hidden = true; return; }
+      for (const m of opcoes) {
+        const li = document.createElement("li");
+        li.setAttribute("role", "option");
+        li.dataset.nome = m;
+        li.textContent = m;
+        lista.appendChild(li);
+      }
+      lista.hidden = false;
+    }
+
+    function marcarAtivo() {
+      Array.from(lista.children).forEach((li, i) => li.classList.toggle("ativo", i === indiceAtivo));
+    }
+
+    function escolher(nome) {
+      clearTimeout(debounceId);
+      input.value = nome;
+      lista.hidden = true;
+      lista.innerHTML = "";
+      selecionarMunicipio(nome);
+    }
+
+    let debounceId = null;
+    input.addEventListener("input", () => {
+      clearTimeout(debounceId);
+      const valor = input.value;
+      if (!valor.trim()) limparMunicipio();
+      debounceId = setTimeout(() => renderSugestoes(valor), 120);
+    });
+
+    input.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        clearTimeout(debounceId);
+        // Só recalcula se a lista visível estiver atrasada (debounce de 120ms) em
+        // relação ao texto atual; preserva indiceAtivo/realce de seta-cima/seta-baixo
+        // quando a lista já está em dia.
+        if (ultimoFiltro !== input.value) renderSugestoes(input.value);
+        if (lista.children.length) {
+          escolher((lista.children[indiceAtivo] || lista.children[0]).dataset.nome);
+        } else if (!input.value.trim()) {
+          limparMunicipio();
+        } else {
+          // Sem correspondência: volta o campo para o que está de fato aplicado.
+          input.value = estado.municipio;
+        }
+        return;
+      }
+      const itens = lista.children;
+      if (lista.hidden || !itens.length) return;
+      if (ev.key === "ArrowDown") { ev.preventDefault(); indiceAtivo = Math.min(indiceAtivo + 1, itens.length - 1); marcarAtivo(); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); indiceAtivo = Math.max(indiceAtivo - 1, 0); marcarAtivo(); }
+      else if (ev.key === "Escape") {
+        // Marca o texto atual como "já resolvido" (sem sugestões) para que um Enter
+        // logo em seguida não reabra a lista e selecione algo que acabou de ser dispensado.
+        clearTimeout(debounceId);
+        lista.hidden = true;
+        lista.innerHTML = "";
+        ultimoFiltro = input.value;
+      }
+    });
+
+    lista.addEventListener("click", ev => {
+      const li = ev.target.closest("li[data-nome]");
+      if (li) escolher(li.dataset.nome);
+    });
+
+    function fecharEReconciliar() {
+      clearTimeout(debounceId);
+      lista.hidden = true;
+      // Se o usuário editou o texto sem confirmar uma sugestão, volta o campo
+      // para refletir o que está de fato aplicado (evita busca e mapa dessincronizados).
+      if (input.value !== estado.municipio) input.value = estado.municipio;
+    }
+
+    document.addEventListener("click", ev => {
+      if (!ev.target.closest(".busca-municipio")) fecharEReconciliar();
+    });
+
+    input.addEventListener("blur", () => {
+      // Adiado: um clique numa sugestão dispara blur antes de click, então sem o
+      // atraso a lista fecharia antes de escolher() rodar.
+      setTimeout(fecharEReconciliar, 150);
+    });
+  }
+
+  // Os guardas `setoresGeoJSON` existem porque os listeners da busca passaram a
+  // ser registrados no boot (uma vez só, ver configurarBuscaMunicipios), ou seja,
+  // já respondem antes da primeira carga terminar.
+  function selecionarMunicipio(nome) {
+    estado.municipio = nome;
+    const input = document.getElementById("buscaMunicipio");
+    if (input.value !== nome) input.value = nome;
+    if (!setoresGeoJSON) return;
+    renderizarTudo();
+    atualizarGraficoParaMunicipio(nome);
+  }
+
+  function limparMunicipio() {
+    estado.municipio = "";
+    if (setoresGeoJSON) renderizarTudo();
+    limparGrafico();
+  }
+
+  function encontrarCodigoEstacao(nomeMunicipio) {
+    // Usa o vínculo já resolvido no pipeline (codigo_estacao por setor) em vez de comparar
+    // nomes: com fonte="inmet" a estação mais próxima raramente tem o nome do município.
+    // Percorre todos os setores do município (não só o primeiro): com fonte="inmet" setores
+    // do mesmo município podem apontar para estações diferentes, e nem todas têm série válida.
+    for (const f of setoresGeoJSON.features) {
+      if (f.properties.munic !== nomeMunicipio) continue;
+      const codigo = f.properties.codigo_estacao;
+      if (codigo && codigo !== "openmeteo" && series[codigo]) return codigo;
+    }
+    if (series[nomeMunicipio]) return nomeMunicipio;
+    return null;
+  }
+
+  function atualizarGraficoParaMunicipio(nome) {
+    const codigo = encontrarCodigoEstacao(nome);
+    const rotulo = document.getElementById("estacaoRotulo");
+    if (!codigo) {
+      limparGrafico();
+      rotulo.textContent = `Sem série de chuva disponível para ${nome}.`;
+      return;
+    }
+    rotulo.textContent = `${series[codigo].nome}: ${series[codigo].fonte.toUpperCase()}`;
+    renderizarGrafico(codigo);
+  }
+
+  function limparGrafico() {
+    if (grafico) { grafico.destroy(); grafico = null; }
+    document.getElementById("grafico").hidden = true;
+    document.getElementById("graficoVazio").hidden = false;
+    document.getElementById("estacaoRotulo").textContent = "Busque um município acima";
+  }
+
+  const TILE_URLS = {
+    claro: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    escuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  };
+
+  function inicializarMapa() {
+    clearTimeout(idAgendaSetoresCompleto);
+    if (mapa) { mapa.remove(); mapa = null; camadaSetores = null; camadaChoropleth = null; camadaSetoresTodos = null; }
+    mapa = L.map("mapa");
+    L.tileLayer(TILE_URLS[temaAtual()], {
+      attribution: "© OpenStreetMap, © CARTO", maxZoom: 19,
+    }).addTo(mapa);
+
+    const legenda = L.control({ position: "bottomleft" });
+    legenda.onAdd = function () {
+      legendaDiv = L.DomUtil.create("div", "legenda");
+      legendaDiv.innerHTML = conteudoLegenda();
+      return legendaDiv;
+    };
+    legenda.addTo(mapa);
+
+    camadaVento = L.layerGroup();
+    camadaSetoresTodos = L.layerGroup();
+    const overlays = { "Setores de risco (estado completo)": camadaSetoresTodos };
+    if (ventoGeoJSON && ventoGeoJSON.features.length) overlays["Rajada de vento"] = camadaVento;
+    L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
+
+    mapa.on("overlayadd", ev => {
+      if (ev.name === "Rajada de vento") {
+        // Também tenta recuperar os nomes do IBGE aqui: é o único gatilho de retry
+        // disponível se aquele fetch falhou/expirou no carregamento inicial.
+        Promise.all([garantirMalhaMunicipios(), garantirNomesMunicipios()]).then(() => {
+          renderizarVento();
+          if (!estado.municipio && choroplethDisponivel() && !camadaChoropleth) renderizarTudo();
+        });
+      }
+      else if (ev.name === "Setores de risco (estado completo)") { renderizarSetoresCompletoEstado(); atualizarLegenda(); }
+    });
+    mapa.on("overlayremove", ev => {
+      if (ev.name === "Setores de risco (estado completo)") { camadaSetoresTodos.clearLayers(); atualizarLegenda(); }
+    });
+  }
+
+  function setoresFiltrados(municipio = estado.municipio, excluirMunicipio = null) {
+    const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+    return setoresGeoJSON.features.filter(f =>
+      (!municipio || f.properties.munic === municipio) &&
+      (!excluirMunicipio || f.properties.munic !== excluirMunicipio)
+    ).map(f => ({ f, chuva: f.properties[campo] }));
+  }
+
+  function primeiroPontoQueCruza(trajetoria, limiar) {
+    if (!trajetoria) return null;
+    for (const [iso, mm] of trajetoria) {
+      if (typeof mm === "number" && mm >= limiar) return iso;
+    }
+    return null;
+  }
+
+  function calcularAlertaPrevisto(filtrados) {
+    if (!previsao) return [];
+    const previsto = [];
+    for (const r of filtrados) {
+      const numSetor = r.f.properties.num_setor;
+      const chuva72hAtual = r.f.properties.chuva_72h;
+      const jaEmAtencao72h = typeof chuva72hAtual === "number" && chuva72hAtual >= estado.limiar;
+      if (jaEmAtencao72h) continue;
+      const quando = primeiroPontoQueCruza(previsao[numSetor], estado.limiar);
+      if (quando) previsto.push({ f: r.f, quando });
+    }
+    previsto.sort((a, b) => a.quando.localeCompare(b.quando));
+    return previsto;
+  }
+
+  function calcularRecorte(municipio, excluirMunicipio = null) {
+    const filtrados = setoresFiltrados(municipio, excluirMunicipio);
+    const emAtencao = filtrados.filter(r => typeof r.chuva === "number" && r.chuva >= estado.limiar);
+    const alertaPrevisto = calcularAlertaPrevisto(filtrados);
+    return { filtrados, emAtencao, alertaPrevisto };
+  }
+
+  function renderizarTudo() {
+    const { filtrados, emAtencao, alertaPrevisto } = calcularRecorte(estado.municipio);
+
+    renderizarCards(filtrados, emAtencao, alertaPrevisto);
+    renderizarMapa(filtrados, emAtencao, alertaPrevisto);
+    renderizarTabela(emAtencao, alertaPrevisto);
+    agendarRenderizarSetoresCompletoEstado();
+  }
+
+  let idAgendaSetoresCompleto = null;
+  function agendarRenderizarSetoresCompletoEstado() {
+    if (!mapa || !camadaSetoresTodos || !mapa.hasLayer(camadaSetoresTodos)) return;
+    // Debounced: essa camada opcional reconstrói ~900 polígonos/tooltips, custosa
+    // demais para rodar a cada evento "input" do slider de limiar.
+    clearTimeout(idAgendaSetoresCompleto);
+    idAgendaSetoresCompleto = setTimeout(renderizarSetoresCompletoEstado, 200);
+  }
+
+  function renderizarCards(filtrados, emAtencao, alertaPrevisto) {
+    const grauAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "alto").length;
+    const grauMuitoAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "muito alto").length;
+    const cards = [
+      { rotulo: "Setores no recorte", valor: filtrados.length },
+      { rotulo: "Grau alto", valor: grauAlto },
+      { rotulo: "Grau muito alto", valor: grauMuitoAlto },
+      { rotulo: `Em atenção (≥ ${estado.limiar}mm)`, valor: emAtencao.length },
+    ];
+    if (previsao) {
+      cards.push({ rotulo: "Alerta previsto (72h)", valor: alertaPrevisto.length });
+    }
+    document.getElementById("cards").innerHTML = cards.map(c =>
+      `<div class="card"><div class="rotulo">${c.rotulo}</div><div class="valor">${c.valor}</div></div>`
+    ).join("");
+  }
+
+  function choroplethDisponivel() {
+    return !!(malhaMunicipios && codareaPorNome && codareaPorNome.size);
+  }
+
+  // Única fonte de verdade sobre o que o mapa principal está mostrando quando
+  // nenhum município está selecionado: o choropleth municipal, ou o fallback com
+  // todos os setores (IBGE indisponível). Com município selecionado é sempre "municipio".
+  function modoMapa() {
+    if (estado.municipio) return "municipio";
+    return choroplethDisponivel() ? "choropleth" : "fallback-estado";
+  }
+
+  function modoSetoresVisivel() {
+    return modoMapa() !== "choropleth" ||
+      !!(camadaSetoresTodos && mapa && mapa.hasLayer(camadaSetoresTodos));
+  }
+
+  function conteudoLegenda() {
+    const cores = coresGrau();
+    const linhasSetor = modoSetoresVisivel()
+      ? '<span style="border:2px solid ' + corAtencao() + ';padding:0 4px">Em atenção</span><br>' +
+        '<span style="border:2px dashed ' + corAtencao() + ';padding:0 4px">Alerta previsto</span>'
+      : '<i>Busque um município para ver setores em atenção/alerta previsto</i>';
+    return '<b>Grau de risco</b><br>' +
+      '<span class="amostra" style="background:' + cores["alto"] + '"></span>Alto<br>' +
+      '<span class="amostra" style="background:' + cores["muito alto"] + '"></span>Muito alto<br>' +
+      linhasSetor +
+      (ventoGeoJSON && ventoGeoJSON.features.length
+        ? '<br><b>Vento (rajada 24h)</b><br>' +
+          '<span class="amostra" style="background:' + coresVento()["atencao"] + '"></span>Atenção<br>' +
+          '<span class="amostra" style="background:' + coresVento()["perigo"] + '"></span>Perigo<br>' +
+          '<span class="amostra" style="background:' + coresVento()["grande_perigo"] + '"></span>Grande perigo'
+        : '');
+  }
+
+  function atualizarLegenda() {
+    if (legendaDiv) legendaDiv.innerHTML = conteudoLegenda();
+  }
+
+  function corPorGrau(grau) {
+    return coresGrau()[(grau || "").toLowerCase()] || corPadrao();
+  }
+
+  function rotuloGrau(grau) {
+    return grau ? grau.charAt(0).toUpperCase() + grau.slice(1) : "—";
+  }
+
+  function criarCamadaSetores(filtrados, emAtencao, alertaPrevisto) {
+    const codigosAtencao = new Set(emAtencao.map(r => r.f.properties.num_setor));
+    const codigosPrevisto = new Set(alertaPrevisto.map(r => r.f.properties.num_setor));
+    const quandoPorSetor = new Map(alertaPrevisto.map(r => [r.f.properties.num_setor, r.quando]));
+    const colecao = { type: "FeatureCollection", features: filtrados.map(r => r.f) };
+
+    return L.geoJSON(colecao, {
+      style: feature => {
+        const numSetor = feature.properties.num_setor;
+        const emAtencaoAgora = codigosAtencao.has(numSetor);
+        const previstoAgora = codigosPrevisto.has(numSetor);
+        const cor = corPorGrau(feature.properties.grau_risco);
+        return {
+          fillColor: cor, fillOpacity: 0.75,
+          color: emAtencaoAgora ? corAtencao() : cor,
+          weight: emAtencaoAgora || previstoAgora ? 3 : 1,
+          dashArray: previstoAgora && !emAtencaoAgora ? "6 4" : null,
+        };
+      },
+      onEachFeature: (feature, layer) => {
+        const p = feature.properties;
+        const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+        const chuva = typeof p[campo] === "number" ? p[campo].toFixed(1) : "—";
+        const linhaFonte = p.fonte_estacao === "openmeteo"
+          ? `Fonte: ${(p.fonte_estacao || "—").toUpperCase()}<br>`
+          : `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
+            `(${(p.fonte_estacao || "—").toUpperCase()})<br>`;
+        const quando = quandoPorSetor.get(p.num_setor);
+        const linhaPrevisao = quando ? `<br><b>Alerta previsto:</b> ${formatarData(quando)}` : "";
+        layer.bindTooltip(
+          `<b>${p.munic}</b><br>Setor: ${p.num_setor}<br>Grau: ${p.grau_risco}<br>` +
+          linhaFonte +
+          `Chuva ${estado.janela}h: ${chuva}mm` +
+          linhaPrevisao
+        );
+      },
+    });
+  }
+
+  function renderizarMapa(filtrados, emAtencao, alertaPrevisto) {
+    if (camadaSetores) { mapa.removeLayer(camadaSetores); camadaSetores = null; }
+    const modo = modoMapa();
+
+    if (modo === "choropleth") {
+      // O choropleth não depende de janela/limiar (só de grau_risco); não reconstrói
+      // à toa a cada tick do slider se ele já está na tela.
+      if (!camadaChoropleth) renderizarChoroplethMunicipios();
+    } else {
+      if (camadaChoropleth) { mapa.removeLayer(camadaChoropleth); camadaChoropleth = null; }
+      camadaSetores = criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(mapa);
+      if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [20, 20] });
+    }
+    atualizarLegenda();
+  }
+
+  function calcularRiscoPorMunicipio() {
+    const rank = { "alto": 1, "muito alto": 2 };
+    const porCodarea = new Map();
+    const semCorrespondencia = new Set();
+    for (const f of setoresGeoJSON.features) {
+      const codarea = codareaPorNome.get(normalizarNome(f.properties.munic));
+      if (!codarea) { semCorrespondencia.add(f.properties.munic); continue; }
+      const atual = porCodarea.get(codarea) || { grauMax: "", nome: f.properties.munic, qtdSetores: 0 };
+      atual.qtdSetores++;
+      const grau = (f.properties.grau_risco || "").toLowerCase();
+      if ((rank[grau] || 0) > (rank[atual.grauMax] || 0)) atual.grauMax = grau;
+      porCodarea.set(codarea, atual);
+    }
+    if (semCorrespondencia.size) {
+      console.warn(
+        "Municípios sem correspondência na malha do IBGE (fora do choropleth):",
+        Array.from(semCorrespondencia)
+      );
+    }
+    return porCodarea;
+  }
+
+  function filtrarMalhaPorCodarea(dadosPorCodarea) {
+    return {
+      type: "FeatureCollection",
+      features: malhaMunicipios.features.filter(f => dadosPorCodarea.has(String(f.properties.codarea))),
+    };
+  }
+
+  function renderizarChoroplethMunicipios() {
+    const riscoPorCodarea = calcularRiscoPorMunicipio();
+    const colecao = filtrarMalhaPorCodarea(riscoPorCodarea);
+
+    camadaChoropleth = L.geoJSON(colecao, {
+      style: feature => {
+        const r = riscoPorCodarea.get(String(feature.properties.codarea));
+        return { fillColor: corPorGrau(r.grauMax), fillOpacity: 0.7, color: corPadrao(), weight: 1 };
+      },
+      onEachFeature: (feature, layer) => {
+        const r = riscoPorCodarea.get(String(feature.properties.codarea));
+        layer.bindTooltip(
+          `<b>${r.nome}</b><br>Grau máximo: ${rotuloGrau(r.grauMax)}<br>` +
+          `Setores mapeados: ${r.qtdSetores}<br><i>Clique para ver o detalhe</i>`
+        );
+        layer.on("click", () => selecionarMunicipio(r.nome));
+      },
+    }).addTo(mapa);
+
+    if (colecao.features.length) mapa.fitBounds(camadaChoropleth.getBounds(), { padding: [20, 20] });
+  }
+
+  function renderizarSetoresCompletoEstado() {
+    if (!camadaSetoresTodos || !setoresGeoJSON || !mapa || !mapa.hasLayer(camadaSetoresTodos)) return;
+    camadaSetoresTodos.clearLayers();
+    if (modoMapa() === "fallback-estado") {
+      // O mapa principal já caiu no fallback com todos os setores (choropleth indisponível);
+      // não duplica a mesma camada aqui.
+      return;
+    }
+    // Exclui o município selecionado: seus setores já estão em camadaSetores (visão detalhada).
+    const { filtrados, emAtencao, alertaPrevisto } = calcularRecorte("", estado.municipio);
+    criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(camadaSetoresTodos);
+  }
+
+  function renderizarVento() {
+    if (!camadaVento) return;
+    camadaVento.clearLayers();
+    if (!malhaMunicipios || !ventoGeoJSON || !ventoGeoJSON.features.length) return;
+
+    const porCodarea = new Map(
+      ventoGeoJSON.features.map(f => [String(f.properties.codarea), f.properties])
+    );
+    const cores = coresVento();
+    const coloridos = filtrarMalhaPorCodarea(porCodarea);
+
+    L.geoJSON(coloridos, {
+      style: feature => {
+        const p = porCodarea.get(String(feature.properties.codarea));
+        return {
+          fillColor: cores[p.severidade] || corPadrao(),
+          fillOpacity: 0.65,
+          color: corAtencao(),
+          weight: 1,
+        };
+      },
+      onEachFeature: (feature, layer) => {
+        const p = porCodarea.get(String(feature.properties.codarea));
+        layer.bindTooltip(
+          `<b>${p.munic}</b><br>Rajada (24h): ${p.rajada_kmh_24h.toFixed(1)} km/h<br>` +
+          `Severidade: ${rotuloSeveridade(p.severidade)}`
+        );
+      },
+    }).addTo(camadaVento);
+  }
+
+  function renderizarTabela(emAtencao, alertaPrevisto) {
+    const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+    const ordenado = emAtencao.slice().sort((a, b) => (b.chuva || 0) - (a.chuva || 0));
+    const corpo = document.getElementById("tabelaCorpo");
+    const vazio = document.getElementById("tabelaVazia");
+
+    if (!ordenado.length) {
+      corpo.innerHTML = "";
+      vazio.hidden = false;
+    } else {
+      vazio.hidden = true;
+      corpo.innerHTML = ordenado.map(r => {
+        const p = r.f.properties;
+        return `<tr><td>${p.munic}</td><td>${p.num_setor}</td><td>${p.grau_risco}</td>` +
+          `<td>${(p[campo] || 0).toFixed(1)}</td><td>${(p.fonte_estacao || "—").toUpperCase()}</td></tr>`;
+      }).join("");
+    }
+
+    const blocoPrevisto = document.getElementById("blocoAlertaPrevisto");
+    if (!previsao || !alertaPrevisto.length) {
+      blocoPrevisto.hidden = true;
+      return;
+    }
+    blocoPrevisto.hidden = false;
+    document.getElementById("tabelaPrevistoCorpo").innerHTML = alertaPrevisto.map(r => {
+      const p = r.f.properties;
+      return `<tr><td>${p.munic}</td><td>${p.num_setor}</td><td>${p.grau_risco}</td>` +
+        `<td>${formatarData(r.quando)}</td></tr>`;
+    }).join("");
+  }
+
+  function renderizarGrafico(codigoEstacao) {
+    const dados = series[codigoEstacao];
+    if (!dados) return;
+    document.getElementById("grafico").hidden = false;
+    document.getElementById("graficoVazio").hidden = true;
+    const ctx = document.getElementById("grafico").getContext("2d");
+    const labels = dados.serie.map(p => new Date(p[0]).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", timeZone: "UTC" }));
+    const valores = dados.serie.map(p => p[1]);
+
+    if (grafico) grafico.destroy();
+    grafico = new Chart(ctx, {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Chuva (mm)", data: valores, backgroundColor: corSerie() }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } },
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+
+  document.getElementById("janelaToggle").addEventListener("click", ev => {
+    const btn = ev.target.closest("button[data-janela]");
+    if (!btn) return;
+    estado.janela = Number(btn.dataset.janela);
+    document.querySelectorAll("#janelaToggle button").forEach(b => b.classList.toggle("ativo", b === btn));
+    renderizarTudo();
+  });
+
+  document.getElementById("limiarSlider").addEventListener("input", ev => {
+    estado.limiar = Number(ev.target.value);
+    document.getElementById("limiarValor").textContent = estado.limiar;
+    renderizarTudo();
+  });
+
+  aplicarTema(temaAtual());
+  document.getElementById("botaoTema").addEventListener("click", alternarTema);
+  configurarBuscaMunicipios();
+
+  carregarUfsDisponiveis().then(carregarDados);
+})();
+</script>
+</body>
+</html>

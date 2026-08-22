@@ -1,0 +1,9 @@
+{
+"type": "FeatureCollection",
+"name": "vento_mg",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "codarea": "3121100", "munic": "Delfim Moreira", "rajada_kmh_24h": 62.6, "severidade": "atencao" }, "geometry": { "type": "Point", "coordinates": [ -45.286439827091286, -22.506533621332125 ] } },
+{ "type": "Feature", "properties": { "codarea": "3140407", "munic": "Marmelópolis", "rajada_kmh_24h": 62.6, "severidade": "atencao" }, "geometry": { "type": "Point", "coordinates": [ -45.170489870829719, -22.464940374434068 ] } }
+]
+}
