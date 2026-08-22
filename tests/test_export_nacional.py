@@ -8,8 +8,10 @@ import pytest
 import responses
 from shapely.geometry import Polygon
 
+import src.export.nacional as nacional
 import src.ingest.openmeteo as openmeteo
 from src.config import caminho_setores
+from src.export.dashboard_data import ExportacaoDashboardError
 from src.export.nacional import exportar_nacional
 from src.ingest.openmeteo import FORECAST_URL
 from src.storage import salvar_setores
@@ -92,6 +94,49 @@ def test_exportar_nacional_pula_uf_sem_setores_ingeridos(tmp_path: Path):
 def test_exportar_nacional_nenhuma_uf_ingerida_levanta_erro(tmp_path: Path):
     with pytest.raises(ValueError):
         exportar_nacional(["SP", "RJ"], 2026, tmp_path, tmp_path / "export")
+
+
+def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path: Path, monkeypatch):
+    """Reproduz o padrão observado em produção: uma UF específica esgota os
+    retries na 1a passada (rate limiting momentâneo da Open-Meteo), mas uma
+    segunda tentativa, em série e ao final, dá tempo pra isso passar e
+    recupera a UF em vez de ela sair faltando do dashboard.
+    """
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
+    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
+
+    chamadas: dict[str, int] = {"SP": 0, "RJ": 0}
+
+    def fake_exportar_dashboard(uf, ano, diretorio_dados, saida_dir, fonte, pontos_grade):
+        chamadas[uf] += 1
+        if uf == "SP" and chamadas[uf] == 1:
+            raise ExportacaoDashboardError("falha simulada na 1a passada")
+        return {"uf": uf}
+
+    monkeypatch.setattr(nacional, "exportar_dashboard", fake_exportar_dashboard)
+
+    saida = tmp_path / "export"
+    resultados = exportar_nacional(["SP", "RJ"], 2026, tmp_path, saida, orcamento_alvo=1000)
+
+    assert set(resultados.keys()) == {"SP", "RJ"}
+    assert chamadas["SP"] == 2
+    assert chamadas["RJ"] == 1
+
+
+def test_exportar_nacional_reexportacao_tambem_falha_mantem_uf_de_fora(tmp_path: Path, monkeypatch):
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
+
+    def sempre_falha(uf, ano, diretorio_dados, saida_dir, fonte, pontos_grade):
+        raise ExportacaoDashboardError("falha simulada persistente")
+
+    monkeypatch.setattr(nacional, "exportar_dashboard", sempre_falha)
+
+    saida = tmp_path / "export"
+    resultados = exportar_nacional(["SP"], 2026, tmp_path, saida, orcamento_alvo=1000)
+
+    assert resultados == {}
+    disponiveis = json.loads((saida / "ufs_disponiveis.json").read_text())
+    assert disponiveis == []
 
 
 def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypatch):

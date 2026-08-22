@@ -60,9 +60,15 @@ def exportar_nacional(
     UFs sem setores ingeridos localmente (`ingest-cprm` ainda não rodou para
     elas) são puladas com um aviso, não interrompem as demais. O mesmo vale
     para UFs cuja exportação individual falhar (ex.: Open-Meteo indisponível
-    para aquele lote). Grava `ufs_disponiveis.json` em `saida_dir` com as
-    UFs exportadas com sucesso (ordem alfabética), para o front-end popular
-    o seletor. Retorna `{uf: meta}` só das UFs exportadas com sucesso.
+    para aquele lote) — mas essas ganham uma 2a tentativa em série, ao final
+    da 1a passada concorrente: na prática, uma fração pequena de UFs esgota
+    os retries por rate limiting momentâneo da Open-Meteo mesmo com o
+    limiter global (ver `src/ingest/rate_limiter.py`), e essa 2a passada,
+    sem a concorrência das outras UFs, recupera a maioria delas. Grava
+    `ufs_disponiveis.json` em `saida_dir` com as UFs exportadas com sucesso
+    (ordem alfabética, mesmo se vazio), para o front-end popular o seletor.
+    Retorna `{uf: meta}` só das UFs exportadas com sucesso (após as 2
+    passadas).
 
     `orcamento_alvo` calibra APENAS a quantidade de pontos de grade distintos
     usados para os setores. A série por município
@@ -119,6 +125,20 @@ def exportar_nacional(
             if meta is not None:
                 resultados[uf] = meta
 
+    # UFs que esgotaram os retries na 1a passada (ex.: rate limiting
+    # momentâneo da Open-Meteo) ganham uma 2a chance em série, ao final: sem
+    # concorrência das outras UFs disputando o mesmo teto de requisições, dá
+    # tempo pra qualquer limitação temporária passar. Reduziu na prática as
+    # UFs que ficavam faltando do dashboard sem essa segunda passada.
+    falhas = [uf for uf in fatias if uf not in resultados]
+    if falhas:
+        logger.info("Reexportando %d UF(s) que falharam na 1a passada: %s", len(falhas), ", ".join(falhas))
+        for uf in falhas:
+            _, meta = _exportar_uf(uf)
+            if meta is not None:
+                resultados[uf] = meta
+
+    saida_dir.mkdir(parents=True, exist_ok=True)
     (saida_dir / "ufs_disponiveis.json").write_text(
         json.dumps(sorted(resultados.keys()), ensure_ascii=False, indent=2)
     )
