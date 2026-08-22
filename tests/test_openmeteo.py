@@ -290,3 +290,93 @@ def test_dias_historico_efetivo_pior_caso_entre_varios_pontos_domina(tmp_path):
     resultado = _dias_historico_efetivo([ponto_cacheado, ponto_novo], "chuva_mm", 30, cache, agora)
 
     assert resultado == 30  # ponto_novo nunca foi cacheado, domina o pior caso
+
+
+@responses.activate
+def test_fetch_variavel_batch_usa_cache_para_encolher_past_days(tmp_path):
+    from src.ingest.openmeteo import _fetch_variavel_batch
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+
+    # Pré-popula o cache com 29 dos 30 dias de histórico pedidos.
+    horas_cacheadas = [
+        h for h in pd.date_range(
+            agora.floor("h") - pd.Timedelta(days=30), agora.floor("h") - pd.Timedelta(days=1), freq="h",
+        ).strftime("%Y-%m-%dT%H:%M")
+    ]
+    cache.gravar([(ponto, h, 1.0) for h in horas_cacheadas], "precipitation", agora.isoformat())
+
+    corpos_recebidos = []
+
+    def callback(request):
+        corpo = json_module.loads(request.body)
+        corpos_recebidos.append(corpo)
+        horas = ["2026-08-10T10:00", "2026-08-10T11:00"]
+        return (200, {}, json_module.dumps({
+            "latitude": ponto[0], "longitude": ponto[1],
+            "hourly": {"time": horas, "precipitation": [5.0, 6.0]},
+        }))
+
+    responses.add_callback(responses.POST, FORECAST_URL, callback=callback, content_type="application/json")
+
+    series = _fetch_variavel_batch(
+        [ponto], "precipitation", "chuva_mm",
+        dias_historico=30, dias_previsao=1, timeout=60.0, max_retries=1, backoff_factor=0.01,
+        session=None, tamanho_lote=50, cache=cache, agora=agora,
+    )
+
+    assert corpos_recebidos[0]["past_days"] <= 2  # bem menor que os 30 originais
+    total_horas = len(series[0])
+    # ~29 dias cacheados (696h) + as horas novas da API, série completa preservada.
+    # Nota: o cache foi populado com exatamente 697 horas e a API mockada
+    # devolve só 2 horas novas (não sobrepostas), então o máximo teórico é
+    # 699 — o limiar original do brief (>700) era inatingível por qualquer
+    # implementação; ver task-3-report.md.
+    assert total_horas > 690
+
+
+@responses.activate
+def test_fetch_variavel_batch_grava_resposta_no_cache(tmp_path):
+    from src.ingest.openmeteo import _fetch_variavel_batch
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+    horas = ["2026-08-10T09:00", "2026-08-10T10:00"]
+    responses.add(
+        responses.POST, FORECAST_URL, status=200,
+        json={"latitude": ponto[0], "longitude": ponto[1], "hourly": {"time": horas, "precipitation": [1.0, 2.0]}},
+    )
+
+    _fetch_variavel_batch(
+        [ponto], "precipitation", "chuva_mm",
+        dias_historico=1, dias_previsao=1, timeout=60.0, max_retries=1, backoff_factor=0.01,
+        session=None, tamanho_lote=50, cache=cache, agora=agora,
+    )
+
+    lido = cache.ler([ponto], "precipitation", horas)
+    assert lido == {ponto: {"2026-08-10T09:00": 1.0, "2026-08-10T10:00": 2.0}}
+
+
+@responses.activate
+def test_fetch_variavel_batch_sem_cache_comportamento_identico_a_hoje():
+    from src.ingest.openmeteo import _fetch_variavel_batch
+
+    horas = ["2026-08-10T00:00"]
+    responses.add(
+        responses.POST, FORECAST_URL, status=200,
+        json={"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas, "precipitation": [1.0]}},
+    )
+
+    series = _fetch_variavel_batch(
+        [(-23.5, -46.6)], "precipitation", "chuva_mm",
+        dias_historico=30, dias_previsao=1, timeout=60.0, max_retries=1, backoff_factor=0.01,
+        session=None, tamanho_lote=50,
+    )
+
+    assert len(series) == 1
+    assert list(series[0]["chuva_mm"]) == [1.0]

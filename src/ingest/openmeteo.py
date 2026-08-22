@@ -175,6 +175,36 @@ def _post_lote(
     return payload if isinstance(payload, list) else [payload]
 
 
+def _serie_do_gap(
+    ponto: tuple[float, float],
+    variavel_hourly: str,
+    coluna_saida: str,
+    dias_historico: int,
+    dias_historico_lote: int,
+    cache: CacheOpenMeteo | None,
+    agora: pd.Timestamp,
+) -> pd.DataFrame:
+    """Horas que o POST (encolhido para `dias_historico_lote`) não cobriu, mas
+    o chamador pediu (`dias_historico`), reconstruídas a partir do cache."""
+    vazio = pd.DataFrame(columns=["data_hora", coluna_saida])
+    if cache is None or dias_historico_lote >= dias_historico:
+        return vazio
+    corte = agora.floor("h") - pd.Timedelta(hours=JANELA_SEMPRE_EXPIRA_HORAS)
+    inicio_completo = agora.floor("h") - pd.Timedelta(days=dias_historico)
+    inicio_lote = agora.floor("h") - pd.Timedelta(days=dias_historico_lote)
+    horas_gap = _horas_no_intervalo(inicio_completo, min(inicio_lote, corte))
+    if not horas_gap:
+        return vazio
+    cacheado = cache.ler([ponto], variavel_hourly, horas_gap)
+    linhas = cacheado.get(ponto, {})
+    if not linhas:
+        return vazio
+    return pd.DataFrame({
+        "data_hora": pd.to_datetime(list(linhas.keys()), utc=True),
+        coluna_saida: list(linhas.values()),
+    })
+
+
 def _fetch_variavel_batch(
     pontos: list[tuple[float, float]],
     variavel_hourly: str,
@@ -187,12 +217,22 @@ def _fetch_variavel_batch(
     session: requests.Session | None,
     tamanho_lote: int,
     max_workers_lote: int = LOTE_WORKERS_PADRAO,
+    cache: CacheOpenMeteo | None = None,
+    agora: pd.Timestamp | None = None,
 ) -> list[pd.DataFrame]:
     """Busca uma variável horária da Open-Meteo para uma lista de pontos, em lotes.
 
     Compartilhada por `fetch_precipitacao_batch` (variavel="precipitation") e
     `fetch_vento_batch` (variavel="windgusts_10m"), mesma paginação, retry e
     tratamento de 429, só muda qual campo é pedido/lido da resposta.
+
+    `cache`, se informado, encolhe o `past_days` de cada lote para só o que
+    ainda falta (ver `_dias_historico_efetivo`) e reconstrói a série completa
+    pedida mesclando a resposta da API com o que faltava vir do cache (ver
+    `_serie_do_gap`) — quem chama sempre recebe a janela completa que pediu,
+    igual a hoje, só que parte dela pode ter vindo do cache em vez da rede.
+    `cache=None` (padrão) reproduz o comportamento de hoje: sem cache, sem
+    encolhimento, série inteira sempre vem da API.
 
     Os lotes são disparados concorrentemente (thread pool), não um a um com
     pausa fixa: quem espaça as chamadas de verdade é `LIMITER_PADRAO`
@@ -202,28 +242,42 @@ def _fetch_variavel_batch(
     if not pontos:
         return []
 
+    agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
     sess = session or requests.Session()
     lotes = [pontos[inicio:inicio + tamanho_lote] for inicio in range(0, len(pontos), tamanho_lote)]
 
+    def _buscar_lote(lote: list[tuple[float, float]]) -> list[tuple[tuple[float, float], dict, int]]:
+        dias_historico_lote = _dias_historico_efetivo(lote, variavel_hourly, dias_historico, cache, agora)
+        payload = _post_lote(
+            lote, [variavel_hourly], dias_historico_lote, dias_previsao,
+            timeout, max_retries, backoff_factor, sess,
+        )
+        if cache is not None:
+            registros = [
+                (ponto, hora, valor)
+                for ponto, item in zip(lote, payload)
+                for hora, valor in zip(
+                    item.get("hourly", {}).get("time", []),
+                    item.get("hourly", {}).get(variavel_hourly, []),
+                )
+            ]
+            cache.gravar(registros, variavel_hourly, agora.isoformat())
+        return [(ponto, item, dias_historico_lote) for ponto, item in zip(lote, payload)]
+
     with ThreadPoolExecutor(max_workers=max_workers_lote) as executor:
-        resultados = list(executor.map(
-            lambda lote: _post_lote(
-                lote, [variavel_hourly], dias_historico, dias_previsao,
-                timeout, max_retries, backoff_factor, sess,
-            ),
-            lotes,
-        ))
-    dados: list[dict] = [item for resultado_lote in resultados for item in resultado_lote]
+        resultados_lotes = list(executor.map(_buscar_lote, lotes))
+    pares = [par for resultado_lote in resultados_lotes for par in resultado_lote]
 
     series = []
-    for item in dados:
+    for ponto, item, dias_historico_lote in pares:
         horario = item.get("hourly", {})
-        horas = horario.get("time", [])
-        valores = horario.get(variavel_hourly, [])
-        series.append(pd.DataFrame({
-            "data_hora": pd.to_datetime(horas, utc=True),
-            coluna_saida: valores,
-        }))
+        df_api = pd.DataFrame({
+            "data_hora": pd.to_datetime(horario.get("time", []), utc=True),
+            coluna_saida: horario.get(variavel_hourly, []),
+        })
+        df_gap = _serie_do_gap(ponto, variavel_hourly, coluna_saida, dias_historico, dias_historico_lote, cache, agora)
+        serie = pd.concat([df_gap, df_api], ignore_index=True) if not df_gap.empty else df_api
+        series.append(serie.sort_values("data_hora").reset_index(drop=True))
     return series
 
 
