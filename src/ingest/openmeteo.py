@@ -102,7 +102,11 @@ def _dias_historico_efetivo(
         return DIAS_HISTORICO_MINIMO
     hora_mais_antiga = min(h for horas in faltantes.values() for h in horas)
     inicio_faltante = pd.Timestamp(hora_mais_antiga).tz_localize("UTC")
-    dias_necessarios = -(-(corte - inicio_faltante).total_seconds() // 86400)  # ceil
+    # O teto é medido contra `agora`, não contra `corte`: a cobertura que a API
+    # precisa entregar vai de `inicio_faltante` até agora, e `past_days` conta
+    # a partir de agora. Medir contra `corte` (agora - 3h) deixa a janela ~3h
+    # curta quando (corte - inicio_faltante) cai num múltiplo exato de dias.
+    dias_necessarios = -(-(agora.floor("h") - inicio_faltante).total_seconds() // 86400)  # ceil
     return int(max(DIAS_HISTORICO_MINIMO, min(dias_historico, dias_necessarios)))
 
 
@@ -277,7 +281,16 @@ def _fetch_variavel_batch(
         })
         df_gap = _serie_do_gap(ponto, variavel_hourly, coluna_saida, dias_historico, dias_historico_lote, cache, agora)
         serie = pd.concat([df_gap, df_api], ignore_index=True) if not df_gap.empty else df_api
-        series.append(serie.sort_values("data_hora").reset_index(drop=True))
+        # `past_days` da Open-Meteo é alinhado a dia corrido (GMT), não à hora
+        # de `agora`, então a resposta da API pode se sobrepor às horas vindas
+        # do cache. Sem deduplicar, essas horas entrariam duas vezes e
+        # inflariam a chuva acumulada de 72h. `kind="stable"` + `keep="last"`
+        # garante que, no empate, vence a linha da API (concatenada depois).
+        series.append(
+            serie.sort_values("data_hora", kind="stable")
+            .drop_duplicates("data_hora", keep="last")
+            .reset_index(drop=True)
+        )
     return series
 
 

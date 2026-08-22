@@ -293,6 +293,39 @@ def test_dias_historico_efetivo_pior_caso_entre_varios_pontos_domina(tmp_path):
     assert resultado == 30  # ponto_novo nunca foi cacheado, domina o pior caso
 
 
+def test_dias_historico_efetivo_ceil_cobre_ate_agora_nao_so_ate_corte(tmp_path):
+    """Caso onde (corte - inicio_faltante) cai num múltiplo exato de dias:
+    o ceil precisa ser medido a partir de `agora`, não de `corte`, senão
+    fica ~3h curto (a janela sempre-expira) e um buraco silencioso passa
+    despercebido tanto pela API quanto pelo cache.
+    """
+    from src.ingest.openmeteo import (
+        JANELA_SEMPRE_EXPIRA_HORAS,
+        _dias_historico_efetivo,
+        _horas_no_intervalo,
+    )
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+    corte = agora.floor("h") - pd.Timedelta(hours=JANELA_SEMPRE_EXPIRA_HORAS)  # 2026-08-10T09:00
+    # inicio_faltante exatamente 5 dias antes de corte -> (corte - inicio_faltante) = 5*86400s exato.
+    inicio_faltante_alvo = corte - pd.Timedelta(days=5)
+
+    horas_cacheadas = _horas_no_intervalo(
+        agora.floor("h") - pd.Timedelta(days=30), inicio_faltante_alvo,
+    )
+    cache.gravar([(ponto, h, 1.0) for h in horas_cacheadas], "chuva_mm", agora.isoformat())
+
+    resultado = _dias_historico_efetivo([ponto], "chuva_mm", 30, cache, agora)
+
+    inicio_coberto = agora.floor("h") - pd.Timedelta(days=resultado)
+    assert inicio_coberto <= inicio_faltante_alvo, (
+        f"resultado={resultado} dias só cobre a partir de {inicio_coberto}, "
+        f"mas a hora faltante mais antiga é {inicio_faltante_alvo} -- buraco de cobertura"
+    )
+
+
 @responses.activate
 def test_fetch_variavel_batch_usa_cache_para_encolher_past_days(tmp_path):
     from src.ingest.openmeteo import _fetch_variavel_batch
@@ -398,3 +431,86 @@ def test_fetch_precipitacao_batch_aceita_cache_e_agora(tmp_path):
 
     assert list(series[0]["chuva_mm"]) == [1.0]
     assert cache.ler([(-23.5, -46.6)], "precipitation", horas) != {}
+
+
+@responses.activate
+def test_fetch_variavel_batch_dedup_horas_sobrepostas_entre_cache_e_api(tmp_path):
+    """Reproduz o cenário real: past_days da Open-Meteo é alinhado a dia
+    corrido (GMT), não à hora de `agora`, então a API pode devolver horas
+    que o cache também tem. A série final não pode ter hora duplicada nem
+    contar o valor duas vezes.
+    """
+    from src.ingest.openmeteo import _fetch_variavel_batch
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+
+    # Cache já tem essa hora, com valor 1.0.
+    cache.gravar([(ponto, "2026-08-10T08:00", 1.0)], "precipitation", agora.isoformat())
+
+    # A API (simulando alinhamento por dia corrido) devolve a MESMA hora de
+    # novo, com um valor diferente (5.0) -- deve vencer sobre o do cache.
+    responses.add(
+        responses.POST, FORECAST_URL, status=200,
+        json={
+            "latitude": ponto[0], "longitude": ponto[1],
+            "hourly": {"time": ["2026-08-10T08:00", "2026-08-10T09:00"], "precipitation": [5.0, 6.0]},
+        },
+    )
+
+    series = _fetch_variavel_batch(
+        [ponto], "precipitation", "chuva_mm",
+        dias_historico=2, dias_previsao=1, timeout=60.0, max_retries=1, backoff_factor=0.01,
+        session=None, tamanho_lote=50, cache=cache, agora=agora,
+    )
+
+    serie = series[0]
+    assert serie["data_hora"].is_unique
+    linha_08h = serie[serie["data_hora"] == pd.Timestamp("2026-08-10T08:00", tz="UTC")]
+    assert len(linha_08h) == 1
+    assert linha_08h["chuva_mm"].iloc[0] == 5.0  # API vence sobre o cache
+
+
+@responses.activate
+def test_fetch_variavel_batch_dedup_quando_past_days_encolhido_ainda_sobrepoe_o_gap(tmp_path):
+    """Mesmo cenário, mas com o encolhimento de past_days realmente em jogo:
+    com o histórico todo cacheado o POST vira past_days mínimo, e a resposta
+    (alinhada a dia corrido) cobre horas que também estão na faixa
+    reconstruída do cache. Sem dedupe essas horas entram duas vezes e
+    inflariam a chuva acumulada de 72h.
+    """
+    from src.ingest.openmeteo import _fetch_variavel_batch, _horas_no_intervalo
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+
+    horas_cacheadas = _horas_no_intervalo(
+        agora.floor("h") - pd.Timedelta(days=3),
+        agora.floor("h") - pd.Timedelta(hours=3),
+    )
+    cache.gravar([(ponto, h, 1.0) for h in horas_cacheadas], "precipitation", agora.isoformat())
+
+    # past_days encolhido, alinhado a dia corrido, devolve desde
+    # 2026-08-09T00:00 -- invadindo a faixa reconstruída do cache.
+    horas_api = ["2026-08-09T00:00", "2026-08-09T06:00", "2026-08-10T00:00", "2026-08-10T11:00"]
+    responses.add(
+        responses.POST, FORECAST_URL, status=200,
+        json={
+            "latitude": ponto[0], "longitude": ponto[1],
+            "hourly": {"time": horas_api, "precipitation": [5.0] * len(horas_api)},
+        },
+    )
+
+    series = _fetch_variavel_batch(
+        [ponto], "precipitation", "chuva_mm",
+        dias_historico=3, dias_previsao=1, timeout=60.0, max_retries=1, backoff_factor=0.01,
+        session=None, tamanho_lote=50, cache=cache, agora=agora,
+    )
+
+    serie = series[0]
+    assert serie["data_hora"].is_unique, "hora duplicada entre a faixa do cache e a resposta da API"
+    sobreposta = serie[serie["data_hora"] == pd.Timestamp("2026-08-09T00:00", tz="UTC")]
+    assert len(sobreposta) == 1
+    assert sobreposta["chuva_mm"].iloc[0] == 5.0

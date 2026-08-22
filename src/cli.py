@@ -149,8 +149,11 @@ def atualizar(
         falhas.append("ana")
 
     typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando dados do dashboard ({uf_norm}, fonte={fonte})...")
+    # Construído fora do try: `cache` é usado também pela exportação de vento
+    # abaixo, e deixá-lo ligado dentro do try dependeria da invariante (de
+    # outro módulo) de que CacheOpenMeteo.__init__ nunca levanta.
+    cache = CacheOpenMeteo()
     try:
-        cache = CacheOpenMeteo()
         meta = exportar_dashboard(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR, fonte=fonte, cache_openmeteo=cache)
         typer.echo(f"  {meta['total_setores']} setores exportados para {DASHBOARD_DATA_DIR}.")
     except (ExportacaoDashboardError, ValueError) as exc:

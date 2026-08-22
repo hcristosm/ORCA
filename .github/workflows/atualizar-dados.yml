@@ -2,6 +2,9 @@ name: Atualizar dados do ORCA
 
 on:
   schedule:
+    # 09:00 UTC (06:00 em São Paulo) todo dia; CPRM/SGB e INMET raramente mudam
+    # mais rápido que isso, e o pacote anual do INMET só é atualizado a cada
+    # poucos dias.
     - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
@@ -40,14 +43,32 @@ jobs:
         run: pip install -e .
 
       - name: Baixar cache da Open-Meteo publicado (gh-pages)
-        # Ausência do arquivo (1a execução, ou branch gh-pages ainda não
-        # existe) não é erro: src/storage_cache_openmeteo.py já trata
-        # arquivo ausente/corrompido como cache vazio.
+        id: baixar_cache
+        # Distingue "nada publicado ainda" (ok, cache vazio) de "falha ao
+        # buscar" (não ok -- não podemos deixar a publicação seguinte
+        # sobrescrever o cache acumulado com um vazio por causa de uma
+        # falha transitória de rede/git). Ausência do arquivo em si não é
+        # erro: src/storage_cache_openmeteo.py trata arquivo ausente ou
+        # corrompido como cache vazio.
         run: |
           mkdir -p data/cache
-          git fetch origin gh-pages 2>/dev/null && \
-            git show origin/gh-pages:cache/openmeteo.sqlite > data/cache/openmeteo.sqlite 2>/dev/null || \
-            echo "Sem cache publicado ainda (1a execução ou branch gh-pages não existe); seguindo com cache vazio."
+          if ! git ls-remote --exit-code origin gh-pages > /dev/null 2>&1; then
+            echo "Branch gh-pages ainda não existe (1a execução); seguindo com cache vazio."
+            exit 0
+          fi
+          if ! git fetch origin gh-pages:refs/remotes/origin/gh-pages; then
+            echo "download_falhou=true" >> "$GITHUB_OUTPUT"
+            echo "Falha ao buscar o branch gh-pages; não vamos publicar por cima do cache existente." >&2
+            exit 0
+          fi
+          if git show origin/gh-pages:cache/openmeteo.sqlite > data/cache/openmeteo.sqlite 2>/dev/null; then
+            echo "Cache publicado baixado com sucesso."
+          else
+            # O redirecionamento cria o arquivo mesmo quando `git show` falha;
+            # remove pra não publicar um sqlite de 0 byte.
+            rm -f data/cache/openmeteo.sqlite
+            echo "Branch gh-pages existe mas ainda não tem cache publicado; seguindo com cache vazio."
+          fi
 
       - name: Rodar atualização nacional
         run: >
@@ -72,12 +93,23 @@ jobs:
         # precisa estar copiado pra lá pra sobreviver ao próximo run.
         # `always()` porque mesmo uma execução com UFs faltando ainda
         # avançou o cache das UFs que deram certo — vale publicar assim
-        # mesmo.
+        # mesmo. Não publica nada se o download anterior falhou (evita
+        # apagar o cache acumulado com um vazio) nem se o arquivo ficou
+        # maior que 80MB (GitHub rejeita push acima de 100MB; melhor
+        # publicar sem cache do que quebrar o deploy do dashboard inteiro).
         if: always()
         run: |
           mkdir -p docs/dashboard/cache
-          if [ -f data/cache/openmeteo.sqlite ]; then
+          if [ "${{ steps.baixar_cache.outputs.download_falhou }}" = "true" ]; then
+            echo "Download do cache anterior falhou; não publicando pra não sobrescrever o acumulado." >&2
+          elif [ -f data/cache/openmeteo.sqlite ]; then
             cp data/cache/openmeteo.sqlite docs/dashboard/cache/openmeteo.sqlite
+            TAMANHO=$(stat -c%s docs/dashboard/cache/openmeteo.sqlite)
+            LIMITE=$((80 * 1024 * 1024))
+            if [ "$TAMANHO" -gt "$LIMITE" ]; then
+              echo "Cache maior que 80MB ($TAMANHO bytes); não publicando pra evitar falha no push do gh-pages." >&2
+              rm -f docs/dashboard/cache/openmeteo.sqlite
+            fi
           fi
 
       - name: Publicar dashboard no GitHub Pages

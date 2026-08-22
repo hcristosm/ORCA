@@ -40,6 +40,22 @@ def _resposta_openmeteo(n_pontos: int) -> list[dict]:
     ]
 
 
+def _resposta_openmeteo_ancorada_em_agora(n_pontos: int) -> list[dict]:
+    """Como `_resposta_openmeteo`, mas com horas ancoradas no relógio real
+    (de agora-6d até agora+1d), para testes que dependem do cache de uma
+    execução servir à execução seguinte."""
+    inicio = pd.Timestamp.now(tz="UTC").floor("h") - pd.Timedelta(days=6)
+    horas = pd.date_range(inicio, periods=7 * 24 + 1, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+    return [
+        {
+            "latitude": -23.5, "longitude": -46.6,
+            "hourly": {"time": horas_iso, "precipitation": [1.0] * len(horas_iso)},
+        }
+        for _ in range(n_pontos)
+    ]
+
+
 def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
     salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
     salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
@@ -79,25 +95,35 @@ def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
 
 
 @responses.activate
-def test_exportar_nacional_segunda_execucao_faz_menos_chamadas_http(tmp_path: Path):
+def test_exportar_nacional_segunda_execucao_pede_menos_historico(tmp_path: Path):
+    """A 2a execução não faz menos chamadas (a janela recente/previsão é
+    sempre buscada ao vivo, ver docs/superpowers/specs/2026-08-22-cache-
+    openmeteo-design.md), mas o past_days de cada chamada encolhe porque o
+    histórico da 1a execução já está cacheado.
+    """
     salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
     cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
     saida = tmp_path / "export"
-    agora = pd.Timestamp("2026-08-22T12:00", tz="UTC")
+
+    # `exportar_nacional` não recebe `agora` (só as funções de baixo nível
+    # recebem), então a janela consultada é o relógio real -- a resposta
+    # simulada precisa cobrir horas reais, senão nada do que a 1a execução
+    # cacheia serve para a 2a.
+    resposta = _resposta_openmeteo_ancorada_em_agora(1)
 
     with responses.RequestsMock() as rsps:
-        rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # setores
-        rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # município
+        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)  # setores
+        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)  # município
         exportar_nacional(["SP"], 2026, tmp_path, saida, orcamento_alvo=1000, cache_openmeteo=cache)
-        chamadas_1a_execucao = len(rsps.calls)
+        past_days_1a_execucao = json.loads(rsps.calls[0].request.body)["past_days"]
 
     with responses.RequestsMock() as rsps:
-        rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)
-        rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)
+        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
+        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
         exportar_nacional(["SP"], 2026, tmp_path, saida, orcamento_alvo=1000, cache_openmeteo=cache)
-        chamadas_2a_execucao = len(rsps.calls)
+        past_days_2a_execucao = json.loads(rsps.calls[0].request.body)["past_days"]
 
-    assert chamadas_2a_execucao <= chamadas_1a_execucao
+    assert past_days_2a_execucao < past_days_1a_execucao
 
 
 def test_exportar_nacional_pula_uf_sem_setores_ingeridos(tmp_path: Path):

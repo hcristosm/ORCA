@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
+from contextlib import suppress
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,9 @@ logger = logging.getLogger(__name__)
 PRECISAO_DECIMAIS = 4  # ~11m no equador; fixo e independente da grade
                         # espacial recalibrada por execução (ver spec).
 CAMINHO_PADRAO = Path("data/cache/openmeteo.sqlite")
+RETENCAO_DIAS_PADRAO = 35  # cobre JANELA_SERIE_DIAS (30, o maior histórico
+                           # pedido hoje) com folga; linhas mais velhas não
+                           # servem a nenhum consumidor atual.
 
 Ponto = tuple[float, float]
 
@@ -35,12 +40,16 @@ def _arredondar(ponto: Ponto) -> Ponto:
 class CacheOpenMeteo:
     """Cache thread-safe (lock próprio) sobre um arquivo SQLite."""
 
-    def __init__(self, caminho: Path = CAMINHO_PADRAO) -> None:
+    def __init__(
+        self, caminho: Path = CAMINHO_PADRAO, retencao_dias: int = RETENCAO_DIAS_PADRAO,
+    ) -> None:
         self._caminho = caminho
+        self._retencao_dias = retencao_dias
         self._lock = threading.Lock()
         self._conn: sqlite3.Connection | None = self._abrir()
 
     def _abrir(self) -> sqlite3.Connection | None:
+        conn: sqlite3.Connection | None = None
         try:
             self._caminho.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(self._caminho, check_same_thread=False)
@@ -51,19 +60,36 @@ class CacheOpenMeteo:
                 "PRIMARY KEY (lat, lon, variavel, data_hora))"
             )
             conn.commit()
+            self._podar(conn)
             return conn
         except (sqlite3.Error, OSError) as exc:
             logger.warning(
                 "Falha ao abrir cache Open-Meteo em %s: %s. Operando sem cache.",
                 self._caminho, exc,
             )
-            # Ensure connection is closed if it was created before error
-            if 'conn' in locals():
-                try:
+            if conn is not None:
+                # `close()` sobre uma conexão já quebrada pode levantar; este
+                # módulo nunca pode levantar (contrato: degrada para cache vazio).
+                with suppress(sqlite3.Error):
                     conn.close()
-                except Exception:
-                    pass
             return None
+
+    def _podar(self, conn: sqlite3.Connection) -> None:
+        """Remove linhas mais velhas que `retencao_dias` -- nada hoje pede
+        histórico além de JANELA_SERIE_DIAS (30 dias), então o resto é peso
+        morto que faria o arquivo crescer sem limite (o arquivo é publicado
+        no gh-pages, e o GitHub rejeita push acima de 100MB; ver
+        docs/superpowers/specs/2026-08-22-cache-openmeteo-design.md)."""
+        corte = (
+            datetime.now(timezone.utc) - timedelta(days=self._retencao_dias)
+        ).strftime("%Y-%m-%dT%H:%M")
+        try:
+            cursor = conn.execute("DELETE FROM cache_horario WHERE data_hora < ?", (corte,))
+            conn.commit()
+            if cursor.rowcount > 0:
+                conn.execute("VACUUM")
+        except sqlite3.Error as exc:
+            logger.warning("Falha ao podar cache Open-Meteo: %s. Seguindo sem podar.", exc)
 
     def horas_faltantes(
         self, pontos: list[Ponto], variavel: str, horas: list[str],

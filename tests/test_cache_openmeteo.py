@@ -1,6 +1,5 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
-import pytest
 
 from src.storage_cache_openmeteo import CacheOpenMeteo
 
@@ -97,3 +96,25 @@ def test_caminho_invalido_mkdir_error_degrada_para_cache_vazio(tmp_path: Path, c
     assert faltando == {(-23.5, -46.6): ["2026-08-10T00:00"]}
     # Verify that a warning was logged for the OSError
     assert any("Falha ao abrir cache Open-Meteo" in record.message for record in caplog.records)
+
+
+def test_retencao_remove_linhas_mais_velhas_que_retencao_dias(tmp_path: Path):
+    caminho = tmp_path / "cache.sqlite"
+    ponto = (-23.5, -46.6)
+
+    # 1a instância grava uma linha "velha" (fora da retenção) e uma "nova".
+    cache1 = CacheOpenMeteo(caminho, retencao_dias=35)
+    velha = (datetime.now(timezone.utc) - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M")
+    nova = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+    cache1.gravar(
+        [(ponto, velha, 1.0), (ponto, nova, 2.0)], "chuva_mm",
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    # 2a instância (nova conexão, dispara _podar de novo no open) não deve
+    # mais ver a linha velha, mas continua vendo a nova.
+    cache2 = CacheOpenMeteo(caminho, retencao_dias=35)
+    lido = cache2.ler([ponto], "chuva_mm", [velha, nova])
+
+    assert velha not in lido.get(ponto, {})
+    assert lido[ponto][nova] == 2.0
