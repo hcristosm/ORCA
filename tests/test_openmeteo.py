@@ -187,3 +187,106 @@ def test_fetch_vento_batch_envia_windgusts_no_corpo():
         fetch_vento_batch([(-23.5, -46.6)])
         corpo_enviado = json_module.loads(rsps.calls[0].request.body)
         assert corpo_enviado["hourly"] == ["windgusts_10m"]
+
+
+def test_horas_no_intervalo_gera_uma_por_hora_exclusive_no_fim():
+    from src.ingest.openmeteo import _horas_no_intervalo
+
+    inicio = pd.Timestamp("2026-08-10T00:00", tz="UTC")
+    fim = pd.Timestamp("2026-08-10T03:00", tz="UTC")
+    assert _horas_no_intervalo(inicio, fim) == [
+        "2026-08-10T00:00", "2026-08-10T01:00", "2026-08-10T02:00",
+    ]
+
+
+def test_horas_no_intervalo_fim_antes_do_inicio_retorna_vazio():
+    from src.ingest.openmeteo import _horas_no_intervalo
+
+    inicio = pd.Timestamp("2026-08-10T03:00", tz="UTC")
+    fim = pd.Timestamp("2026-08-10T00:00", tz="UTC")
+    assert _horas_no_intervalo(inicio, fim) == []
+
+
+def test_dias_historico_efetivo_sem_cache_retorna_original():
+    from src.ingest.openmeteo import _dias_historico_efetivo
+
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+    resultado = _dias_historico_efetivo([(-23.5, -46.6)], "chuva_mm", 30, None, agora)
+    assert resultado == 30
+
+
+def test_dias_historico_efetivo_cache_vazio_retorna_original(tmp_path):
+    from src.ingest.openmeteo import _dias_historico_efetivo
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+    resultado = _dias_historico_efetivo([(-23.5, -46.6)], "chuva_mm", 30, cache, agora)
+    assert resultado == 30
+
+
+def test_dias_historico_efetivo_tudo_cacheado_retorna_minimo(tmp_path):
+    from src.ingest.openmeteo import DIAS_HISTORICO_MINIMO, _dias_historico_efetivo, _horas_no_intervalo
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+    horas = _horas_no_intervalo(
+        agora.floor("h") - pd.Timedelta(days=30),
+        agora.floor("h") - pd.Timedelta(hours=3),
+    )
+    cache.gravar([(ponto, h, 1.0) for h in horas], "chuva_mm", agora.isoformat())
+
+    resultado = _dias_historico_efetivo([ponto], "chuva_mm", 30, cache, agora)
+
+    assert resultado == DIAS_HISTORICO_MINIMO
+
+
+def test_dias_historico_efetivo_so_ultimo_dia_faltando(tmp_path):
+    from src.ingest.openmeteo import _dias_historico_efetivo, _horas_no_intervalo
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+    # Cacheia tudo exceto o último dia antes da janela "sempre expira".
+    horas_cacheadas = _horas_no_intervalo(
+        agora.floor("h") - pd.Timedelta(days=30),
+        agora.floor("h") - pd.Timedelta(days=1),
+    )
+    cache.gravar([(ponto, h, 1.0) for h in horas_cacheadas], "chuva_mm", agora.isoformat())
+
+    resultado = _dias_historico_efetivo([ponto], "chuva_mm", 30, cache, agora)
+
+    assert resultado <= 2  # só falta ~1 dia + a janela sempre-expira, não os 30 originais
+    assert resultado >= 1
+
+
+def test_dias_historico_efetivo_ponto_nunca_visto_retorna_original(tmp_path):
+    from src.ingest.openmeteo import _dias_historico_efetivo
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+    resultado = _dias_historico_efetivo([(-23.5, -46.6)], "chuva_mm", 30, cache, agora)
+    assert resultado == 30
+
+
+def test_dias_historico_efetivo_pior_caso_entre_varios_pontos_domina(tmp_path):
+    from src.ingest.openmeteo import _dias_historico_efetivo, _horas_no_intervalo
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto_cacheado = (-23.5, -46.6)
+    ponto_novo = (-22.9, -43.2)
+    agora = pd.Timestamp("2026-08-10T12:00", tz="UTC")
+    horas = _horas_no_intervalo(
+        agora.floor("h") - pd.Timedelta(days=30),
+        agora.floor("h") - pd.Timedelta(hours=3),
+    )
+    cache.gravar([(ponto_cacheado, h, 1.0) for h in horas], "chuva_mm", agora.isoformat())
+
+    resultado = _dias_historico_efetivo([ponto_cacheado, ponto_novo], "chuva_mm", 30, cache, agora)
+
+    assert resultado == 30  # ponto_novo nunca foi cacheado, domina o pior caso

@@ -40,6 +40,7 @@ import pandas as pd
 import requests
 
 from src.ingest.rate_limiter import RateLimiter
+from src.storage_cache_openmeteo import CacheOpenMeteo
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,43 @@ LIMITER_PADRAO = RateLimiter(
     max_por_minuto=500, max_por_hora=4500,
     intervalo_minimo_segundos=0.15, max_concorrentes=1,
 )
+
+JANELA_SEMPRE_EXPIRA_HORAS = 3
+DIAS_HISTORICO_MINIMO = 1
+
+
+def _horas_no_intervalo(inicio: pd.Timestamp, fim: pd.Timestamp) -> list[str]:
+    """Horas (ISO 8601, ex. "2026-08-10T00:00") de `inicio` até `fim`, exclusive no fim."""
+    if fim <= inicio:
+        return []
+    return pd.date_range(inicio, fim, freq="h", inclusive="left").strftime("%Y-%m-%dT%H:%M").tolist()
+
+
+def _dias_historico_efetivo(
+    pontos: list[tuple[float, float]],
+    variavel: str,
+    dias_historico: int,
+    cache: CacheOpenMeteo | None,
+    agora: pd.Timestamp,
+) -> int:
+    """Quanto de `dias_historico` ainda precisa ser pedido à API, dado o que já
+    está cacheado para `pontos`. Sem cache, ou sem nada cacheado, retorna
+    `dias_historico` inalterado (comportamento de hoje).
+    """
+    if cache is None:
+        return dias_historico
+    corte = agora.floor("h") - pd.Timedelta(hours=JANELA_SEMPRE_EXPIRA_HORAS)
+    inicio = agora.floor("h") - pd.Timedelta(days=dias_historico)
+    horas_esperadas = _horas_no_intervalo(inicio, corte)
+    if not horas_esperadas:
+        return dias_historico
+    faltantes = cache.horas_faltantes(pontos, variavel, horas_esperadas)
+    if not faltantes:
+        return DIAS_HISTORICO_MINIMO
+    hora_mais_antiga = min(h for horas in faltantes.values() for h in horas)
+    inicio_faltante = pd.Timestamp(hora_mais_antiga).tz_localize("UTC")
+    dias_necessarios = -(-(corte - inicio_faltante).total_seconds() // 86400)  # ceil
+    return int(max(DIAS_HISTORICO_MINIMO, min(dias_historico, dias_necessarios)))
 
 
 class OpenMeteoFetchError(RuntimeError):
