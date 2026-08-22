@@ -20,6 +20,7 @@ from src.export.vento_data import exportar_vento
 from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
 from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
 from src.ingest.ana import ANAFetchError, ingerir_uf as ingerir_ana
+from src.storage_cache_openmeteo import CacheOpenMeteo
 
 app = typer.Typer(add_completion=False)
 
@@ -81,7 +82,8 @@ def exportar_dashboard_cmd(
 ) -> None:
     """Pré-computa a chuva por setor e gera os arquivos estáticos do dashboard (GeoJSON/JSON)."""
     saida_dir = saida or DASHBOARD_DATA_DIR
-    meta = exportar_dashboard(uf, ano, diretorio, saida_dir, fonte=fonte)
+    cache = CacheOpenMeteo()
+    meta = exportar_dashboard(uf, ano, diretorio, saida_dir, fonte=fonte, cache_openmeteo=cache)
     typer.echo(f"{meta['total_setores']} setores exportados para {saida_dir} (fonte: {meta['fonte']})")
 
 
@@ -148,7 +150,8 @@ def atualizar(
 
     typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando dados do dashboard ({uf_norm}, fonte={fonte})...")
     try:
-        meta = exportar_dashboard(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR, fonte=fonte)
+        cache = CacheOpenMeteo()
+        meta = exportar_dashboard(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR, fonte=fonte, cache_openmeteo=cache)
         typer.echo(f"  {meta['total_setores']} setores exportados para {DASHBOARD_DATA_DIR}.")
     except (ExportacaoDashboardError, ValueError) as exc:
         typer.echo(f"  FALHA na exportação do dashboard: {exc}", err=True)
@@ -156,7 +159,7 @@ def atualizar(
 
     typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando camada de vento ({uf_norm})...")
     try:
-        resultado_vento = exportar_vento(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR)
+        resultado_vento = exportar_vento(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR, cache_openmeteo=cache)
         typer.echo(f"  {resultado_vento['total_municipios_sinalizados']} município(s) sinalizado(s).")
     except (ExportacaoDashboardError, ValueError) as exc:
         typer.echo(f"  FALHA na exportação de vento: {exc}", err=True)
@@ -223,10 +226,11 @@ def atualizar_nacional_cmd(
             typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc}", err=True)
             falhas_cprm.append(uf)
 
+    cache = CacheOpenMeteo()
     try:
         resultados = exportar_nacional(
             lista_ufs, ano, diretorio, saida,
-            orcamento_alvo=orcamento_alvo,
+            orcamento_alvo=orcamento_alvo, cache_openmeteo=cache,
         )
     except ValueError as exc:
         typer.echo(f"FALHA na exportação nacional: {exc}", err=True)
@@ -237,7 +241,7 @@ def atualizar_nacional_cmd(
     falhas_vento = []
     for uf in resultados:
         try:
-            exportar_vento(uf, ano, diretorio, saida)
+            exportar_vento(uf, ano, diretorio, saida, cache_openmeteo=cache)
         except (ExportacaoDashboardError, ValueError) as exc:
             typer.echo(f"  FALHA na exportação de vento ({uf}): {exc}", err=True)
             falhas_vento.append(uf)

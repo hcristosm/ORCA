@@ -6,6 +6,7 @@ __pycache__/
 data/*
 !data/.gitkeep
 !data/samples/
+data/cache/
 docs/dashboard/data/
 .superpowers/
 .claude/settings.local.json
