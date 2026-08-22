@@ -52,11 +52,17 @@ class CacheOpenMeteo:
             )
             conn.commit()
             return conn
-        except sqlite3.Error as exc:
+        except (sqlite3.Error, OSError) as exc:
             logger.warning(
                 "Falha ao abrir cache Open-Meteo em %s: %s. Operando sem cache.",
                 self._caminho, exc,
             )
+            # Ensure connection is closed if it was created before error
+            if 'conn' in locals():
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             return None
 
     def horas_faltantes(

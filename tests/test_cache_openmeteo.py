@@ -70,6 +70,8 @@ def test_arquivo_corrompido_degrada_para_cache_vazio(tmp_path: Path, caplog):
     cache.gravar([((-23.5, -46.6), "2026-08-10T00:00", 1.0)], "chuva_mm", "2026-08-10T05:00")
 
     assert faltando == {(-23.5, -46.6): ["2026-08-10T00:00"]}
+    # Verify that a warning was logged when opening the corrupted file
+    assert any("Falha ao abrir cache Open-Meteo" in record.message for record in caplog.records)
 
 
 def test_diretorio_pai_e_criado_automaticamente(tmp_path: Path):
@@ -77,3 +79,21 @@ def test_diretorio_pai_e_criado_automaticamente(tmp_path: Path):
     cache = CacheOpenMeteo(caminho)
     cache.gravar([((-23.5, -46.6), "2026-08-10T00:00", 1.0)], "chuva_mm", "2026-08-10T05:00")
     assert caminho.exists()
+
+
+def test_caminho_invalido_mkdir_error_degrada_para_cache_vazio(tmp_path: Path, caplog):
+    # Create a file where a directory is expected, so mkdir will fail with NotADirectoryError (OSError)
+    bloqueador = tmp_path / "bloqueador"
+    bloqueador.write_text("arquivo em lugar de diretorio")
+
+    caminho = bloqueador / "cache.sqlite"
+
+    # Should not raise - should degrade to empty cache with warning
+    cache = CacheOpenMeteo(caminho)
+    faltando = cache.horas_faltantes([(-23.5, -46.6)], "chuva_mm", ["2026-08-10T00:00"])
+    cache.gravar([((-23.5, -46.6), "2026-08-10T00:00", 1.0)], "chuva_mm", "2026-08-10T05:00")
+
+    # Should behave as empty cache
+    assert faltando == {(-23.5, -46.6): ["2026-08-10T00:00"]}
+    # Verify that a warning was logged for the OSError
+    assert any("Falha ao abrir cache Open-Meteo" in record.message for record in caplog.records)
