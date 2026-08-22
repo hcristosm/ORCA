@@ -79,17 +79,24 @@ derruba a exportação por causa do cache.
 Antes de montar um lote para POST, `_fetch_variavel_batch` consulta o cache
 por `(ponto, variável, hora)` para o intervalo pedido:
 
-- Horas mais antigas que a janela "sempre expira" (últimas ~3h + toda a
-  previsão) e já presentes no cache **não** entram no pedido.
-- Pontos cujas horas pedidas estão 100% cacheadas e frescas são removidos do
-  lote inteiramente — no limite, um lote pode gerar zero chamadas.
-- Para pontos que ainda precisam de dado, o `dias_historico` do POST deixa
-  de ser a constante fixa atual (30 para setor, 4 para vento) e passa a ser
-  calculado por lote: o maior intervalo entre "agora" e a hora mais recente
-  já cacheada entre os pontos daquele lote (com a constante atual como teto,
-  para pontos nunca vistos). Depois da 1a execução que povoa o cache,
-  execuções seguintes (cadência diária) só precisam pedir ~1-2 dias de
-  histórico por ponto, não os 30 de novo.
+- A janela "sempre expira" (últimas ~3h + toda a previsão) **nunca** é
+  considerada cacheada, mesmo que já tenha uma linha no cache de uma
+  execução anterior — é justamente o dado recente/futuro que o dashboard
+  existe para mostrar atualizado, então essa fatia é buscada ao vivo em
+  toda execução. Isso significa que **nenhum ponto é removido do lote por
+  completo**: todo ponto que faz parte da exportação sempre gera pelo menos
+  a chamada da janela recente. O que o cache elimina é o histórico
+  redundante por trás dela, não a chamada em si.
+- Só a parte estritamente mais antiga que essa janela (histórico "fechado",
+  que não muda mais) é cacheável. Para pontos com esse histórico já
+  cacheado, o `dias_historico` do POST deixa de ser a constante fixa atual
+  (30 para setor, 4 para vento) e passa a ser calculado por lote: o teto
+  vira o maior intervalo entre "agora" e a hora histórica mais antiga ainda
+  faltando entre os pontos daquele lote (a constante atual continua sendo o
+  teto máximo, para pontos nunca vistos). Depois da 1a execução que povoa o
+  cache, execuções seguintes (cadência diária) só precisam pedir ~1-2 dias
+  de histórico por ponto, não os 30 de novo — a chamada continua
+  acontecendo, só que menor.
 - Resposta bem-sucedida grava todas as horas retornadas no cache antes de
   devolver a série para quem chamou (setor ou município), incluindo a ponta
   recente/previsão (que será sobrescrita na próxima execução, mas serve de
