@@ -34,6 +34,7 @@ from src.processing.previsao import (
     trajetoria_chuva_72h,
 )
 from src.storage import chuva_existe, ler_chuva, ler_setores
+from src.storage_cache_openmeteo import CacheOpenMeteo
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,7 @@ def _calcular_chuva_openmeteo(
     dias_previsao: int = DIAS_PREVISAO_ALERTA,
     agora: pd.Timestamp | None = None,
     pontos: list[tuple[float, float]] | None = None,
+    cache: CacheOpenMeteo | None = None,
 ) -> tuple[gpd.GeoDataFrame, dict]:
     """Consulta a Open-Meteo e calcula a chuva acumulada por setor.
 
@@ -155,7 +157,10 @@ def _calcular_chuva_openmeteo(
 
     pontos_unicos = list(dict.fromkeys(pontos))
     indice_por_ponto = {ponto: i for i, ponto in enumerate(pontos_unicos)}
-    series_unicas = fetch_precipitacao_batch(pontos_unicos, dias_historico=dias_historico, dias_previsao=dias_previsao)
+    series_unicas = fetch_precipitacao_batch(
+        pontos_unicos, dias_historico=dias_historico, dias_previsao=dias_previsao,
+        cache=cache, agora=agora,
+    )
     series = [series_unicas[indice_por_ponto[ponto]] for ponto in pontos]
 
     validas = pd.concat(
@@ -192,12 +197,13 @@ def _series_openmeteo_por_municipio(
     setores: gpd.GeoDataFrame,
     dias_historico: int = JANELA_SERIE_DIAS,
     agora: pd.Timestamp | None = None,
+    cache: CacheOpenMeteo | None = None,
 ) -> dict:
     """Um ponto por município (média dos centroides dos setores daquele município)."""
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
 
     municipios, pontos = centroides_municipio(setores)
-    series_brutas = fetch_precipitacao_batch(pontos, dias_historico=dias_historico)
+    series_brutas = fetch_precipitacao_batch(pontos, dias_historico=dias_historico, cache=cache, agora=agora)
 
     limite = agora - timedelta(days=JANELA_SERIE_DIAS)
     series = {}
@@ -215,7 +221,9 @@ def _series_openmeteo_por_municipio(
 
 
 def _exportar_openmeteo(
-    setores: gpd.GeoDataFrame, pontos: list[tuple[float, float]] | None = None
+    setores: gpd.GeoDataFrame,
+    pontos: list[tuple[float, float]] | None = None,
+    cache: CacheOpenMeteo | None = None,
 ) -> tuple[pd.DataFrame, dict, dict, dict]:
     """Estratégia `fonte="openmeteo"`: consulta direto no centroide de cada setor
     (ou nos pontos de grade compartilhados, se `pontos` for informado).
@@ -225,8 +233,8 @@ def _exportar_openmeteo(
     `gerado_em` (adicionado por `exportar_dashboard`, comum às duas fontes).
     """
     try:
-        cruzado, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72), pontos=pontos)
-        series = _series_openmeteo_por_municipio(setores)
+        cruzado, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72), pontos=pontos, cache=cache)
+        series = _series_openmeteo_por_municipio(setores, cache=cache)
     except OpenMeteoFetchError as exc:
         raise ExportacaoDashboardError(f"Falha ao consultar a Open-Meteo: {exc}") from exc
     referencia = cruzado.attrs["referencia"]
@@ -286,6 +294,7 @@ def exportar_dashboard(
     saida_dir: Path,
     fonte: str = "openmeteo",
     pontos_grade: list[tuple[float, float]] | None = None,
+    cache_openmeteo: CacheOpenMeteo | None = None,
 ) -> dict:
     """Pré-computa a chuva por setor e grava os arquivos estáticos do dashboard.
 
@@ -298,6 +307,9 @@ def exportar_dashboard(
     `pontos_grade`, se informado, substitui o centroide de cada setor pelo
     ponto de grade compartilhado (ver `src/processing/grade_espacial.py` e
     `src/export/nacional.py`); só é válido com `fonte="openmeteo"`.
+
+    `cache_openmeteo`, se informado, é repassado para as buscas na Open-Meteo
+    (só relevante com fonte="openmeteo"; ver src/storage_cache_openmeteo.py).
 
     Grava em `saida_dir`: `setores_<uf>.geojson`, `series_<uf>.json`
     (por estação com `fonte="inmet"`, por município com `fonte="openmeteo"`)
@@ -319,7 +331,7 @@ def exportar_dashboard(
     saida_dir.mkdir(parents=True, exist_ok=True)
 
     if fonte == "openmeteo":
-        cruzado, series, previsao, meta = _exportar_openmeteo(setores, pontos=pontos_grade)
+        cruzado, series, previsao, meta = _exportar_openmeteo(setores, pontos=pontos_grade, cache=cache_openmeteo)
     else:
         cruzado, series, previsao, meta = _exportar_inmet(setores, uf_norm, ano, diretorio_dados)
     meta["gerado_em"] = datetime.now(timezone.utc).isoformat()

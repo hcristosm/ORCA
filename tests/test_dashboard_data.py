@@ -189,6 +189,35 @@ def test_exportar_dashboard_fonte_openmeteo_fim_a_fim(tmp_path: Path, setores):
     assert series["CIDADE A"]["fonte"] == "openmeteo"
 
 
+def test_exportar_dashboard_aceita_cache_openmeteo(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+    from src.storage_cache_openmeteo import CacheOpenMeteo
+
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+
+    agora = pd.Timestamp.now(tz="UTC").floor("h")
+    horas = pd.date_range(agora - pd.Timedelta(hours=47), periods=48, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+
+    def _resposta_para(n_pontos: int) -> list[dict]:
+        return [
+            {"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas_iso, "precipitation": [1.0] * 48}}
+            for _ in range(n_pontos)
+        ]
+
+    saida = tmp_path / "export"
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_para(2), status=200)  # setores
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_para(2), status=200)  # municípios
+        meta = exportar_dashboard(
+            "SP", 2026, tmp_path, saida, fonte="openmeteo", cache_openmeteo=cache,
+        )
+
+    assert meta["fonte"] == "openmeteo"
+
+
 def test_exportar_dashboard_fonte_invalida_levanta_erro(tmp_path: Path, setores):
     salvar_setores(setores, caminho_setores("SP", tmp_path))
     with pytest.raises(ValueError):
