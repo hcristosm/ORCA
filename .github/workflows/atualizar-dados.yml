@@ -2,9 +2,6 @@ name: Atualizar dados do ORCA
 
 on:
   schedule:
-    # 09:00 UTC (06:00 em São Paulo) todo dia; CPRM/SGB e INMET raramente mudam
-    # mais rápido que isso, e o pacote anual do INMET só é atualizado a cada
-    # poucos dias.
     - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
@@ -16,6 +13,15 @@ on:
         description: "Ano dos dados históricos do INMET"
         required: false
         default: "2026"
+
+# Impede duas execuções (agendada + manual) rodando ao mesmo tempo: além de
+# disputar cota de rate limit da Open-Meteo (observado em 22/08/2026), duas
+# escritas concorrentes no arquivo de cache fariam a última a publicar
+# apagar silenciosamente o progresso da outra (ver
+# docs/superpowers/specs/2026-08-22-cache-openmeteo-design.md).
+concurrency:
+  group: atualizar-dados
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -32,6 +38,16 @@ jobs:
 
       - name: Instalar dependências
         run: pip install -e .
+
+      - name: Baixar cache da Open-Meteo publicado (gh-pages)
+        # Ausência do arquivo (1a execução, ou branch gh-pages ainda não
+        # existe) não é erro: src/storage_cache_openmeteo.py já trata
+        # arquivo ausente/corrompido como cache vazio.
+        run: |
+          mkdir -p data/cache
+          git fetch origin gh-pages 2>/dev/null && \
+            git show origin/gh-pages:cache/openmeteo.sqlite > data/cache/openmeteo.sqlite 2>/dev/null || \
+            echo "Sem cache publicado ainda (1a execução ou branch gh-pages não existe); seguindo com cache vazio."
 
       - name: Rodar atualização nacional
         run: >
@@ -50,12 +66,21 @@ jobs:
             data/ultima_atualizacao.txt
           retention-days: 14
 
+      - name: Preparar cache para publicação
+        # `peaceiris/actions-gh-pages` com force_orphan publica só o que
+        # estiver dentro de publish_dir no momento do deploy; o cache
+        # precisa estar copiado pra lá pra sobreviver ao próximo run.
+        # `always()` porque mesmo uma execução com UFs faltando ainda
+        # avançou o cache das UFs que deram certo — vale publicar assim
+        # mesmo.
+        if: always()
+        run: |
+          mkdir -p docs/dashboard/cache
+          if [ -f data/cache/openmeteo.sqlite ]; then
+            cp data/cache/openmeteo.sqlite docs/dashboard/cache/openmeteo.sqlite
+          fi
+
       - name: Publicar dashboard no GitHub Pages
-        # Uma UF que falhe faz o passo anterior sair com código != 0; sem
-        # `always()` as demais UFs exportadas com sucesso seriam descartadas.
-        # `force_orphan: true` reseta a branch gh-pages a cada deploy (um
-        # único commit), em vez de acumular histórico como fazíamos antes
-        # commitando os dados na main.
         if: always()
         uses: peaceiris/actions-gh-pages@v4
         with:
