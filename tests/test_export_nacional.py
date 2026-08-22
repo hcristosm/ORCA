@@ -15,6 +15,7 @@ from src.export.dashboard_data import ExportacaoDashboardError
 from src.export.nacional import exportar_nacional
 from src.ingest.openmeteo import FORECAST_URL
 from src.storage import salvar_setores
+from src.storage_cache_openmeteo import CacheOpenMeteo
 
 
 def _quadrado(cx: float, cy: float, lado: float = 0.01) -> Polygon:
@@ -77,6 +78,28 @@ def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
     assert resultados["SP"]["total_celulas_grade"] == resultados["RJ"]["total_celulas_grade"]
 
 
+@responses.activate
+def test_exportar_nacional_segunda_execucao_faz_menos_chamadas_http(tmp_path: Path):
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    saida = tmp_path / "export"
+    agora = pd.Timestamp("2026-08-22T12:00", tz="UTC")
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # setores
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # município
+        exportar_nacional(["SP"], 2026, tmp_path, saida, orcamento_alvo=1000, cache_openmeteo=cache)
+        chamadas_1a_execucao = len(rsps.calls)
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)
+        exportar_nacional(["SP"], 2026, tmp_path, saida, orcamento_alvo=1000, cache_openmeteo=cache)
+        chamadas_2a_execucao = len(rsps.calls)
+
+    assert chamadas_2a_execucao <= chamadas_1a_execucao
+
+
 def test_exportar_nacional_pula_uf_sem_setores_ingeridos(tmp_path: Path):
     salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
 
@@ -107,7 +130,7 @@ def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path:
 
     chamadas: dict[str, int] = {"SP": 0, "RJ": 0}
 
-    def fake_exportar_dashboard(uf, ano, diretorio_dados, saida_dir, fonte, pontos_grade):
+    def fake_exportar_dashboard(uf, ano, diretorio_dados, saida_dir, fonte, pontos_grade, cache_openmeteo=None):
         chamadas[uf] += 1
         if uf == "SP" and chamadas[uf] == 1:
             raise ExportacaoDashboardError("falha simulada na 1a passada")
@@ -126,7 +149,7 @@ def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path:
 def test_exportar_nacional_reexportacao_tambem_falha_mantem_uf_de_fora(tmp_path: Path, monkeypatch):
     salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
 
-    def sempre_falha(uf, ano, diretorio_dados, saida_dir, fonte, pontos_grade):
+    def sempre_falha(uf, ano, diretorio_dados, saida_dir, fonte, pontos_grade, cache_openmeteo=None):
         raise ExportacaoDashboardError("falha simulada persistente")
 
     monkeypatch.setattr(nacional, "exportar_dashboard", sempre_falha)

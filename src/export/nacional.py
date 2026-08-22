@@ -32,6 +32,7 @@ from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboa
 from src.processing.cruzamento import centroides_4326
 from src.processing.grade_espacial import calibrar_tamanho_celula, mapear_para_grade
 from src.storage import ler_setores
+from src.storage_cache_openmeteo import CacheOpenMeteo
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ def exportar_nacional(
     saida_dir: Path,
     orcamento_alvo: int = ORCAMENTO_ALVO_PADRAO,
     max_workers_uf: int = UF_WORKERS_PADRAO,
+    cache_openmeteo: CacheOpenMeteo | None = None,
 ) -> dict[str, dict]:
     """Exporta o dashboard (fonte Open-Meteo) para várias UFs, com 1 grade nacional.
 
@@ -64,7 +66,12 @@ def exportar_nacional(
     da 1a passada concorrente: na prática, uma fração pequena de UFs esgota
     os retries por rate limiting momentâneo da Open-Meteo mesmo com o
     limiter global (ver `src/ingest/rate_limiter.py`), e essa 2a passada,
-    sem a concorrência das outras UFs, recupera a maioria delas. Grava
+    sem a concorrência das outras UFs, recupera a maioria delas.
+
+    `cache_openmeteo`, se informado, é repassado para `exportar_dashboard` de
+    cada UF — mesma instância compartilhada entre todas, para que o cache de
+    uma UF beneficie a leitura/escrita das outras (ver
+    docs/superpowers/specs/2026-08-22-cache-openmeteo-design.md). Grava
     `ufs_disponiveis.json` em `saida_dir` com as UFs exportadas com sucesso
     (ordem alfabética, mesmo se vazio), para o front-end popular o seletor.
     Retorna `{uf: meta}` só das UFs exportadas com sucesso (após as 2
@@ -111,6 +118,7 @@ def exportar_nacional(
             meta = exportar_dashboard(
                 uf, ano, diretorio_dados, saida_dir,
                 fonte="openmeteo", pontos_grade=pontos_grade[inicio:fim],
+                cache_openmeteo=cache_openmeteo,
             )
         except (ExportacaoDashboardError, OSError, ValueError) as exc:
             logger.warning("Falha ao exportar %s: %s", uf, exc)
