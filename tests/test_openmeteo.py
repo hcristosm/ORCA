@@ -109,6 +109,7 @@ def test_fetch_precipitacao_batch_busca_lotes_concorrentemente(monkeypatch):
     do thread pool.
     """
     monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "acquire", lambda: None)
+    monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "release", lambda: None)
     horas = ["2026-08-10T00:00"]
     pontos = [(-23.0 - i * 0.01, -46.0) for i in range(4)]
 
@@ -130,6 +131,7 @@ def test_fetch_precipitacao_batch_busca_lotes_concorrentemente(monkeypatch):
 def test_fetch_precipitacao_batch_usa_rate_limiter_compartilhado(monkeypatch):
     chamadas = []
     monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "acquire", lambda: chamadas.append(1))
+    monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "release", lambda: None)
 
     horas = ["2026-08-10T00:00"]
     pontos = [(-23.0 - i * 0.01, -46.0) for i in range(3)]

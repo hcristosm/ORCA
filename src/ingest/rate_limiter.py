@@ -17,6 +17,16 @@ estando bem abaixo de 500/min — 8 das 27 UFs esgotaram os retries e ficaram
 de fora do dashboard. `acquire()` então também espaça cada concessão de
 `intervalo_minimo_segundos` em relação à anterior, suavizando a rajada em
 vez de só limitar a contagem total na janela.
+
+Só espaçar o INÍCIO das requisições não é suficiente: espaçar por
+`intervalo_minimo_segundos=0.15` sozinho ainda deixou UFs falhando na
+prática, porque uma requisição pode ficar em voo por vários segundos (ou até
+60s esperando um 429), então dezenas continuam abertas ao mesmo tempo mesmo
+começando escalonadas. `max_concorrentes` resolve isso com um teto real de
+requisições simultaneamente em voo: `acquire()` bloqueia num semáforo até
+haver um slot livre, e quem chama precisa liberar com `release()` assim que
+a resposta (ou erro) daquela tentativa específica chegar — ver
+`src/ingest/openmeteo.py::_post_lote`.
 """
 
 from __future__ import annotations
@@ -37,6 +47,7 @@ class RateLimiter:
         max_por_minuto: int,
         max_por_hora: int,
         intervalo_minimo_segundos: float = 0.0,
+        max_concorrentes: int | None = None,
         relogio=time.monotonic,
         dormir=time.sleep,
     ) -> None:
@@ -48,10 +59,19 @@ class RateLimiter:
         self._timestamps: deque[float] = deque()
         self._ultima_concessao: float | None = None
         self._lock = threading.Lock()
+        self._semaforo = threading.Semaphore(max_concorrentes) if max_concorrentes else None
 
     def acquire(self) -> None:
-        """Bloqueia até que uma nova requisição caiba nos dois tetos e no
-        espaçamento mínimo em relação à última concedida, depois a registra."""
+        """Bloqueia até haver um slot de concorrência livre e uma nova
+        requisição caber nos tetos de janela e no espaçamento mínimo em
+        relação à última concedida, depois a registra.
+
+        Quem chama `acquire()` DEVE chamar `release()` assim que a
+        requisição (sucesso ou falha) terminar, para liberar o slot de
+        concorrência para a próxima.
+        """
+        if self._semaforo is not None:
+            self._semaforo.acquire()
         while True:
             with self._lock:
                 agora = self._relogio()
@@ -62,6 +82,11 @@ class RateLimiter:
                     self._ultima_concessao = agora
                     return
             self._dormir(espera)
+
+    def release(self) -> None:
+        """Libera o slot de concorrência ocupado por um `acquire()` anterior."""
+        if self._semaforo is not None:
+            self._semaforo.release()
 
     def _purgar(self, agora: float) -> None:
         limite = agora - JANELA_HORA_SEGUNDOS

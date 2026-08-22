@@ -119,6 +119,52 @@ def test_acquire_intervalo_minimo_evita_rajadas_sob_concorrencia_real():
     assert all(intervalo >= 0.045 for intervalo in intervalos)
 
 
+def test_max_concorrentes_limita_requisicoes_em_voo_simultaneas():
+    """Reproduz o bug real: espaçar o início das requisições não basta, porque
+    uma requisição pode ficar em voo por segundos. `max_concorrentes` precisa
+    limitar quantas ficam abertas ao mesmo tempo, não só a taxa de início.
+    """
+    limiter = RateLimiter(
+        max_por_minuto=100000, max_por_hora=100000, max_concorrentes=2,
+        relogio=time.monotonic, dormir=time.sleep,
+    )
+    em_voo = 0
+    pico = 0
+    lock = threading.Lock()
+
+    def tarefa() -> None:
+        nonlocal em_voo, pico
+        limiter.acquire()
+        try:
+            with lock:
+                em_voo += 1
+                pico = max(pico, em_voo)
+            time.sleep(0.05)
+            with lock:
+                em_voo -= 1
+        finally:
+            limiter.release()
+
+    threads = [threading.Thread(target=tarefa) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert pico <= 2
+
+
+def test_max_concorrentes_none_nao_limita_concorrencia():
+    limiter, relogio = _limiter(max_por_minuto=1000, max_por_hora=100000)
+
+    limiter.acquire()
+    limiter.acquire()
+    limiter.release()
+    limiter.release()
+
+    assert relogio.agora == 0.0
+
+
 def test_acquire_e_thread_safe_sob_concorrencia_real():
     limiter = RateLimiter(max_por_minuto=1000, max_por_hora=100000, relogio=time.monotonic, dormir=time.sleep)
     contagens: list[int] = []

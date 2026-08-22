@@ -53,13 +53,18 @@ LOTE_WORKERS_PADRAO = 5
 # o processo, então cobre tanto a concorrência entre lotes de uma UF quanto
 # entre UFs (ver `src/export/nacional.py`).
 #
-# `intervalo_minimo_segundos=0.15` (~6,7 req/s) é o que de fato evita as
-# rajadas: sem ele, várias threads liberadas pela janela de contagem podiam
-# disparar a requisição no mesmo instante (até ~20 simultâneas, com os
-# workers de UF e de lote empilhados) e a Open-Meteo respondia com 429 ou
-# read timeout em cadeia mesmo com a taxa agregada dentro do teto por
-# minuto — ver `src/ingest/rate_limiter.py`.
-LIMITER_PADRAO = RateLimiter(max_por_minuto=500, max_por_hora=4500, intervalo_minimo_segundos=0.15)
+# `intervalo_minimo_segundos=0.15` (~6,7 req/s) evita que várias threads
+# liberadas pela janela de contagem disparem a requisição no mesmo instante.
+# Isso sozinho não bastou em produção: uma requisição pode ficar em voo por
+# vários segundos (ou até 60s esperando um 429), então dezenas continuam
+# abertas ao mesmo tempo mesmo começando escalonadas. `max_concorrentes=4`
+# põe um teto real em quantas ficam simultaneamente em voo — ver
+# `src/ingest/rate_limiter.py` e `_post_lote` abaixo (que faz acquire/release
+# por tentativa, não só uma vez por lote).
+LIMITER_PADRAO = RateLimiter(
+    max_por_minuto=500, max_por_hora=4500,
+    intervalo_minimo_segundos=0.15, max_concorrentes=4,
+)
 
 
 class OpenMeteoFetchError(RuntimeError):
@@ -89,8 +94,8 @@ def _post_lote(
     resposta_ok = None
     last_exc: Exception | None = None
     for tentativa in range(1, max_retries + 1):
+        limiter.acquire()
         try:
-            limiter.acquire()
             resp = session.post(FORECAST_URL, json=corpo, timeout=timeout)
             resp.raise_for_status()
             resposta_ok = resp
@@ -111,6 +116,11 @@ def _post_lote(
             )
             if tentativa < max_retries:
                 time.sleep(espera)
+        finally:
+            # Libera o slot de concorrência assim que a resposta (ou erro)
+            # desta tentativa chega — não durante a espera de backoff acima,
+            # que não ocupa uma conexão.
+            limiter.release()
 
     if resposta_ok is None:
         raise OpenMeteoFetchError(

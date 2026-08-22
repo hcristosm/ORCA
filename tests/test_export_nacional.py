@@ -105,6 +105,7 @@ def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypa
     neutralizado para isolar só a concorrência do thread pool.
     """
     monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "acquire", lambda: None)
+    monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "release", lambda: None)
     salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
     salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
     salvar_setores(_setores_uf("MG", "MG1", -44.00, -19.90), caminho_setores("MG", tmp_path))
