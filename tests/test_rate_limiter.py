@@ -67,6 +67,58 @@ def test_acquire_nao_bloqueia_depois_que_a_janela_desliza():
     assert relogio.agora == 61.0
 
 
+def test_acquire_espaca_requisicoes_com_intervalo_minimo():
+    relogio = RelogioFalso()
+    limiter = RateLimiter(
+        max_por_minuto=1000, max_por_hora=100000, intervalo_minimo_segundos=5.0,
+        relogio=relogio.tempo, dormir=relogio.dormir,
+    )
+
+    limiter.acquire()
+    limiter.acquire()
+    limiter.acquire()
+
+    assert relogio.agora == 10.0
+
+
+def test_acquire_intervalo_minimo_nao_bloqueia_quando_zero():
+    limiter, relogio = _limiter(max_por_minuto=1000, max_por_hora=100000)
+
+    limiter.acquire()
+    limiter.acquire()
+    limiter.acquire()
+
+    assert relogio.agora == 0.0
+
+
+def test_acquire_intervalo_minimo_evita_rajadas_sob_concorrencia_real():
+    """Reproduz o bug: threads liberadas ao mesmo tempo pela janela de contagem
+    não devem poder disparar a requisição no mesmo instante — precisa haver
+    espaçamento mínimo real entre elas, não só um teto de contagem por janela.
+    """
+    limiter = RateLimiter(
+        max_por_minuto=1000, max_por_hora=100000, intervalo_minimo_segundos=0.05,
+        relogio=time.monotonic, dormir=time.sleep,
+    )
+    instantes: list[float] = []
+    lock = threading.Lock()
+
+    def registrar() -> None:
+        limiter.acquire()
+        with lock:
+            instantes.append(time.monotonic())
+
+    threads = [threading.Thread(target=registrar) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    instantes.sort()
+    intervalos = [b - a for a, b in zip(instantes, instantes[1:])]
+    assert all(intervalo >= 0.045 for intervalo in intervalos)
+
+
 def test_acquire_e_thread_safe_sob_concorrencia_real():
     limiter = RateLimiter(max_por_minuto=1000, max_por_hora=100000, relogio=time.monotonic, dormir=time.sleep)
     contagens: list[int] = []

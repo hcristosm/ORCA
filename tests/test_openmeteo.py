@@ -99,12 +99,16 @@ def test_fetch_precipitacao_batch_divide_em_lotes_e_preserva_ordem():
 
 
 @responses.activate
-def test_fetch_precipitacao_batch_busca_lotes_concorrentemente():
+def test_fetch_precipitacao_batch_busca_lotes_concorrentemente(monkeypatch):
     """Os lotes são disparados em paralelo (thread pool), não um a um com pausa.
 
     Cada resposta simulada demora 0.1s pra "chegar"; se os 4 lotes fossem
-    buscados um a um, o total seria >= 0.4s. Concorrente, fica bem abaixo.
+    buscados um a um, o total seria >= 0.4s. Concorrente, fica bem abaixo. O
+    espaçamento mínimo entre requisições do `LIMITER_PADRAO` (ver
+    `test_rate_limiter.py`) é neutralizado aqui para isolar só a concorrência
+    do thread pool.
     """
+    monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "acquire", lambda: None)
     horas = ["2026-08-10T00:00"]
     pontos = [(-23.0 - i * 0.01, -46.0) for i in range(4)]
 

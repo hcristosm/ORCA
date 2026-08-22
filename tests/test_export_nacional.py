@@ -8,6 +8,7 @@ import pytest
 import responses
 from shapely.geometry import Polygon
 
+import src.ingest.openmeteo as openmeteo
 from src.config import caminho_setores
 from src.export.nacional import exportar_nacional
 from src.ingest.openmeteo import FORECAST_URL
@@ -93,13 +94,17 @@ def test_exportar_nacional_nenhuma_uf_ingerida_levanta_erro(tmp_path: Path):
         exportar_nacional(["SP", "RJ"], 2026, tmp_path, tmp_path / "export")
 
 
-def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path):
+def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypatch):
     """As UFs não esperam 5s uma pela outra: são exportadas em paralelo.
 
     Cada resposta simulada demora 0.1s; exportar_dashboard faz 2 POSTs por UF
     (setores + série por município), então sequencial daria >= 3 * 2 * 0.1s.
-    Concorrente, fica bem abaixo disso.
+    Concorrente, fica bem abaixo disso. O espaçamento mínimo entre
+    requisições do `LIMITER_PADRAO` (ver `src/ingest/openmeteo.py`) é uma
+    preocupação à parte (coberta em `tests/test_rate_limiter.py`); aqui ele é
+    neutralizado para isolar só a concorrência do thread pool.
     """
+    monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "acquire", lambda: None)
     salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
     salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
     salvar_setores(_setores_uf("MG", "MG1", -44.00, -19.90), caminho_setores("MG", tmp_path))

@@ -52,7 +52,14 @@ LOTE_WORKERS_PADRAO = 5
 # conservadora (ver docstring do módulo). O limiter é compartilhado por todo
 # o processo, então cobre tanto a concorrência entre lotes de uma UF quanto
 # entre UFs (ver `src/export/nacional.py`).
-LIMITER_PADRAO = RateLimiter(max_por_minuto=500, max_por_hora=4500)
+#
+# `intervalo_minimo_segundos=0.15` (~6,7 req/s) é o que de fato evita as
+# rajadas: sem ele, várias threads liberadas pela janela de contagem podiam
+# disparar a requisição no mesmo instante (até ~20 simultâneas, com os
+# workers de UF e de lote empilhados) e a Open-Meteo respondia com 429 ou
+# read timeout em cadeia mesmo com a taxa agregada dentro do teto por
+# minuto — ver `src/ingest/rate_limiter.py`.
+LIMITER_PADRAO = RateLimiter(max_por_minuto=500, max_por_hora=4500, intervalo_minimo_segundos=0.15)
 
 
 class OpenMeteoFetchError(RuntimeError):
