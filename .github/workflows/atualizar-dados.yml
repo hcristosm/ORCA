@@ -43,22 +43,35 @@ jobs:
         run: pip install -e .
 
       - name: Baixar cache da Open-Meteo publicado (gh-pages)
-        id: baixar_cache
-        # Distingue "nada publicado ainda" (ok, cache vazio) de "falha ao
-        # buscar" (não ok -- não podemos deixar a publicação seguinte
-        # sobrescrever o cache acumulado com um vazio por causa de uma
-        # falha transitória de rede/git). Ausência do arquivo em si não é
-        # erro: src/storage_cache_openmeteo.py trata arquivo ausente ou
+        # Este passo só dá um "empurrão inicial" à execução: se o cache
+        # publicado vier, a atualização nacional pede menos histórico à
+        # Open-Meteo. Se não vier -- por qualquer motivo -- a execução
+        # degrada para uma reconstrução fria, que é segura e continua
+        # sendo publicada normalmente no fim do job. Por isso nenhum
+        # caminho de falha aqui é fatal nem precisa avisar os passos
+        # seguintes. Ausência do arquivo também não é erro:
+        # src/storage_cache_openmeteo.py trata arquivo ausente ou
         # corrompido como cache vazio.
+        #
+        # `git ls-remote --exit-code` devolve 2 para "nenhuma ref
+        # correspondente" (branch ainda não existe, 1a execução) e outros
+        # códigos (128, etc.) para falha de rede/autenticação -- vale
+        # distinguir os dois no log. O `|| codigo=$?` é necessário porque
+        # o GitHub roda o script com `bash -e`: sem ele, o próprio
+        # ls-remote falhando abortaria o passo antes de lermos `$?`.
         run: |
           mkdir -p data/cache
-          if ! git ls-remote --exit-code origin gh-pages > /dev/null 2>&1; then
+          codigo=0
+          git ls-remote --exit-code origin gh-pages > /dev/null 2>&1 || codigo=$?
+          if [ "$codigo" -eq 2 ]; then
             echo "Branch gh-pages ainda não existe (1a execução); seguindo com cache vazio."
+            exit 0
+          elif [ "$codigo" -ne 0 ]; then
+            echo "Falha ao verificar o branch gh-pages (rede/git, código $codigo); seguindo mesmo assim -- a atualização nacional vai reconstruir o cache do zero se precisar."
             exit 0
           fi
           if ! git fetch origin gh-pages:refs/remotes/origin/gh-pages; then
-            echo "download_falhou=true" >> "$GITHUB_OUTPUT"
-            echo "Falha ao buscar o branch gh-pages; não vamos publicar por cima do cache existente." >&2
+            echo "Falha ao buscar o branch gh-pages; seguindo com cache vazio -- a atualização nacional reconstrói do zero se precisar."
             exit 0
           fi
           if git show origin/gh-pages:cache/openmeteo.sqlite > data/cache/openmeteo.sqlite 2>/dev/null; then
@@ -93,16 +106,20 @@ jobs:
         # precisa estar copiado pra lá pra sobreviver ao próximo run.
         # `always()` porque mesmo uma execução com UFs faltando ainda
         # avançou o cache das UFs que deram certo — vale publicar assim
-        # mesmo. Não publica nada se o download anterior falhou (evita
-        # apagar o cache acumulado com um vazio) nem se o arquivo ficou
-        # maior que 80MB (GitHub rejeita push acima de 100MB; melhor
-        # publicar sem cache do que quebrar o deploy do dashboard inteiro).
+        # mesmo. Publica o que existir em data/cache/openmeteo.sqlite neste
+        # ponto, sem se importar se ele veio do download do início do job ou
+        # foi reconstruído do zero durante "Rodar atualização nacional"
+        # (ambos os casos produzem um cache válido — a gravação no cache não
+        # depende de ter baixado um cache anterior; não publicar o
+        # reconstruído do zero só pioraria as coisas, jogando fora um cache
+        # bom e, com force_orphan, deixando o gh-pages sem cache nenhum). Só
+        # não publica se o arquivo ficar maior que 80MB (GitHub rejeita push
+        # acima de 100MB; melhor publicar sem cache do que quebrar o deploy
+        # do dashboard inteiro).
         if: always()
         run: |
           mkdir -p docs/dashboard/cache
-          if [ "${{ steps.baixar_cache.outputs.download_falhou }}" = "true" ]; then
-            echo "Download do cache anterior falhou; não publicando pra não sobrescrever o acumulado." >&2
-          elif [ -f data/cache/openmeteo.sqlite ]; then
+          if [ -f data/cache/openmeteo.sqlite ]; then
             cp data/cache/openmeteo.sqlite docs/dashboard/cache/openmeteo.sqlite
             TAMANHO=$(stat -c%s docs/dashboard/cache/openmeteo.sqlite)
             LIMITE=$((80 * 1024 * 1024))

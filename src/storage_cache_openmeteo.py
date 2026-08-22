@@ -28,6 +28,9 @@ CAMINHO_PADRAO = Path("data/cache/openmeteo.sqlite")
 RETENCAO_DIAS_PADRAO = 35  # cobre JANELA_SERIE_DIAS (30, o maior histórico
                            # pedido hoje) com folga; linhas mais velhas não
                            # servem a nenhum consumidor atual.
+LINHAS_PODADAS_PARA_VACUUM = 1000  # abaixo disso o VACUUM custa mais
+                                   # (reescreve o arquivo todo) do que o
+                                   # espaço que recupera.
 
 Ponto = tuple[float, float]
 
@@ -86,7 +89,12 @@ class CacheOpenMeteo:
         try:
             cursor = conn.execute("DELETE FROM cache_horario WHERE data_hora < ?", (corte,))
             conn.commit()
-            if cursor.rowcount > 0:
+            if cursor.rowcount > LINHAS_PODADAS_PARA_VACUUM:
+                # VACUUM reescreve o arquivo inteiro (precisa de espaço
+                # temporário ~= o tamanho do banco), então não vale a pena
+                # com o punhado de linhas que uma execução diária poda; as
+                # páginas livres são reaproveitadas na próxima gravação de
+                # qualquer forma. Só compensa depois de uma poda grande.
                 conn.execute("VACUUM")
         except sqlite3.Error as exc:
             logger.warning("Falha ao podar cache Open-Meteo: %s. Seguindo sem podar.", exc)
