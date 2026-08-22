@@ -4,7 +4,7 @@
 
 **Goal:** Adicionar uma camada de cache SQLite incremental para as 3 séries horárias buscadas na Open-Meteo (chuva por setor, chuva por município, rajada de vento), reduzindo o `dias_historico` efetivamente pedido à API em execuções subsequentes, e persistindo o cache entre execuções efêmeras do CI via o branch `gh-pages`.
 
-**Architecture:** Um módulo novo (`src/storage/cache_openmeteo.py`) expõe uma classe `CacheOpenMeteo` sobre um arquivo SQLite (`(lat, lon, variavel, data_hora) -> valor`). `src/ingest/openmeteo.py` ganha um parâmetro opcional `cache` em `_fetch_variavel_batch`/`fetch_precipitacao_batch`/`fetch_vento_batch`: antes de cada POST, calcula quanto do histórico pedido já está cacheado e encolhe `past_days` de acordo; depois de uma resposta bem-sucedida, grava as horas retornadas no cache; a série devolvida ao chamador é sempre a janela completa pedida, reconstruída mesclando a resposta da API com o que faltava do cache. O parâmetro é opcional e `None` em todo lugar reproduz o comportamento atual exatamente (sem cache) — nenhum teste existente deveria precisar mudar por causa disso. `src/export/nacional.py` e `src/cli.py` constroem uma única instância por execução e a repassam para as 3 séries. O CI baixa o arquivo de cache do `gh-pages` antes de rodar e publica a versão atualizada de volta depois, com `concurrency:` no workflow para impedir duas execuções escrevendo ao mesmo tempo.
+**Architecture:** Um módulo novo (`src/storage_cache_openmeteo.py`) expõe uma classe `CacheOpenMeteo` sobre um arquivo SQLite (`(lat, lon, variavel, data_hora) -> valor`). `src/ingest/openmeteo.py` ganha um parâmetro opcional `cache` em `_fetch_variavel_batch`/`fetch_precipitacao_batch`/`fetch_vento_batch`: antes de cada POST, calcula quanto do histórico pedido já está cacheado e encolhe `past_days` de acordo; depois de uma resposta bem-sucedida, grava as horas retornadas no cache; a série devolvida ao chamador é sempre a janela completa pedida, reconstruída mesclando a resposta da API com o que faltava do cache. O parâmetro é opcional e `None` em todo lugar reproduz o comportamento atual exatamente (sem cache) — nenhum teste existente deveria precisar mudar por causa disso. `src/export/nacional.py` e `src/cli.py` constroem uma única instância por execução e a repassam para as 3 séries. O CI baixa o arquivo de cache do `gh-pages` antes de rodar e publica a versão atualizada de volta depois, com `concurrency:` no workflow para impedir duas execuções escrevendo ao mesmo tempo.
 
 **Tech Stack:** Python 3.11+, `sqlite3` (biblioteca padrão), `pandas`, `pytest` + `responses` (já usados no projeto).
 
@@ -22,7 +22,7 @@
 ## Task 1: Módulo de cache (`CacheOpenMeteo`)
 
 **Files:**
-- Create: `src/storage/cache_openmeteo.py`
+- Create: `src/storage_cache_openmeteo.py`
 - Test: `tests/test_cache_openmeteo.py`
 
 **Interfaces:**
@@ -121,7 +121,7 @@ Expected: FAIL/ERROR — `ModuleNotFoundError: No module named 'src.storage.cach
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# src/storage/cache_openmeteo.py
+# src/storage_cache_openmeteo.py
 """Cache local incremental para respostas horárias da Open-Meteo.
 
 Ver docs/superpowers/specs/2026-08-22-cache-openmeteo-design.md. Uma tabela
@@ -260,9 +260,7 @@ class CacheOpenMeteo:
                 )
 ```
 
-Também criar `src/storage/__init__.py` só re-exportando (o pacote `src/storage` hoje é um módulo único `src/storage.py`; confirmar antes de criar o pacote — ver nota abaixo).
-
-**Nota de estrutura:** `src/storage.py` hoje é um arquivo único (não um pacote). Este plano cria `src/storage/` como pacote só para o cache ficaria estranho ter os dois convivendo. Decisão: colocar o novo módulo em `src/storage_cache_openmeteo.py` (arquivo irmão de `src/storage.py`, não um subpacote) para não precisar migrar `src/storage.py` para pacote como efeito colateral deste plano. Ajustar o path acima: **`src/storage_cache_openmeteo.py`**, e o import em todos os passos seguintes é `from src.storage_cache_openmeteo import CacheOpenMeteo, CAMINHO_PADRAO`.
+**Nota de estrutura:** `src/storage.py` hoje é um arquivo único, não um pacote — `src/storage_cache_openmeteo.py` fica como arquivo irmão dele (não um subpacote `src/storage/`), para não forçar uma migração de `storage.py` para pacote como efeito colateral deste plano. O import em todos os passos seguintes é `from src.storage_cache_openmeteo import CacheOpenMeteo, CAMINHO_PADRAO`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
