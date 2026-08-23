@@ -213,28 +213,56 @@ def _municipios_com_chuva_relevante(
 
 def _series_openmeteo_por_municipio(
     setores: gpd.GeoDataFrame,
-    dias_historico: int = JANELA_SERIE_DIAS,
+    municipios_dias_completos: set[str] | None = None,
     agora: pd.Timestamp | None = None,
     cache: CacheOpenMeteo | None = None,
 ) -> dict:
-    """Um ponto por município (média dos centroides dos setores daquele município)."""
-    agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
+    """Um ponto por município (média dos centroides dos setores daquele município).
 
+    `municipios_dias_completos`, se informado, restringe quais municípios
+    pedem `JANELA_SERIE_DIAS` (30) dias de histórico; os demais pedem só
+    `DIAS_HISTORICO_CRUZAMENTO` (4) -- ver
+    docs/superpowers/specs/2026-08-23-triagem-chuva-serie-municipio-design.md.
+    `None` (padrão) mantém o comportamento anterior: todos pedem 30 dias.
+    """
+    agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
     municipios, pontos = centroides_municipio(setores)
-    series_brutas = fetch_precipitacao_batch(pontos, dias_historico=dias_historico, cache=cache, agora=agora)
+
+    if municipios_dias_completos is None:
+        grupos = [(municipios, pontos, JANELA_SERIE_DIAS)]
+    else:
+        completos_idx = [i for i, m in enumerate(municipios) if m in municipios_dias_completos]
+        reduzidos_idx = [i for i, m in enumerate(municipios) if m not in municipios_dias_completos]
+        grupos = []
+        if completos_idx:
+            grupos.append((
+                [municipios[i] for i in completos_idx],
+                [pontos[i] for i in completos_idx],
+                JANELA_SERIE_DIAS,
+            ))
+        if reduzidos_idx:
+            grupos.append((
+                [municipios[i] for i in reduzidos_idx],
+                [pontos[i] for i in reduzidos_idx],
+                DIAS_HISTORICO_CRUZAMENTO,
+            ))
 
     limite = agora - timedelta(days=JANELA_SERIE_DIAS)
     series = {}
-    for municipio, serie in zip(municipios, series_brutas):
-        recente = serie[(serie["data_hora"] >= limite) & (serie["data_hora"] <= agora)]
-        series[municipio] = {
-            "nome": municipio,
-            "fonte": "openmeteo",
-            "serie": [
-                [ts.isoformat(), (None if pd.isna(mm) else round(float(mm), 2))]
-                for ts, mm in zip(recente["data_hora"], recente["chuva_mm"])
-            ],
-        }
+    for municipios_grupo, pontos_grupo, dias_historico_grupo in grupos:
+        series_brutas = fetch_precipitacao_batch(
+            pontos_grupo, dias_historico=dias_historico_grupo, cache=cache, agora=agora,
+        )
+        for municipio, serie in zip(municipios_grupo, series_brutas):
+            recente = serie[(serie["data_hora"] >= limite) & (serie["data_hora"] <= agora)]
+            series[municipio] = {
+                "nome": municipio,
+                "fonte": "openmeteo",
+                "serie": [
+                    [ts.isoformat(), (None if pd.isna(mm) else round(float(mm), 2))]
+                    for ts, mm in zip(recente["data_hora"], recente["chuva_mm"])
+                ],
+            }
     return series
 
 

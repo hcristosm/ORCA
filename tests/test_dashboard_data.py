@@ -463,3 +463,89 @@ def test_municipios_com_chuva_relevante_respeita_limiar_customizado(setores):
     relevantes = _municipios_com_chuva_relevante(setores, previsao, limiar_mm=40.0)
 
     assert relevantes == {"CIDADE A"}
+
+
+def test_series_openmeteo_por_municipio_divide_em_dois_grupos(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+    from src.export.dashboard_data import _series_openmeteo_por_municipio, JANELA_SERIE_DIAS, DIAS_HISTORICO_CRUZAMENTO
+
+    agora = pd.Timestamp.now(tz="UTC").floor("h")
+    horas = pd.date_range(agora - pd.Timedelta(hours=23), periods=24, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+
+    corpos_capturados = []
+
+    def _callback(request):
+        import json as _json
+        corpos_capturados.append(_json.loads(request.body))
+        resposta = [
+            {"latitude": lat, "longitude": lon, "hourly": {"time": horas_iso, "precipitation": [1.0] * 24}}
+            for lat, lon in zip(_json.loads(request.body)["latitude"], _json.loads(request.body)["longitude"])
+        ]
+        return (200, {}, _json.dumps(resposta))
+
+    with responses.RequestsMock() as rsps:
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)
+        series = _series_openmeteo_por_municipio(
+            setores, municipios_dias_completos={"CIDADE A"}, agora=agora,
+        )
+
+    assert set(series.keys()) == {"CIDADE A", "CIDADE B"}
+    assert len(corpos_capturados) == 2
+    past_days_por_chamada = sorted(c["past_days"] for c in corpos_capturados)
+    assert past_days_por_chamada == sorted([JANELA_SERIE_DIAS, DIAS_HISTORICO_CRUZAMENTO])
+
+
+def test_series_openmeteo_por_municipio_grupo_vazio_nao_gera_chamada(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+    from src.export.dashboard_data import _series_openmeteo_por_municipio
+
+    agora = pd.Timestamp.now(tz="UTC").floor("h")
+    horas = pd.date_range(agora - pd.Timedelta(hours=23), periods=24, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+
+    def _resposta_para(n_pontos: int) -> list[dict]:
+        return [
+            {"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas_iso, "precipitation": [1.0] * 24}}
+            for _ in range(n_pontos)
+        ]
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, FORECAST_URL, json=_resposta_para(2), status=200)
+        series = _series_openmeteo_por_municipio(
+            setores, municipios_dias_completos=set(), agora=agora,
+        )
+        assert len(rsps.calls) == 1
+
+    assert set(series.keys()) == {"CIDADE A", "CIDADE B"}
+
+
+def test_series_openmeteo_por_municipio_sem_filtro_mantem_comportamento_antigo(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+    from src.export.dashboard_data import _series_openmeteo_por_municipio, JANELA_SERIE_DIAS
+
+    agora = pd.Timestamp.now(tz="UTC").floor("h")
+    horas = pd.date_range(agora - pd.Timedelta(hours=23), periods=24, freq="h", tz="UTC")
+    horas_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas]
+
+    corpos_capturados = []
+
+    def _callback(request):
+        import json as _json
+        corpos_capturados.append(_json.loads(request.body))
+        resposta = [
+            {"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas_iso, "precipitation": [1.0] * 24}}
+            for _ in range(len(_json.loads(request.body)["latitude"]))
+        ]
+        return (200, {}, _json.dumps(resposta))
+
+    with responses.RequestsMock() as rsps:
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)
+        series = _series_openmeteo_por_municipio(setores, agora=agora)
+
+    assert len(corpos_capturados) == 1
+    assert corpos_capturados[0]["past_days"] == JANELA_SERIE_DIAS
+    assert set(series.keys()) == {"CIDADE A", "CIDADE B"}
