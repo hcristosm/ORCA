@@ -19,7 +19,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
 
-from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores
+from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores, LIMIAR_ATENCAO_MM_PADRAO
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_precipitacao_batch
 from src.processing.cruzamento import (
     CRS_METRICO,
@@ -191,6 +191,24 @@ def _calcular_chuva_openmeteo(
 
     resultado.attrs["referencia"] = referencia
     return resultado, previsao
+
+
+def _municipios_com_chuva_relevante(
+    setores: gpd.GeoDataFrame, previsao: dict, limiar_mm: float = LIMIAR_ATENCAO_MM_PADRAO,
+) -> set[str]:
+    """Municípios com ao menos um setor cuja trajetória de 72h prevista
+    (`previsao`, ver `_calcular_chuva_openmeteo`) ultrapassa `limiar_mm` em
+    algum ponto futuro -- usado por `_series_openmeteo_por_municipio` para
+    decidir quem pede JANELA_SERIE_DIAS completos vs. DIAS_HISTORICO_CRUZAMENTO
+    (ver docs/superpowers/specs/2026-08-23-triagem-chuva-serie-municipio-design.md).
+    """
+    relevantes: set[str] = set()
+    for num_setor, munic in zip(setores["num_setor"], setores["munic"]):
+        trajetoria = previsao.get(num_setor, [])
+        valores = [mm for _, mm in trajetoria if mm is not None]
+        if valores and max(valores) >= limiar_mm:
+            relevantes.add(munic)
+    return relevantes
 
 
 def _series_openmeteo_por_municipio(

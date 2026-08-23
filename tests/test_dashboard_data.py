@@ -6,10 +6,11 @@ import pandas as pd
 import pytest
 from shapely.geometry import Polygon
 
-from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores
+from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores, LIMIAR_ATENCAO_MM_PADRAO
 from src.export.dashboard_data import (
     ExportacaoDashboardError,
     _calcular_chuva_openmeteo,
+    _municipios_com_chuva_relevante,
     exportar_dashboard,
 )
 from src.storage import salvar_chuva, salvar_setores
@@ -415,3 +416,50 @@ def test_exportar_dashboard_pontos_grade_com_fonte_inmet_levanta_erro(tmp_path: 
             "SP", 2026, tmp_path, tmp_path / "export",
             fonte="inmet", pontos_grade=[(-23.5, -46.6), (-23.5, -46.6)],
         )
+
+
+def test_municipios_com_chuva_relevante_marca_quem_passa_do_limiar(setores):
+    previsao = {
+        "S1": [["2026-08-10T00:00", 40.0], ["2026-08-10T03:00", 120.0]],
+        "S2": [["2026-08-10T00:00", 10.0], ["2026-08-10T03:00", 20.0]],
+    }
+
+    relevantes = _municipios_com_chuva_relevante(setores, previsao)
+
+    assert relevantes == {"CIDADE A"}
+
+
+def test_municipios_com_chuva_relevante_usa_o_maximo_entre_setores_do_municipio(setores):
+    # Dois setores no mesmo município (CIDADE A); só um deles passa do limiar.
+    dois_setores_mesmo_municipio = setores.copy()
+    dois_setores_mesmo_municipio["munic"] = ["CIDADE A", "CIDADE A"]
+    previsao = {
+        "S1": [["2026-08-10T00:00", 10.0]],
+        "S2": [["2026-08-10T00:00", 150.0]],
+    }
+
+    relevantes = _municipios_com_chuva_relevante(dois_setores_mesmo_municipio, previsao)
+
+    assert relevantes == {"CIDADE A"}
+
+
+def test_municipios_com_chuva_relevante_ignora_trajetoria_so_com_none(setores):
+    previsao = {
+        "S1": [["2026-08-10T00:00", None], ["2026-08-10T03:00", None]],
+        "S2": [["2026-08-10T00:00", 10.0]],
+    }
+
+    relevantes = _municipios_com_chuva_relevante(setores, previsao)
+
+    assert relevantes == set()
+
+
+def test_municipios_com_chuva_relevante_respeita_limiar_customizado(setores):
+    previsao = {
+        "S1": [["2026-08-10T00:00", 50.0]],
+        "S2": [["2026-08-10T00:00", 10.0]],
+    }
+
+    relevantes = _municipios_com_chuva_relevante(setores, previsao, limiar_mm=40.0)
+
+    assert relevantes == {"CIDADE A"}
