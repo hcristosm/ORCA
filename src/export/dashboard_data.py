@@ -281,6 +281,10 @@ def _exportar_openmeteo(
     try:
         cruzado, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72), pontos=pontos, cache=cache)
         municipios_dias_completos = _municipios_com_chuva_relevante(setores, previsao)
+        logger.info(
+            "Triagem por chuva prevista: %d de %d municípios com série completa",
+            len(municipios_dias_completos), setores["munic"].nunique(),
+        )
         series = _series_openmeteo_por_municipio(
             setores, municipios_dias_completos=municipios_dias_completos, cache=cache,
         )

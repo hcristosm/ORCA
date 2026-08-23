@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 
 import geopandas as gpd
@@ -190,7 +191,7 @@ def test_exportar_dashboard_fonte_openmeteo_fim_a_fim(tmp_path: Path, setores):
     assert series["CIDADE A"]["fonte"] == "openmeteo"
 
 
-def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_path: Path, setores):
+def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_path: Path, setores, caplog):
     import responses
     from src.ingest.openmeteo import FORECAST_URL
     from src.export.dashboard_data import JANELA_SERIE_DIAS, DIAS_HISTORICO_CRUZAMENTO
@@ -225,11 +226,12 @@ def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_p
         return (200, {}, _json.dumps(resposta))
 
     saida = tmp_path / "export"
-    with responses.RequestsMock() as rsps:
-        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # setores
-        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (completo)
-        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (reduzido)
-        meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="openmeteo")
+    with caplog.at_level(logging.INFO, logger="src.export.dashboard_data"):
+        with responses.RequestsMock() as rsps:
+            rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # setores
+            rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (completo)
+            rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (reduzido)
+            meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="openmeteo")
 
     assert len(corpos_capturados) == 3
     # A 1a chamada é sempre a de setores (dias_historico=DIAS_HISTORICO_CRUZAMENTO).
@@ -237,6 +239,13 @@ def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_p
     past_days_municipio = sorted(c["past_days"] for c in corpos_capturados[1:])
     assert past_days_municipio == sorted([JANELA_SERIE_DIAS, DIAS_HISTORICO_CRUZAMENTO])
     assert meta["total_municipios"] == 2
+    # Achado de revisão final: a triagem por chuva precisa deixar rastro no log,
+    # já que uma degradação silenciosa (todos caindo no grupo reduzido) é
+    # indistinguível de uma semana seca sem esse log.
+    assert any(
+        "Triagem por chuva prevista: 1 de 2 municípios" in record.message
+        for record in caplog.records
+    )
 
 
 def test_exportar_dashboard_aceita_cache_openmeteo(tmp_path: Path, setores):
