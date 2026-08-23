@@ -280,7 +280,10 @@ def _exportar_openmeteo(
     """
     try:
         cruzado, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72), pontos=pontos, cache=cache)
-        series = _series_openmeteo_por_municipio(setores, cache=cache)
+        municipios_dias_completos = _municipios_com_chuva_relevante(setores, previsao)
+        series = _series_openmeteo_por_municipio(
+            setores, municipios_dias_completos=municipios_dias_completos, cache=cache,
+        )
     except OpenMeteoFetchError as exc:
         raise ExportacaoDashboardError(f"Falha ao consultar a Open-Meteo: {exc}") from exc
     referencia = cruzado.attrs["referencia"]

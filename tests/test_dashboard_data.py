@@ -190,6 +190,55 @@ def test_exportar_dashboard_fonte_openmeteo_fim_a_fim(tmp_path: Path, setores):
     assert series["CIDADE A"]["fonte"] == "openmeteo"
 
 
+def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_path: Path, setores):
+    import responses
+    from src.ingest.openmeteo import FORECAST_URL
+    from src.export.dashboard_data import JANELA_SERIE_DIAS, DIAS_HISTORICO_CRUZAMENTO
+
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+
+    agora = pd.Timestamp.now(tz="UTC").floor("h")
+    # S1 (CIDADE A) recebe uma janela com chuva forte o bastante pra passar
+    # de 100mm/72h; S2 (CIDADE B) fica bem abaixo.
+    horas_forte = pd.date_range(agora - pd.Timedelta(hours=47), periods=48, freq="h", tz="UTC")
+    horas_forte_iso = [h.strftime("%Y-%m-%dT%H:%M") for h in horas_forte]
+    horas_fraca = horas_forte_iso
+
+    corpos_capturados = []
+
+    def _callback(request):
+        import json as _json
+        corpo = _json.loads(request.body)
+        corpos_capturados.append(corpo)
+        lats = corpo["latitude"]
+        lons = corpo["longitude"]
+        # Setor/ponto de CIDADE A fica perto de -23.5,-46.6; CIDADE B perto
+        # de -24.0,-47.0 (ver fixture `setores`).
+        resposta = []
+        for lat, lon in zip(lats, lons):
+            forte = abs(lat - (-23.5)) < 0.5 and abs(lon - (-46.6)) < 0.5
+            valores = [5.0] * len(horas_forte_iso) if forte else [0.1] * len(horas_fraca)
+            resposta.append({
+                "latitude": lat, "longitude": lon,
+                "hourly": {"time": horas_forte_iso, "precipitation": valores},
+            })
+        return (200, {}, _json.dumps(resposta))
+
+    saida = tmp_path / "export"
+    with responses.RequestsMock() as rsps:
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # setores
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (completo)
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (reduzido)
+        meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="openmeteo")
+
+    assert len(corpos_capturados) == 3
+    # A 1a chamada é sempre a de setores (dias_historico=DIAS_HISTORICO_CRUZAMENTO).
+    assert corpos_capturados[0]["past_days"] == DIAS_HISTORICO_CRUZAMENTO
+    past_days_municipio = sorted(c["past_days"] for c in corpos_capturados[1:])
+    assert past_days_municipio == sorted([JANELA_SERIE_DIAS, DIAS_HISTORICO_CRUZAMENTO])
+    assert meta["total_municipios"] == 2
+
+
 def test_exportar_dashboard_aceita_cache_openmeteo(tmp_path: Path, setores):
     import responses
     from src.ingest.openmeteo import FORECAST_URL
