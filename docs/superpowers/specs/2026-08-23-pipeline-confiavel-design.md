@@ -69,6 +69,29 @@ Isso expõe um problema de desenho — o limiar de *alerta* foi reaproveitado
 como limiar de *triagem de histórico*, e na prática o grupo de 30 dias fica
 permanentemente vazio. **Fora do escopo deste documento** (ver §9).
 
+### 2.4 Não foi a primeira vez
+
+Levantamento dos 18 runs bem-sucedidos entre 2026-08-10 e 08-23:
+
+| Run | Data | Falhas CPRM | Export | Cobertura |
+|---|---|---|---|---|
+| #12–#15 | 15–17/08 | 0 | 27/27 | 100% |
+| #16 | 18/08 | 0 | 22/27 | 81% |
+| #17–#18 | 19–20/08 | 0 | 27/27 | 100% |
+| #21 | 21/08 | 0 | 19/27 | 70% |
+| **#23** | 22/08 | **22** | **1/27** | **4%** |
+| #24 | 22/08 | 0 | 20/27 | 74% |
+| #25 | 22/08 | 0 | 25/27 | 93% |
+| #26, #28 | 22–23/08 | 0 | 27/27 | 100% |
+| **#29** | 23/08 | **25** | **2/27** | **7%** |
+
+O run **#23** já havia publicado 1 UF de 27 em 22/08, também como `success`,
+também destruindo o `gh-pages`. **O incidente do run #29 é a segunda
+ocorrência, não a primeira** — e passou despercebida.
+
+A oscilação de 70–100% nos runs sem falha de CPRM é atribuível à Open-Meteo
+(rate limiting) e é o comportamento normal do sistema, não uma anomalia.
+
 ## 3. Princípios
 
 1. **Isolar fontes externas por cadência.** Dado quase estático não deve
@@ -155,8 +178,19 @@ que a defasagem seja lida em vez de interpretada.
 - **Mensal (CPRM):** falha se **qualquer** UF falhar após os retries. É
   mensal, então a notificação é rara e sempre significativa; ignorar custa
   uma UF congelada por um mês.
-- **Diário (Open-Meteo):** falha abaixo de **90%** de cobertura, ajustável
-  por variável do workflow.
+- **Diário (Open-Meteo):** falha quando **qualquer UF** tiver `gerado_em`
+  mais velho que **3 dias**. A cobertura do run em si vai para o Step
+  Summary como informação, não como critério de falha.
+
+  Justificativa empírica (18 runs, 2026-08-10 a 08-23): com a CPRM saudável,
+  a cobertura Open-Meteo oscila entre 70% e 100%, e 4 dos 12 runs limpos
+  ficaram abaixo de 90%. Um piso de 90% dispararia em um terço das execuções
+  e seria aprendido como ruído — reproduzindo a cegueira que este trabalho
+  existe para corrigir.
+
+  Com a publicação não-destrutiva (§4.5), uma UF que falha não desaparece,
+  envelhece. Um run a 74% não é emergência; uma UF parada há três dias é.
+  A defasagem é imune à oscilação transitória e mede o dano real.
 
 Nos dois casos a publicação mantém `if: always()`: falhar o job nunca
 impede a mescla de ir ao ar.
@@ -164,9 +198,12 @@ impede a mescla de ir ao ar.
 ### 4.8 Teste de fumaça no site publicado
 
 Passo final do job diário: busca a URL pública e afirma invariantes —
-`ufs_disponiveis.json` traz pelo menos o mesmo piso de §4.7 (90% das UFs
-esperadas), cada `meta_<uf>.json` faz
-parse, `referencia` não é absurdamente antiga.
+`ufs_disponiveis.json` traz **as 27 UFs**, cada `meta_<uf>.json` faz parse,
+e nenhuma `referencia` é mais velha que o limite de defasagem de §4.7.
+
+A asserção pode ser exata (27, não um piso) justamente por causa da mescla:
+depois de §4.3 e §4.5, uma UF só sai do site publicado se algo estiver
+errado. Perder uma UF deixa de ser degradação tolerável e vira defeito.
 
 Justificativa: toda verificação anterior valida o build, e o build do run
 #29 foi integralmente bem-sucedido. Este passo cobre classes de falha ainda
@@ -186,8 +223,8 @@ Testáveis sem rede, via pytest:
 
 - **Mescla:** UF ausente no run preserva a anterior; UF presente sobrescreve;
   run vazio preserva tudo.
-- **Cobertura:** cálculo contra o piso, incluindo as bordas (exatamente no
-  piso, zero UFs, todas as UFs).
+- **Defasagem:** detecção de UF vencida, incluindo as bordas (exatamente no
+  limite, um dia além, UF ausente do conjunto publicado).
 - **Sanidade:** rejeita `total_setores == 0` e geojson malformado.
 
 A separação dos workflows verifica-se por `workflow_dispatch` manual.
