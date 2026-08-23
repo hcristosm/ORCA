@@ -10,3 +10,4 @@ data/cache/
 docs/dashboard/data/
 .superpowers/
 .claude/settings.local.json
+docs/.superpowers/
