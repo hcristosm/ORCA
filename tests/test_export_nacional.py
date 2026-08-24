@@ -1,5 +1,5 @@
 import json
-import time
+import threading
 from pathlib import Path
 
 import geopandas as gpd
@@ -189,14 +189,21 @@ def test_exportar_nacional_reexportacao_tambem_falha_mantem_uf_de_fora(tmp_path:
 
 
 def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypatch):
-    """As UFs não esperam 5s uma pela outra: são exportadas em paralelo.
+    """As UFs não esperam uma pela outra: são exportadas em paralelo.
 
-    Cada resposta simulada demora 0.1s; exportar_dashboard faz 2 POSTs por UF
-    (setores + série por município), então sequencial daria >= 3 * 2 * 0.1s.
-    Concorrente, fica bem abaixo disso. O espaçamento mínimo entre
-    requisições do `LIMITER_PADRAO` (ver `src/ingest/openmeteo.py`) é uma
-    preocupação à parte (coberta em `tests/test_rate_limiter.py`); aqui ele é
-    neutralizado para isolar só a concorrência do thread pool.
+    A prova é determinística, não cronometrada: cada resposta simulada só é
+    liberada quando 3 threads estiverem simultaneamente dentro do callback
+    (`threading.Barrier`). Se a exportação for sequencial, a primeira thread
+    espera sozinha, a barreira estoura no timeout e o teste falha -- sem
+    depender de relógio de parede (a versão anterior afirmava
+    `decorrido < 0.5` e era flaky em runner compartilhado).
+
+    `exportar_dashboard` faz 2 POSTs por UF (setores + série por município),
+    então 3 UFs geram 6 passagens pela barreira: 2 rodadas completas de 3.
+    O espaçamento mínimo entre requisições do `LIMITER_PADRAO` (ver
+    `src/ingest/openmeteo.py`) é uma preocupação à parte (coberta em
+    `tests/test_rate_limiter.py`); aqui ele é neutralizado para isolar só a
+    concorrência do thread pool.
     """
     monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "acquire", lambda: None)
     monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "release", lambda: None)
@@ -204,8 +211,15 @@ def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypa
     salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
     salvar_setores(_setores_uf("MG", "MG1", -44.00, -19.90), caminho_setores("MG", tmp_path))
 
+    barreira = threading.Barrier(3, timeout=30)
+    quebrou: list[str] = []
+
     def callback(request):
-        time.sleep(0.1)
+        try:
+            barreira.wait()
+        except threading.BrokenBarrierError:
+            # Sequencial: ninguém mais chegou à barreira dentro do timeout.
+            quebrou.append(request.url)
         return (200, {}, json.dumps(_resposta_openmeteo(1)[0]))
 
     saida = tmp_path / "export"
@@ -213,9 +227,9 @@ def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypa
         for _ in range(6):
             rsps.add_callback(responses.POST, FORECAST_URL, callback=callback, content_type="application/json")
 
-        inicio = time.monotonic()
-        resultados = exportar_nacional(["SP", "RJ", "MG"], 2026, tmp_path, saida, orcamento_alvo=1000)
-        decorrido = time.monotonic() - inicio
+        resultados = exportar_nacional(
+            ["SP", "RJ", "MG"], 2026, tmp_path, saida, orcamento_alvo=1000, max_workers_uf=3
+        )
 
+    assert not quebrou, "as UFs não estavam dentro da exportação ao mesmo tempo"
     assert set(resultados.keys()) == {"SP", "RJ", "MG"}
-    assert decorrido < 0.5
