@@ -1,16 +1,14 @@
 name: Atualizar dados do ORCA
 
 on:
-  # DESARMADO em 2026-08-23: enquanto a ingestão CPRM roda no caminho diário,
-  # uma queda da SGB faz este workflow republicar o gh-pages com poucas UFs
-  # (ocorreu nos runs #23 e #29). Rearmado na Tarefa 6 do plano
-  # docs/superpowers/plans/2026-08-23-isolamento-fontes.md, depois que a
-  # ingestão CPRM sair daqui.
-  # schedule:
-  #   # 09:00 UTC (06:00 em São Paulo) todo dia; CPRM/SGB e INMET raramente mudam
-  #   # mais rápido que isso, e o pacote anual do INMET só é atualizado a cada
-  #   # poucos dias.
-  #   - cron: "0 9 * * *"
+  # Rearmado na Tarefa 6 do plano docs/superpowers/plans/2026-08-23-isolamento-fontes.md:
+  # a ingestão CPRM/SGB saiu do caminho diário (agora lê a branch dados-base),
+  # então uma queda da SGB não afeta mais esta execução agendada.
+  schedule:
+    # 09:00 UTC (06:00 em São Paulo) todo dia; CPRM/SGB e INMET raramente mudam
+    # mais rápido que isso, e o pacote anual do INMET só é atualizado a cada
+    # poucos dias.
+    - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       ufs:
@@ -46,6 +44,25 @@ jobs:
 
       - name: Instalar dependências
         run: pip install -e .
+
+      - name: Baixar setores da branch dados-base
+        # Diferente do cache da Open-Meteo, que é só um empurrão inicial,
+        # os setores são obrigatórios: sem eles a exportação não tem o que
+        # cruzar e o dashboard sai vazio. Por isso este passo é fatal.
+        run: |
+          mkdir -p data
+          if ! git ls-remote --exit-code origin dados-base > /dev/null 2>&1; then
+            echo "::error::Branch dados-base não existe. Rode o workflow ingerir-setores.yml antes." >&2
+            exit 1
+          fi
+          git fetch origin dados-base:refs/remotes/origin/dados-base
+          git archive origin/dados-base | tar -x -C data
+          TOTAL=$(ls data/*.gpkg 2>/dev/null | wc -l)
+          echo "Setores carregados: $TOTAL UF(s)."
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "::error::Nenhum GeoPackage em dados-base." >&2
+            exit 1
+          fi
 
       - name: Baixar cache da Open-Meteo publicado (gh-pages)
         # Este passo só dá um "empurrão inicial" à execução: se o cache
