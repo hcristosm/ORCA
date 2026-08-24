@@ -54,7 +54,7 @@ jobs:
           if [ "$codigo" -eq 0 ]; then
             git fetch origin dados-base:refs/remotes/origin/dados-base
             git archive origin/dados-base | tar -x -C data
-            anterior=$(ls data/*.gpkg 2>/dev/null | wc -l)
+            anterior=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
             echo "Branch dados-base encontrada. Setores anteriores: ${anterior} UF(s)."
           elif [ "$codigo" -eq 2 ]; then
             echo "Branch dados-base ainda não existe (1a execução); ingestão parte do zero."
@@ -80,28 +80,38 @@ jobs:
         # falha no download ou na ingestão, a mesma classe de incidente que
         # este workflow existe para evitar. Na dúvida (contagem anterior
         # não disponível), não publica.
+        #
+        # Toda recusa GRAVA `publicar=false` e só então SAI COM 1 (ruling
+        # R-9), nessa ordem: o output é o que faz o passo de publicação ser
+        # pulado, e a falha é o que torna a recusa visível -- recusar
+        # fechando `success` reintroduz a degradação silenciosa dos runs #23
+        # e #29 dentro da própria cura.
         if: "!cancelled()"
         run: |
           anterior="${{ steps.baixar.outputs.anterior }}"
-          atual=$(ls data/*.gpkg 2>/dev/null | wc -l)
+          # `find | wc -l` e não `ls data/*.gpkg | wc -l`: este passo hoje roda
+          # sem `pipefail`, então o `ls` saindo 2 no glob vazio é engolido --
+          # mas basta alguém acrescentar `pipefail` para o `errexit` matar o
+          # passo antes das mensagens de recusa. `find` não tem esse gatilho.
+          atual=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
           echo "Setores nesta execução: ${atual} UF(s) (anterior: ${anterior:-<vazio>})."
 
           if ! [ "$anterior" -eq "$anterior" ] 2>/dev/null; then
             echo "::error::Contagem anterior indisponível ou inválida ('${anterior}'). Sem ela não dá para confirmar que não estamos regredindo -- publicação recusada."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           if [ "${atual}" -eq 0 ]; then
             echo "::error::Conjunto atual está vazio (0 UFs). Publicação recusada para não apagar dados-base."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           if [ "${atual}" -lt "${anterior}" ]; then
             echo "::error::Regressão detectada: ${atual} UF(s) atuais é menor que ${anterior} anteriores. Publicação recusada."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           # Contagem de arquivos não basta: 27 .gpkg de 0 byte ou truncados
@@ -121,7 +131,7 @@ jobs:
           if [ -n "$pequeno" ]; then
             echo "::error::Ao menos um .gpkg está vazio ou truncado. Publicação recusada."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           echo "publicar=true" >> "$GITHUB_OUTPUT"

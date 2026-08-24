@@ -77,7 +77,11 @@ jobs:
             exit 1
           fi
           git archive origin/dados-base | tar -x -C data
-          TOTAL=$(ls data/*.gpkg 2>/dev/null | wc -l)
+          # `find | wc -l` e não `ls data/*.gpkg | wc -l`: com o `pipefail`
+          # acima, o glob sem correspondência faz o `ls` sair 2, o pipeline
+          # herda 2 e o `errexit` mataria o passo ANTES do `if` abaixo --
+          # deixando o operador sem a anotação ::error:: que explica o quê.
+          TOTAL=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
           echo "Setores carregados: $TOTAL UF(s)."
           if [ "$TOTAL" -eq 0 ]; then
             echo "::error::Nenhum GeoPackage em dados-base."
@@ -108,8 +112,11 @@ jobs:
         # insumo da guarda anti-regressão do passo "Conferir antes de
         # publicar". Diferente do cache, esse número NÃO é opcional: se não
         # conseguirmos lê-lo, `publicado` sai vazio e a guarda recusa a
-        # publicação (falha fechada). Só o caso "branch gh-pages não existe"
-        # (1a publicação) vira legitimamente `publicado=0`.
+        # publicação (falha fechada). SÓ o caso "branch gh-pages não existe"
+        # vira legitimamente `publicado=0` -- essa é a 1a publicação e não há
+        # nada a destruir. Branch presente sem `data/ufs_disponiveis.json` NÃO
+        # é 0: é estado indeterminado, e tratá-lo como 0 deixaria passar um
+        # conjunto de 1 UF por cima do que quer que esteja publicado.
         shell: bash -eo pipefail {0}
         run: |
           mkdir -p data/cache
@@ -141,8 +148,7 @@ jobs:
               fi
             else
               rm -f /tmp/ufs_publicadas.json
-              echo "Branch gh-pages existe mas não tem data/ufs_disponiveis.json; tratando como 0 UF(s) publicadas."
-              publicado=0
+              echo "Branch gh-pages existe mas não tem data/ufs_disponiveis.json -- estado publicado indeterminado (não é a 1a publicação, então há algo lá que não conseguimos medir); a guarda vai recusar a publicação em vez de autorizar sobrescrever no escuro."
             fi
           fi
           echo "publicado=${publicado}" >> "$GITHUB_OUTPUT"
@@ -178,6 +184,15 @@ jobs:
         # mas não num job cancelado. Publicação parcial é aceitável;
         # publicar MENOS do que já está no ar, não. Na dúvida (contagem
         # publicada indisponível), não publica.
+        #
+        # Toda recusa GRAVA `publicar=false` e só então SAI COM 1 (ruling
+        # R-9). A ordem importa: o output precisa estar no $GITHUB_OUTPUT
+        # antes da falha, senão a publicação não é pulada -- é a condição do
+        # passo seguinte que a pula. E a falha importa porque os runs #23 e
+        # #29 destruíram o dashboard fechando como `success`: uma guarda que
+        # recusa em silêncio, num cron diário, poderia bloquear a publicação
+        # por semanas sem ninguém ver -- degradação silenciosa é justamente a
+        # doença que este workflow existe para curar.
         if: "!cancelled()"
         run: |
           publicado="${{ steps.publicado.outputs.publicado }}"
@@ -186,20 +201,20 @@ jobs:
           if ! [ "$publicado" -eq "$publicado" ] 2>/dev/null; then
             echo "::error::Contagem publicada indisponível ou inválida ('${publicado}'). Sem ela não dá para confirmar que não estamos regredindo -- publicação recusada."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           if [ ! -f "$arquivo" ]; then
             echo "::error::${arquivo} não existe: esta execução não gerou dado nenhum (atual=ausente, publicado=${publicado}). Publicação recusada para não apagar o que está no ar."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           atual=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.stdout.write(str(len(d)))' "$arquivo") || atual=""
           if ! [ "$atual" -eq "$atual" ] 2>/dev/null; then
             echo "::error::${arquivo} não é uma lista JSON legível (atual=inválido, publicado=${publicado}). Publicação recusada."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           echo "UFs nesta execução: ${atual} (publicado: ${publicado})."
@@ -207,13 +222,13 @@ jobs:
           if [ "$atual" -eq 0 ]; then
             echo "::error::Conjunto atual está vazio (atual=0, publicado=${publicado}). Publicação recusada para não apagar o dashboard."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           if [ "$atual" -lt "$publicado" ]; then
             echo "::error::Regressão detectada: atual=${atual} UF(s) é menor que publicado=${publicado}. Publicação recusada."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           echo "publicar=true" >> "$GITHUB_OUTPUT"
