@@ -49,29 +49,50 @@ jobs:
         # Diferente do cache da Open-Meteo, que é só um empurrão inicial,
         # os setores são obrigatórios: sem eles a exportação não tem o que
         # cruzar e o dashboard sai vazio. Por isso este passo é fatal.
+        #
+        # `git ls-remote --exit-code` devolve 2 para "nenhuma ref
+        # correspondente" (branch realmente não existe) e outros códigos
+        # (128, etc.) para falha de rede/autenticação. Tratar os dois como
+        # "não existe" mandaria o operador rodar ingerir-setores.yml (14
+        # minutos contra a SGB) por causa de uma intermitência de rede --
+        # instrução errada e cara. Mesmo padrão do passo do gh-pages abaixo
+        # e de ingerir-setores.yml. `shell: bash -eo pipefail` porque o
+        # padrão do GitHub é `bash -e` SEM pipefail, e aí uma falha do
+        # `git archive` no meio de `git archive | tar -x` passaria batido
+        # (o tar sai 0 com entrada vazia).
+        shell: bash -eo pipefail {0}
         run: |
           mkdir -p data
-          if ! git ls-remote --exit-code origin dados-base > /dev/null 2>&1; then
-            echo "::error::Branch dados-base não existe. Rode o workflow ingerir-setores.yml antes." >&2
+          codigo=0
+          git ls-remote --exit-code origin dados-base > /dev/null 2>&1 || codigo=$?
+          if [ "$codigo" -eq 2 ]; then
+            echo "::error::Branch dados-base não existe. Rode o workflow ingerir-setores.yml antes."
+            exit 1
+          elif [ "$codigo" -ne 0 ]; then
+            echo "::error::Falha ao verificar o branch dados-base (rede/git, código $codigo) -- não dá para distinguir de 'branch não existe'. Abortando; NÃO rode ingerir-setores.yml por causa disto, apenas tente de novo."
             exit 1
           fi
-          git fetch origin dados-base:refs/remotes/origin/dados-base
+          if ! git fetch origin dados-base:refs/remotes/origin/dados-base; then
+            echo "::error::Falha ao buscar o branch dados-base (rede/git). Abortando: sem setores a exportação não tem o que cruzar."
+            exit 1
+          fi
           git archive origin/dados-base | tar -x -C data
           TOTAL=$(ls data/*.gpkg 2>/dev/null | wc -l)
           echo "Setores carregados: $TOTAL UF(s)."
           if [ "$TOTAL" -eq 0 ]; then
-            echo "::error::Nenhum GeoPackage em dados-base." >&2
+            echo "::error::Nenhum GeoPackage em dados-base."
             exit 1
           fi
 
       - name: Baixar cache da Open-Meteo publicado (gh-pages)
+        id: publicado
         # Este passo só dá um "empurrão inicial" à execução: se o cache
         # publicado vier, a atualização nacional pede menos histórico à
         # Open-Meteo. Se não vier -- por qualquer motivo -- a execução
         # degrada para uma reconstrução fria, que é segura e continua
         # sendo publicada normalmente no fim do job. Por isso nenhum
-        # caminho de falha aqui é fatal nem precisa avisar os passos
-        # seguintes. Ausência do arquivo também não é erro:
+        # caminho de falha aqui é fatal *para o cache*. Ausência do arquivo
+        # também não é erro:
         # src/storage_cache_openmeteo.py trata arquivo ausente ou
         # corrompido como cache vazio.
         #
@@ -81,29 +102,50 @@ jobs:
         # distinguir os dois no log. O `|| codigo=$?` é necessário porque
         # o GitHub roda o script com `bash -e`: sem ele, o próprio
         # ls-remote falhando abortaria o passo antes de lermos `$?`.
+        #
+        # Como o fetch do gh-pages já acontece aqui, aproveitamos para ler
+        # quantas UFs estão publicadas hoje e exportar isso em `publicado`,
+        # insumo da guarda anti-regressão do passo "Conferir antes de
+        # publicar". Diferente do cache, esse número NÃO é opcional: se não
+        # conseguirmos lê-lo, `publicado` sai vazio e a guarda recusa a
+        # publicação (falha fechada). Só o caso "branch gh-pages não existe"
+        # (1a publicação) vira legitimamente `publicado=0`.
+        shell: bash -eo pipefail {0}
         run: |
           mkdir -p data/cache
+          publicado=""
           codigo=0
           git ls-remote --exit-code origin gh-pages > /dev/null 2>&1 || codigo=$?
           if [ "$codigo" -eq 2 ]; then
             echo "Branch gh-pages ainda não existe (1a execução); seguindo com cache vazio."
-            exit 0
+            publicado=0
           elif [ "$codigo" -ne 0 ]; then
-            echo "Falha ao verificar o branch gh-pages (rede/git, código $codigo); seguindo mesmo assim -- a atualização nacional vai reconstruir o cache do zero se precisar."
-            exit 0
-          fi
-          if ! git fetch origin gh-pages:refs/remotes/origin/gh-pages; then
-            echo "Falha ao buscar o branch gh-pages; seguindo com cache vazio -- a atualização nacional reconstrói do zero se precisar."
-            exit 0
-          fi
-          if git show origin/gh-pages:cache/openmeteo.sqlite > data/cache/openmeteo.sqlite 2>/dev/null; then
-            echo "Cache publicado baixado com sucesso."
+            echo "Falha ao verificar o branch gh-pages (rede/git, código $codigo); seguindo mesmo assim -- a atualização nacional vai reconstruir o cache do zero se precisar. Mas a contagem publicada fica indisponível e a guarda vai recusar a publicação."
+          elif ! git fetch origin gh-pages:refs/remotes/origin/gh-pages; then
+            echo "Falha ao buscar o branch gh-pages; seguindo com cache vazio -- a atualização nacional reconstrói do zero se precisar. Contagem publicada indisponível; a guarda vai recusar a publicação."
           else
-            # O redirecionamento cria o arquivo mesmo quando `git show` falha;
-            # remove pra não publicar um sqlite de 0 byte.
-            rm -f data/cache/openmeteo.sqlite
-            echo "Branch gh-pages existe mas ainda não tem cache publicado; seguindo com cache vazio."
+            if git show origin/gh-pages:cache/openmeteo.sqlite > data/cache/openmeteo.sqlite 2>/dev/null; then
+              echo "Cache publicado baixado com sucesso."
+            else
+              # O redirecionamento cria o arquivo mesmo quando `git show` falha;
+              # remove pra não publicar um sqlite de 0 byte.
+              rm -f data/cache/openmeteo.sqlite
+              echo "Branch gh-pages existe mas ainda não tem cache publicado; seguindo com cache vazio."
+            fi
+            if git show origin/gh-pages:data/ufs_disponiveis.json > /tmp/ufs_publicadas.json 2>/dev/null; then
+              publicado=$(python3 -c 'import json,sys; d=json.load(open("/tmp/ufs_publicadas.json")); sys.stdout.write(str(len(d)))') || publicado=""
+              if [ -z "$publicado" ]; then
+                echo "Branch gh-pages tem data/ufs_disponiveis.json, mas ele não é uma lista JSON legível; contagem publicada indisponível -- a guarda vai recusar a publicação."
+              else
+                echo "UFs publicadas hoje no gh-pages: ${publicado}."
+              fi
+            else
+              rm -f /tmp/ufs_publicadas.json
+              echo "Branch gh-pages existe mas não tem data/ufs_disponiveis.json; tratando como 0 UF(s) publicadas."
+              publicado=0
+            fi
           fi
+          echo "publicado=${publicado}" >> "$GITHUB_OUTPUT"
 
       - name: Rodar atualização nacional
         run: >
@@ -122,6 +164,60 @@ jobs:
             data/ultima_atualizacao.txt
           retention-days: 14
 
+      - name: Conferir antes de publicar
+        id: conferir
+        # Invariante da spec: nenhuma publicação destrói dado bom. O deploy
+        # usa force_orphan, então o gh-pages passa a ser EXATAMENTE o
+        # conteúdo de docs/dashboard -- publicar com data/ vazio (passo dos
+        # setores abortado, ou "Rodar atualização nacional" falhando antes de
+        # exportar) apaga as 27 UFs e o cache publicado de quebra. Foi assim
+        # que o run #29 destruiu 25 UFs de forma irrecuperável.
+        #
+        # `!cancelled()` em vez de `always()` para que a conferência rode
+        # mesmo com passo anterior falho (publicação parcial vale a pena),
+        # mas não num job cancelado. Publicação parcial é aceitável;
+        # publicar MENOS do que já está no ar, não. Na dúvida (contagem
+        # publicada indisponível), não publica.
+        if: "!cancelled()"
+        run: |
+          publicado="${{ steps.publicado.outputs.publicado }}"
+          arquivo="docs/dashboard/data/ufs_disponiveis.json"
+
+          if ! [ "$publicado" -eq "$publicado" ] 2>/dev/null; then
+            echo "::error::Contagem publicada indisponível ou inválida ('${publicado}'). Sem ela não dá para confirmar que não estamos regredindo -- publicação recusada."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ ! -f "$arquivo" ]; then
+            echo "::error::${arquivo} não existe: esta execução não gerou dado nenhum (atual=ausente, publicado=${publicado}). Publicação recusada para não apagar o que está no ar."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          atual=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.stdout.write(str(len(d)))' "$arquivo") || atual=""
+          if ! [ "$atual" -eq "$atual" ] 2>/dev/null; then
+            echo "::error::${arquivo} não é uma lista JSON legível (atual=inválido, publicado=${publicado}). Publicação recusada."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "UFs nesta execução: ${atual} (publicado: ${publicado})."
+
+          if [ "$atual" -eq 0 ]; then
+            echo "::error::Conjunto atual está vazio (atual=0, publicado=${publicado}). Publicação recusada para não apagar o dashboard."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$atual" -lt "$publicado" ]; then
+            echo "::error::Regressão detectada: atual=${atual} UF(s) é menor que publicado=${publicado}. Publicação recusada."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publicar=true" >> "$GITHUB_OUTPUT"
+
       - name: Preparar cache para publicação
         # `peaceiris/actions-gh-pages` com force_orphan publica só o que
         # estiver dentro de publish_dir no momento do deploy; o cache
@@ -138,7 +234,10 @@ jobs:
         # não publica se o arquivo ficar maior que 80MB (GitHub rejeita push
         # acima de 100MB; melhor publicar sem cache do que quebrar o deploy
         # do dashboard inteiro).
-        if: always()
+        #
+        # `!cancelled()` + guarda: se a conferência recusou, nem preparamos o
+        # cache -- não há publicação para alimentar.
+        if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
         run: |
           mkdir -p docs/dashboard/cache
           if [ -f data/cache/openmeteo.sqlite ]; then
@@ -152,7 +251,12 @@ jobs:
           fi
 
       - name: Publicar dashboard no GitHub Pages
-        if: always()
+        # `always()` aqui era o defeito do run #29: com force_orphan, publicar
+        # depois de uma falha reescreve o gh-pages com o que sobrou (às vezes
+        # nada). `!cancelled()` mantém a publicação parcial útil, e a guarda
+        # de "Conferir antes de publicar" barra o conjunto vazio ou menor que
+        # o que já está no ar.
+        if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
