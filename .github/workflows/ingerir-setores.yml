@@ -31,6 +31,7 @@ jobs:
         run: pip install -e .
 
       - name: Baixar setores já publicados
+        id: baixar
         # Ingestão é incremental (marcador d'água em _where_incremental):
         # partir do estado anterior evita rebaixar tudo e, se a SGB falhar
         # numa UF, o dado do mês passado continua ali. Ausência da branch
@@ -40,18 +41,49 @@ jobs:
           if git ls-remote --exit-code origin dados-base > /dev/null 2>&1; then
             git fetch origin dados-base:refs/remotes/origin/dados-base
             git archive origin/dados-base | tar -x -C data
-            echo "Setores anteriores: $(ls data/*.gpkg 2>/dev/null | wc -l) UF(s)."
+            anterior=$(ls data/*.gpkg 2>/dev/null | wc -l)
+            echo "Setores anteriores: ${anterior} UF(s)."
           else
             echo "Branch dados-base ainda não existe; ingestão parte do zero."
+            anterior=0
           fi
+          echo "anterior=${anterior}" >> "$GITHUB_OUTPUT"
 
       - name: Ingerir setores
         run: python -m src.cli ingerir-setores --diretorio data
 
+      - name: Conferir antes de publicar
+        id: conferir
+        # Roda mesmo se "Ingerir setores" falhar: uma queda no meio da
+        # ingestão não pode nos impedir de checar o que sobrou em data/.
+        # Invariante (nunca publicar um conjunto menor que o anterior):
+        # publicação parcial é aceitável -- é melhor que 20 UFs frescas
+        # do que nenhuma -- mas publicar MENOS do que já estava em
+        # dados-base significa destruir dado bom por uma falha no download
+        # ou na ingestão, a mesma classe de incidente que este workflow
+        # existe para evitar.
+        if: always()
+        run: |
+          anterior="${{ steps.baixar.outputs.anterior }}"
+          atual=$(ls data/*.gpkg 2>/dev/null | wc -l)
+          echo "Setores nesta execução: ${atual} UF(s) (anterior: ${anterior})."
+          if [ "${atual}" -eq 0 ]; then
+            echo "::error::Conjunto atual está vazio (0 UFs). Publicação recusada para não apagar dados-base."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+          elif [ "${atual}" -lt "${anterior}" ]; then
+            echo "::error::Regressão detectada: ${atual} UF(s) atuais é menor que ${anterior} anteriores. Publicação recusada."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publicar=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publicar em dados-base
         # always() porque uma execução parcial ainda avançou as UFs que deram
-        # certo -- vale guardar mesmo com o job marcado como falho.
-        if: always()
+        # certo -- vale guardar mesmo com o job marcado como falho. Mas a
+        # guarda do passo "Conferir antes de publicar" também precisa passar:
+        # publicar menos do que se baixou é perder dado bom, então a
+        # publicação parcial é permitida, a regressão não.
+        if: always() && steps.conferir.outputs.publicar == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
