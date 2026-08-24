@@ -1,11 +1,16 @@
 name: Atualizar dados do ORCA
 
 on:
-  schedule:
-    # 09:00 UTC (06:00 em São Paulo) todo dia; CPRM/SGB e INMET raramente mudam
-    # mais rápido que isso, e o pacote anual do INMET só é atualizado a cada
-    # poucos dias.
-    - cron: "0 9 * * *"
+  # DESARMADO em 2026-08-23: enquanto a ingestão CPRM roda no caminho diário,
+  # uma queda da SGB faz este workflow republicar o gh-pages com poucas UFs
+  # (ocorreu nos runs #23 e #29). Rearmado na Tarefa 6 do plano
+  # docs/superpowers/plans/2026-08-23-isolamento-fontes.md, depois que a
+  # ingestão CPRM sair daqui.
+  # schedule:
+  #   # 09:00 UTC (06:00 em São Paulo) todo dia; CPRM/SGB e INMET raramente mudam
+  #   # mais rápido que isso, e o pacote anual do INMET só é atualizado a cada
+  #   # poucos dias.
+  #   - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       ufs:
