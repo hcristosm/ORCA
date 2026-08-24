@@ -226,9 +226,8 @@ def _fetch_variavel_batch(
 ) -> list[pd.DataFrame]:
     """Busca uma variável horária da Open-Meteo para uma lista de pontos, em lotes.
 
-    Compartilhada por `fetch_precipitacao_batch` (variavel="precipitation") e
-    `fetch_vento_batch` (variavel="windgusts_10m"), mesma paginação, retry e
-    tratamento de 429, só muda qual campo é pedido/lido da resposta.
+    Usada por `fetch_precipitacao_batch` (variavel="precipitation"); campo
+    pedido/lido da resposta é parametrizado por `variavel_hourly`.
 
     `cache`, se informado, encolhe o `past_days` de cada lote para só o que
     ainda falta (ver `_dias_historico_efetivo`) e reconstrói a série completa
@@ -325,32 +324,6 @@ def fetch_precipitacao_batch(
     """
     return _fetch_variavel_batch(
         pontos, "precipitation", "chuva_mm", dias_historico, dias_previsao,
-        timeout, max_retries, backoff_factor, session, tamanho_lote, max_workers_lote,
-        cache, agora,
-    )
-
-
-def fetch_vento_batch(
-    pontos: list[tuple[float, float]],
-    dias_historico: int = 4,
-    dias_previsao: int = 1,
-    timeout: float = 60.0,
-    max_retries: int = 5,
-    backoff_factor: float = 2.0,
-    session: requests.Session | None = None,
-    tamanho_lote: int = TAMANHO_LOTE_PADRAO,
-    max_workers_lote: int = LOTE_WORKERS_PADRAO,
-    cache: CacheOpenMeteo | None = None,
-    agora: pd.Timestamp | None = None,
-) -> list[pd.DataFrame]:
-    """Busca rajada de vento (`windgusts_10m`) horária para uma lista de pontos `(lat, lon)`.
-
-    Mesmo cliente/lote/retry de `fetch_precipitacao_batch`, reaproveita
-    `_fetch_variavel_batch`. Retorna uma lista de DataFrames
-    (`data_hora, vento_rajada_kmh`), um por ponto, na mesma ordem de `pontos`.
-    """
-    return _fetch_variavel_batch(
-        pontos, "windgusts_10m", "vento_rajada_kmh", dias_historico, dias_previsao,
         timeout, max_retries, backoff_factor, session, tamanho_lote, max_workers_lote,
         cache, agora,
     )

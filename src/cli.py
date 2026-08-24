@@ -16,7 +16,6 @@ import typer
 from src.config import DASHBOARD_DATA_DIR, DATA_DIR, UFS_VALIDAS, caminho_setores
 from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
 from src.export.nacional import ORCAMENTO_ALVO_PADRAO, exportar_nacional
-from src.export.vento_data import exportar_vento
 from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
 from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
 from src.ingest.ana import ANAFetchError, ingerir_uf as ingerir_ana
@@ -87,27 +86,6 @@ def exportar_dashboard_cmd(
     typer.echo(f"{meta['total_setores']} setores exportados para {saida_dir} (fonte: {meta['fonte']})")
 
 
-@app.command("exportar-vento")
-def exportar_vento_cmd(
-    uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
-    ano: int = typer.Option(
-        datetime.now(timezone.utc).year, "--ano",
-        help="Não usado hoje; mantido por simetria com exportar-dashboard",
-    ),
-    diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
-    saida: Path = typer.Option(
-        None, "--saida", help="Diretório de saída (padrão: docs/dashboard/data/)"
-    ),
-) -> None:
-    """Consulta a rajada de vento recente por município e gera vento_<uf>.geojson."""
-    saida_dir = saida or DASHBOARD_DATA_DIR
-    resultado = exportar_vento(uf, ano, diretorio, saida_dir)
-    typer.echo(
-        f"{resultado['total_municipios_sinalizados']} município(s) sinalizado(s) "
-        f"exportados para {saida_dir}"
-    )
-
-
 @app.command()
 def atualizar(
     uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
@@ -149,9 +127,6 @@ def atualizar(
         falhas.append("ana")
 
     typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando dados do dashboard ({uf_norm}, fonte={fonte})...")
-    # Construído fora do try: `cache` é usado também pela exportação de vento
-    # abaixo, e deixá-lo ligado dentro do try dependeria da invariante (de
-    # outro módulo) de que CacheOpenMeteo.__init__ nunca levanta.
     cache = CacheOpenMeteo()
     try:
         meta = exportar_dashboard(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR, fonte=fonte, cache_openmeteo=cache)
@@ -160,15 +135,7 @@ def atualizar(
         typer.echo(f"  FALHA na exportação do dashboard: {exc}", err=True)
         falhas.append("dashboard")
 
-    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando camada de vento ({uf_norm})...")
-    try:
-        resultado_vento = exportar_vento(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR, cache_openmeteo=cache)
-        typer.echo(f"  {resultado_vento['total_municipios_sinalizados']} município(s) sinalizado(s).")
-    except (ExportacaoDashboardError, ValueError) as exc:
-        typer.echo(f"  FALHA na exportação de vento: {exc}", err=True)
-        falhas.append("vento")
-
-    falhas_criticas = [f for f in falhas if f not in ("ana", "dashboard", "vento")]
+    falhas_criticas = [f for f in falhas if f not in ("ana", "dashboard")]
 
     marcador = DATA_DIR / "ultima_atualizacao.txt"
     marcador.write_text(
@@ -207,12 +174,12 @@ def atualizar_nacional_cmd(
     diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
     saida: Path = typer.Option(DASHBOARD_DATA_DIR, "--saida", help="Diretório de saída do dashboard"),
 ) -> None:
-    """Ingere setores da CPRM (incremental) e exporta o dashboard + camada de vento para
-    várias UFs de uma vez, compartilhando 1 grade espacial nacional para caber no rate
-    limit da Open-Meteo.
+    """Ingere setores da CPRM (incremental) e exporta o dashboard para várias UFs
+    de uma vez, compartilhando 1 grade espacial nacional para caber no rate limit
+    da Open-Meteo.
 
     Não ingere INMET/ANA (essas fontes continuam por UF, via `atualizar`);
-    esta é a via nacional para setores + chuva Open-Meteo + vento, ver
+    esta é a via nacional para setores + chuva Open-Meteo, ver
     docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
 
     `--orcamento-alvo` calibra só os pontos de grade dos setores; a série por
@@ -240,16 +207,6 @@ def atualizar_nacional_cmd(
         raise typer.Exit(code=1)
 
     typer.echo(f"{len(resultados)}/{len(lista_ufs)} UF(s) exportada(s) para {saida}.")
-
-    falhas_vento = []
-    for uf in resultados:
-        try:
-            exportar_vento(uf, ano, diretorio, saida, cache_openmeteo=cache)
-        except (ExportacaoDashboardError, ValueError) as exc:
-            typer.echo(f"  FALHA na exportação de vento ({uf}): {exc}", err=True)
-            falhas_vento.append(uf)
-    if falhas_vento:
-        typer.echo(f"Falha na exportação de vento: {', '.join(falhas_vento)}", err=True)
 
     if falhas_cprm:
         typer.echo(f"Falha na ingestão CPRM: {', '.join(falhas_cprm)}", err=True)
