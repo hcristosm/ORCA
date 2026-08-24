@@ -170,6 +170,47 @@ jobs:
             data/ultima_atualizacao.txt
           retention-days: 14
 
+      - name: Preservar UFs não regeneradas (mescla com o gh-pages)
+        # Spec §4.5. Com force_orphan, o gh-pages vira EXATAMENTE
+        # docs/dashboard: uma UF que a Open-Meteo não entregou hoje sumiria
+        # do ar. E como a cobertura diária oscila entre 70% e 100% (18 runs,
+        # 2026-08-10 a 08-23), sumir seria o caso comum -- a guarda
+        # anti-regressão abaixo viraria uma catraca travada no melhor dia já
+        # publicado, recusando cerca de um terço das execuções e congelando o
+        # dashboard. Completando o conjunto com o que já está publicado,
+        # degradar passa a ser envelhecer, e a guarda volta a significar
+        # "algo está errado" em vez de "hoje a Open-Meteo oscilou".
+        #
+        # `!cancelled()` para mesclar mesmo depois de uma exportação
+        # parcialmente falha -- é justamente aí que a mescla serve. Mas o
+        # script recusa (sai 1) quando este run não gerou índice nenhum: aí a
+        # mescla produziria um conjunto artificialmente completo, feito só de
+        # dado velho, e a guarda o aprovaria como se fosse novo. Sem índice,
+        # o conjunto atual continua vazio e a guarda recusa, que é o certo.
+        #
+        # Reaproveita o `origin/gh-pages` já buscado no passo do cache: sem
+        # ele (branch inexistente na 1a publicação, ou fetch que falhou) não
+        # há nada a preservar e seguimos em frente.
+        shell: bash -eo pipefail {0}
+        if: "!cancelled()"
+        run: |
+          if ! git rev-parse --verify --quiet refs/remotes/origin/gh-pages > /dev/null; then
+            echo "gh-pages não disponível localmente (1a publicação ou fetch falhou); nada a preservar."
+            exit 0
+          fi
+          publicado_dir=$(mktemp -d)
+          # `git archive` falha se o caminho não existir na árvore (gh-pages
+          # sem data/); e sem o pipefail acima o tar sairia 0 com entrada
+          # vazia, escondendo isso.
+          if ! git archive origin/gh-pages data | tar -x -C "$publicado_dir"; then
+            echo "gh-pages não tem data/ publicado; nada a preservar."
+            exit 0
+          fi
+          python3 scripts/mesclar_publicado.py \
+            --publicado "$publicado_dir/data" \
+            --atual docs/dashboard/data \
+            --escopo data
+
       - name: Conferir antes de publicar
         id: conferir
         # Invariante da spec: nenhuma publicação destrói dado bom. O deploy
