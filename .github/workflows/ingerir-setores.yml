@@ -36,16 +36,32 @@ jobs:
         # partir do estado anterior evita rebaixar tudo e, se a SGB falhar
         # numa UF, o dado do mês passado continua ali. Ausência da branch
         # não é erro -- a 1a execução parte do zero.
+        #
+        # `git ls-remote --exit-code` devolve 2 para "nenhuma ref
+        # correspondente" (branch ainda não existe) e outros códigos (128,
+        # etc.) para falha de rede/autenticação -- tratar os dois como
+        # "branch não existe" faria uma intermitência de rede zerar
+        # `anterior` e a guarda do passo "Conferir antes de publicar"
+        # aprovaria apagar as UFs que já estavam em dados-base. O
+        # `|| codigo=$?` é necessário porque o GitHub roda o script com
+        # `bash -e`: sem ele, o próprio ls-remote falhando abortaria o
+        # passo antes de lermos `$?` (mesmo padrão usado em
+        # atualizar-dados.yml).
         run: |
           mkdir -p data
-          if git ls-remote --exit-code origin dados-base > /dev/null 2>&1; then
+          codigo=0
+          git ls-remote --exit-code origin dados-base > /dev/null 2>&1 || codigo=$?
+          if [ "$codigo" -eq 0 ]; then
             git fetch origin dados-base:refs/remotes/origin/dados-base
             git archive origin/dados-base | tar -x -C data
             anterior=$(ls data/*.gpkg 2>/dev/null | wc -l)
-            echo "Setores anteriores: ${anterior} UF(s)."
-          else
-            echo "Branch dados-base ainda não existe; ingestão parte do zero."
+            echo "Branch dados-base encontrada. Setores anteriores: ${anterior} UF(s)."
+          elif [ "$codigo" -eq 2 ]; then
+            echo "Branch dados-base ainda não existe (1a execução); ingestão parte do zero."
             anterior=0
+          else
+            echo "::error::Falha ao verificar o branch dados-base (rede/git, código $codigo) -- não é possível distinguir de 'branch não existe'. Abortando para não publicar sobre dado que não conseguimos confirmar."
+            exit 1
           fi
           echo "anterior=${anterior}" >> "$GITHUB_OUTPUT"
 
@@ -54,42 +70,80 @@ jobs:
 
       - name: Conferir antes de publicar
         id: conferir
-        # Roda mesmo se "Ingerir setores" falhar: uma queda no meio da
+        # Roda mesmo se "Ingerir setores" falhar (mas não se o job foi
+        # cancelado -- ver `!cancelled()` abaixo): uma queda no meio da
         # ingestão não pode nos impedir de checar o que sobrou em data/.
-        # Invariante (nunca publicar um conjunto menor que o anterior):
-        # publicação parcial é aceitável -- é melhor que 20 UFs frescas
-        # do que nenhuma -- mas publicar MENOS do que já estava em
-        # dados-base significa destruir dado bom por uma falha no download
-        # ou na ingestão, a mesma classe de incidente que este workflow
-        # existe para evitar.
-        if: always()
+        # Invariante (nunca publicar um conjunto menor ou pior que o
+        # anterior): publicação parcial é aceitável -- é melhor que 20 UFs
+        # frescas do que nenhuma -- mas publicar MENOS, ou publicar
+        # arquivos vazios/truncados, significa destruir dado bom por uma
+        # falha no download ou na ingestão, a mesma classe de incidente que
+        # este workflow existe para evitar. Na dúvida (contagem anterior
+        # não disponível), não publica.
+        if: "!cancelled()"
         run: |
           anterior="${{ steps.baixar.outputs.anterior }}"
           atual=$(ls data/*.gpkg 2>/dev/null | wc -l)
-          echo "Setores nesta execução: ${atual} UF(s) (anterior: ${anterior})."
+          echo "Setores nesta execução: ${atual} UF(s) (anterior: ${anterior:-<vazio>})."
+
+          if ! [ "$anterior" -eq "$anterior" ] 2>/dev/null; then
+            echo "::error::Contagem anterior indisponível ou inválida ('${anterior}'). Sem ela não dá para confirmar que não estamos regredindo -- publicação recusada."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [ "${atual}" -eq 0 ]; then
             echo "::error::Conjunto atual está vazio (0 UFs). Publicação recusada para não apagar dados-base."
             echo "publicar=false" >> "$GITHUB_OUTPUT"
-          elif [ "${atual}" -lt "${anterior}" ]; then
-            echo "::error::Regressão detectada: ${atual} UF(s) atuais é menor que ${anterior} anteriores. Publicação recusada."
-            echo "publicar=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "publicar=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          if [ "${atual}" -lt "${anterior}" ]; then
+            echo "::error::Regressão detectada: ${atual} UF(s) atuais é menor que ${anterior} anteriores. Publicação recusada."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Contagem de arquivos não basta: 27 .gpkg de 0 byte ou truncados
+          # também passariam em atual >= anterior. Limiar de 10 KiB: o menor
+          # .gpkg real hoje em dados-base é risco_to.gpkg com ~108 KiB (a
+          # UF com menos setores), então 10 KiB fica bem abaixo de qualquer
+          # arquivo real e ainda pega vazio/truncado com folga.
+          limiar_bytes=10240
+          pequeno=""
+          for f in data/*.gpkg; do
+            tamanho=$(stat -c%s "$f")
+            if [ "$tamanho" -lt "$limiar_bytes" ]; then
+              echo "::error::${f} tem ${tamanho} byte(s), abaixo do limiar de ${limiar_bytes} -- parece vazio ou truncado."
+              pequeno="1"
+            fi
+          done
+          if [ -n "$pequeno" ]; then
+            echo "::error::Ao menos um .gpkg está vazio ou truncado. Publicação recusada."
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publicar=true" >> "$GITHUB_OUTPUT"
+
       - name: Publicar em dados-base
-        # always() porque uma execução parcial ainda avançou as UFs que deram
-        # certo -- vale guardar mesmo com o job marcado como falho. Mas a
-        # guarda do passo "Conferir antes de publicar" também precisa passar:
-        # publicar menos do que se baixou é perder dado bom, então a
-        # publicação parcial é permitida, a regressão não.
-        if: always() && steps.conferir.outputs.publicar == 'true'
+        # !cancelled() (em vez de always()) porque uma execução parcial
+        # ainda avançou as UFs que deram certo -- vale guardar mesmo com o
+        # job marcado como falho, mas não se o job foi cancelado. A guarda
+        # do passo "Conferir antes de publicar" também precisa passar:
+        # publicar menos, ou pior, do que já estava em dados-base é perder
+        # dado bom, então a publicação parcial é permitida, a regressão não.
+        #
+        # Sem force_orphan (ruling R-5): a spec define dados-base com
+        # histórico (§4.4), justamente para permitir `git revert` se algo
+        # passar pela guarda e ainda assim publicar algo ruim -- histórico
+        # é a rede de segurança atrás da guarda, não redundante com ela.
+        if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: data
           publish_branch: dados-base
-          force_orphan: true
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
           commit_message: "chore(dados-base): atualizar setores da CPRM/SGB"
