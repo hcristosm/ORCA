@@ -117,10 +117,17 @@ camada no `docs/dashboard/index.html`, os testes `test_export_vento.py`,
 Remove também os 9 `docs/dashboard/data/vento_*.geojson` versionados em
 `main`, resíduos de execuções antigas.
 
-Verificado: o IBGE é usado **exclusivamente** pelo vento. `centroides_ibge`
-tem um único chamador (`vento_data.py`), e `src/ingest/ibge.py` só é
-importado por ele. **Remover o vento elimina uma das duas dependências
-`.gov.br` por inteiro.**
+Verificado: no **pipeline Python**, o IBGE é usado exclusivamente pelo
+vento. `centroides_ibge` tem um único chamador (`vento_data.py`), e
+`src/ingest/ibge.py` só é importado por ele. **Remover o vento tira o IBGE
+do pipeline Python por inteiro.**
+
+Não elimina a dependência do projeto: `docs/dashboard/index.html` continua
+chamando `servicodados.ibge.gov.br` em tempo de visualização, na malha
+municipal (linha 351) e nos nomes de municípios (linha 395) -- é por isso
+que o host segue listado no `connect-src` da CSP (linha 18). O que muda é
+o raio do estrago: uma queda do IBGE passa a degradar o mapa no navegador
+de quem está olhando, em vez de quebrar a geração dos dados publicados.
 
 ### 4.2 Separar a ingestão CPRM em workflow mensal
 
@@ -161,6 +168,15 @@ histórico. Qualquer publicação ruim passa a estar a um `git revert` de
 distância. Era o `force_orphan` que tornava o incidente irreversível, e ele
 existia só por causa do blob de 45MB mudando diariamente.
 
+**Estado atual (até o Plano 2):** `atualizar-dados.yml` ainda publica com
+`force_orphan: true`, porque tirá-lo depende de antes tirar o cache de
+45MB do `gh-pages`. Enquanto isso não acontecer, o **princípio 3 ("todo
+estrago é reversível") não vale para o `gh-pages`**: cada publicação apaga
+o histórico e não há `git revert` possível. A única rede de segurança é a
+guarda de publicação (R-8/R-9), que recusa publicar quando a cobertura
+regride -- ou seja, a proteção é *preventiva*, não *reversível*, e a linha
+"Histórico: sim" da tabela acima descreve o alvo, não o presente.
+
 ### 4.5 Publicação não-destrutiva
 
 Antes de publicar, o job diário busca o `gh-pages` atual e preserva os
@@ -177,7 +193,11 @@ que a defasagem seja lida em vez de interpretada.
 
 - **Mensal (CPRM):** falha se **qualquer** UF falhar após os retries. É
   mensal, então a notificação é rara e sempre significativa; ignorar custa
-  uma UF congelada por um mês.
+  uma UF congelada por um mês. Por isso o comando `ingerir-setores` chama
+  `ingerir_uf(..., permitir_cache=False)`: o workflow extrai os
+  GeoPackages de `dados-base` para o diretório de trabalho antes de
+  ingerir, então o fallback de cache local aceitaria o próprio dado
+  anterior e devolveria 27 sucessos com a SGB fora do ar.
 - **Diário (Open-Meteo):** falha quando **qualquer UF** tiver `gerado_em`
   mais velho que **3 dias**. A cobertura do run em si vai para o Step
   Summary como informação, não como critério de falha.
@@ -192,8 +212,14 @@ que a defasagem seja lida em vez de interpretada.
   envelhece. Um run a 74% não é emergência; uma UF parada há três dias é.
   A defasagem é imune à oscilação transitória e mede o dano real.
 
-Nos dois casos a publicação mantém `if: always()`: falhar o job nunca
-impede a mescla de ir ao ar.
+**Revisto pelo ruling R-9:** esta seção dizia originalmente que "nos dois
+casos a publicação mantém `if: always()`: falhar o job nunca impede a
+mescla de ir ao ar". Os dois workflows fazem o **oposto**, de propósito: a
+guarda de publicação sai com código 1 e o passo de publicação é **pulado**.
+Publicar mesmo assim seria recusar em silêncio -- o run acabaria com dado
+ruim no ar e nenhum sinal, que é exatamente a degradação silenciosa que
+esta spec existe para eliminar. Falhar o job e não publicar deixa o estado
+anterior de pé e produz a notificação.
 
 ### 4.8 Teste de fumaça no site publicado
 

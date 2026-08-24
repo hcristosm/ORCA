@@ -635,7 +635,7 @@ curl -s https://hcristosm.github.io/ORCA/data/ufs_disponiveis.json | python3 -c 
 
 Expected: número bem maior que 2.
 
-**Nota:** enquanto a publicação não-destrutiva do Plano 2 não existir, uma UF que falhar na Open-Meteo ainda some do site. Se este número vier abaixo de 27, é esperado e é exatamente o que o Plano 2 conserta — não retrabalhe aqui.
+**Nota (atualizada pelo ruling R-8):** a guarda de publicação agora **recusa** a publicação que regride o total de UFs, e o job sai com código 1. Ou seja, um número abaixo de 27 não é mais "esperado, siga em frente": ou o site continua com o conteúdo anterior (publicação recusada), ou houve uma queda que passou pela guarda. Nos dois casos, investigue antes de seguir. O que continua diferido ao Plano 2 é a publicação não-destrutiva por UF — hoje a proteção é tudo-ou-nada, no run inteiro.
 
 ---
 
