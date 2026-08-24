@@ -220,22 +220,11 @@
   function corPadrao() { return token("--risco-padrao"); }
   function corAtencao() { return token("--contorno-atencao"); }
   function corSerie() { return token("--serie-chuva"); }
-  function coresVento() {
-    return {
-      "atencao": token("--vento-atencao"),
-      "perigo": token("--vento-perigo"),
-      "grande_perigo": token("--vento-grande-perigo"),
-    };
-  }
-  function rotuloSeveridade(sev) {
-    return { "atencao": "Atenção", "perigo": "Perigo", "grande_perigo": "Grande perigo" }[sev] || sev;
-  }
 
   const estado = { janela: 72, limiar: 100, municipio: "" };
   let setoresGeoJSON = null;
   let series = {};
   let previsao = null;
-  let ventoGeoJSON = null;
   let malhaMunicipios = null;
   let malhaMunicipiosUf = null;
   let codareaPorNome = null;
@@ -244,7 +233,6 @@
   let camadaSetores = null;
   let camadaChoropleth = null;
   let camadaSetoresTodos = null;
-  let camadaVento = null;
   let mapa = null;
   let legendaDiv = null;
   let grafico = null;
@@ -312,21 +300,12 @@
       previsaoCarregada = null;
     }
 
-    let ventoCarregado = null;
-    try {
-      const ventoResp = await fetch(`data/vento_${ufAlvo}.geojson`);
-      ventoCarregado = ventoResp.ok ? await ventoResp.json() : null;
-    } catch (e) {
-      ventoCarregado = null;
-    }
-
     // Commit atômico do estado: só depois de tudo buscado, e só se ainda somos a
     // carga mais recente.
     if (UF !== ufAlvo) return;
     setoresGeoJSON = setoresCarregados;
     series = seriesCarregadas;
     previsao = previsaoCarregada;
-    ventoGeoJSON = ventoCarregado;
 
     const detalheFonte = meta.fonte === "openmeteo"
       ? "Fonte: Open-Meteo (consulta direta por setor)"
@@ -377,8 +356,8 @@
   async function garantirMalhaMunicipios() {
     if (malhaMunicipios && malhaMunicipiosUf === UF) return malhaMunicipios;
     if (!promessaMalha) {
-      // Evita disparar fetches duplicados se dois gatilhos (load inicial + toggle do
-      // vento) chamarem isso antes do primeiro terminar.
+      // Evita disparar fetches duplicados se dois gatilhos (load inicial + outro
+      // trigger) chamarem isso antes do primeiro terminar.
       // Captura a UF alvo no início do fetch: se a UF mudar antes deste resolver (o
       // usuário trocou de seletor), o resultado não pode ser gravado sob a UF nova.
       const ufAlvo = UF;
@@ -634,22 +613,12 @@
     };
     legenda.addTo(mapa);
 
-    camadaVento = L.layerGroup();
     camadaSetoresTodos = L.layerGroup();
     const overlays = { "Setores de risco (estado completo)": camadaSetoresTodos };
-    if (ventoGeoJSON && ventoGeoJSON.features.length) overlays["Rajada de vento"] = camadaVento;
     L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
 
     mapa.on("overlayadd", ev => {
-      if (ev.name === "Rajada de vento") {
-        // Também tenta recuperar os nomes do IBGE aqui: é o único gatilho de retry
-        // disponível se aquele fetch falhou/expirou no carregamento inicial.
-        Promise.all([garantirMalhaMunicipios(), garantirNomesMunicipios()]).then(() => {
-          renderizarVento();
-          if (!estado.municipio && choroplethDisponivel() && !camadaChoropleth) renderizarTudo();
-        });
-      }
-      else if (ev.name === "Setores de risco (estado completo)") { renderizarSetoresCompletoEstado(); atualizarLegenda(); }
+      if (ev.name === "Setores de risco (estado completo)") { renderizarSetoresCompletoEstado(); atualizarLegenda(); }
     });
     mapa.on("overlayremove", ev => {
       if (ev.name === "Setores de risco (estado completo)") { camadaSetoresTodos.clearLayers(); atualizarLegenda(); }
@@ -755,13 +724,7 @@
     return '<b>Grau de risco</b><br>' +
       '<span class="amostra" style="background:' + cores["alto"] + '"></span>Alto<br>' +
       '<span class="amostra" style="background:' + cores["muito alto"] + '"></span>Muito alto<br>' +
-      linhasSetor +
-      (ventoGeoJSON && ventoGeoJSON.features.length
-        ? '<br><b>Vento (rajada 24h)</b><br>' +
-          '<span class="amostra" style="background:' + coresVento()["atencao"] + '"></span>Atenção<br>' +
-          '<span class="amostra" style="background:' + coresVento()["perigo"] + '"></span>Perigo<br>' +
-          '<span class="amostra" style="background:' + coresVento()["grande_perigo"] + '"></span>Grande perigo'
-        : '');
+      linhasSetor;
   }
 
   function atualizarLegenda() {
@@ -893,37 +856,6 @@
     // Exclui o município selecionado: seus setores já estão em camadaSetores (visão detalhada).
     const { filtrados, emAtencao, alertaPrevisto } = calcularRecorte("", estado.municipio);
     criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(camadaSetoresTodos);
-  }
-
-  function renderizarVento() {
-    if (!camadaVento) return;
-    camadaVento.clearLayers();
-    if (!malhaMunicipios || !ventoGeoJSON || !ventoGeoJSON.features.length) return;
-
-    const porCodarea = new Map(
-      ventoGeoJSON.features.map(f => [String(f.properties.codarea), f.properties])
-    );
-    const cores = coresVento();
-    const coloridos = filtrarMalhaPorCodarea(porCodarea);
-
-    L.geoJSON(coloridos, {
-      style: feature => {
-        const p = porCodarea.get(String(feature.properties.codarea));
-        return {
-          fillColor: cores[p.severidade] || corPadrao(),
-          fillOpacity: 0.65,
-          color: corAtencao(),
-          weight: 1,
-        };
-      },
-      onEachFeature: (feature, layer) => {
-        const p = porCodarea.get(String(feature.properties.codarea));
-        layer.bindTooltip(
-          `<b>${p.munic}</b><br>Rajada (24h): ${p.rajada_kmh_24h.toFixed(1)} km/h<br>` +
-          `Severidade: ${rotuloSeveridade(p.severidade)}`
-        );
-      },
-    }).addTo(camadaVento);
   }
 
   function renderizarTabela(emAtencao, alertaPrevisto) {

@@ -157,39 +157,6 @@ def test_fetch_precipitacao_batch_usa_dias_previsao_no_corpo():
     assert corpo_enviado["forecast_days"] == 3
 
 
-def test_fetch_vento_batch_parseia_windgusts_na_ordem_dos_pontos():
-    from src.ingest.openmeteo import fetch_vento_batch
-
-    horas = ["2026-08-10T00:00", "2026-08-10T01:00"]
-    resposta = [
-        {"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas, "windgusts_10m": [40.0, 90.0]}},
-        {"latitude": -24.0, "longitude": -47.0, "hourly": {"time": horas, "windgusts_10m": [10.0, 15.0]}},
-    ]
-
-    with responses.RequestsMock() as rsps:
-        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
-        series = fetch_vento_batch([(-23.5, -46.6), (-24.0, -47.0)])
-
-    assert len(series) == 2
-    assert list(series[0]["vento_rajada_kmh"]) == [40.0, 90.0]
-    assert list(series[1]["vento_rajada_kmh"]) == [10.0, 15.0]
-
-
-def test_fetch_vento_batch_envia_windgusts_no_corpo():
-    import json as json_module
-
-    from src.ingest.openmeteo import fetch_vento_batch
-
-    horas = ["2026-08-10T00:00"]
-    resposta = [{"latitude": -23.5, "longitude": -46.6, "hourly": {"time": horas, "windgusts_10m": [40.0]}}]
-
-    with responses.RequestsMock() as rsps:
-        rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
-        fetch_vento_batch([(-23.5, -46.6)])
-        corpo_enviado = json_module.loads(rsps.calls[0].request.body)
-        assert corpo_enviado["hourly"] == ["windgusts_10m"]
-
-
 def test_horas_no_intervalo_gera_uma_por_hora_exclusive_no_fim():
     from src.ingest.openmeteo import _horas_no_intervalo
 

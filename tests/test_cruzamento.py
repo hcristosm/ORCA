@@ -223,27 +223,3 @@ def test_centroides_municipio_agrupa_e_ordena_por_nome():
     lat_a, lon_a = pontos[0]
     assert -24.0 < lat_a < -23.0
     assert -47.0 < lon_a < -46.0
-
-
-def test_centroides_ibge_retorna_codarea_e_centroide_do_poligono():
-    import geopandas as gpd
-    from shapely.geometry import Polygon
-
-    from src.processing.cruzamento import centroides_ibge
-
-    municipios = gpd.GeoDataFrame(
-        {"codarea": ["3500105", "3500204"]},
-        geometry=[
-            Polygon([(-51.0, -21.0), (-51.1, -21.0), (-51.1, -21.1), (-51.0, -21.1)]),
-            Polygon([(-49.5, -21.2), (-49.6, -21.2), (-49.6, -21.3), (-49.5, -21.3)]),
-        ],
-        crs="EPSG:4326",
-    )
-
-    codareas, pontos = centroides_ibge(municipios)
-
-    assert codareas == ["3500105", "3500204"]
-    assert len(pontos) == 2
-    lat0, lon0 = pontos[0]
-    assert -21.1 < lat0 < -21.0
-    assert -51.1 < lon0 < -51.0

@@ -1,8 +1,0 @@
-{
-"type": "FeatureCollection",
-"name": "vento_sc",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "codarea": "4213807", "munic": "Praia Grande", "rajada_kmh_24h": 72.0, "severidade": "atencao" }, "geometry": { "type": "Point", "coordinates": [ -49.990905279877637, -29.182704213175402 ] } }
-]
-}

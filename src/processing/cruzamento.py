@@ -54,23 +54,6 @@ def centroides_municipio(setores: gpd.GeoDataFrame) -> tuple[list[str], list[tup
     return municipios, pontos
 
 
-def centroides_ibge(municipios: gpd.GeoDataFrame) -> tuple[list[str], list[tuple[float, float]]]:
-    """Centroide de cada polígono municipal da malha do IBGE.
-
-    Espelha `centroides_municipio` (que usa a média dos centroides dos
-    setores CPRM), mas a partir da malha oficial do IBGE, usado só pela
-    camada de vento (`src/export/vento_data.py`), que cobre todos os
-    municípios de uma UF, não só os que têm setor de risco geológico
-    registrado. Retorna `(codareas, pontos)` em correspondência posicional,
-    `pontos` em `(lat, lon)`, prontos para `fetch_vento_batch`.
-    """
-    centroides_m = municipios.to_crs(CRS_METRICO).geometry.centroid
-    centroides_4326 = centroides_m.to_crs("EPSG:4326")
-    codareas = list(municipios["codarea"])
-    pontos = [(pt.y, pt.x) for pt in centroides_4326]
-    return codareas, pontos
-
-
 def _estacoes_para_pontos(chuva_df: pd.DataFrame) -> gpd.GeoDataFrame:
     estacoes = chuva_df.drop_duplicates("codigo_estacao")[
         ["codigo_estacao", "nome_estacao", "latitude", "longitude"]

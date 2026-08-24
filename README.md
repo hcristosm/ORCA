@@ -62,6 +62,7 @@ publicado no GitHub Pages e atualizado todo dia pelo cron (ver
   - [3. Abrir o dashboard](#3-abrir-o-dashboard)
   - [4. Atualização automática](#4-atualização-automática)
   - [5. Cobertura nacional (27 UFs)](#5-cobertura-nacional-27-ufs)
+  - [6. Cadências separadas: setores mensais, chuva diária](#6-cadências-separadas-setores-mensais-chuva-diária)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Testes e CI](#testes-e-ci)
 - [Decisões e investigações](#decisões-e-investigações)
@@ -78,7 +79,7 @@ publicado no GitHub Pages e atualizado todo dia pelo cron (ver
 | [**CPRM/SGB**](https://www.sgb.gov.br/) | Polígonos de setorização de risco geológico (grau de risco, tipologia, nº de moradias/pessoas afetadas) | `https://geoportal.sgb.gov.br/server/rest/services/gestaoterritorial/risco/FeatureServer/0` (ArcGIS REST, GeoJSON) |
 | [**INMET**](https://portal.inmet.gov.br/) | Chuva horária por estação meteorológica automática | `https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` (CSV, pacote público anual) |
 | [**ANA**](https://www.gov.br/ana/pt-br) | Chuva em intervalos de 15min por estação telemétrica (fonte complementar ao INMET; nem toda estação tem dado vivo, ver [Decisões e investigações](#decisões-e-investigações)) | `https://telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP/XML, sem captcha/autenticação) |
-| [**Open-Meteo**](https://open-meteo.com/) | Chuva e rajada de vento horárias por coordenada (consulta direta no centro de cada setor, sem estação; **fonte padrão do dashboard exportado**) | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
+| [**Open-Meteo**](https://open-meteo.com/) | Chuva horária por coordenada (consulta direta no centro de cada setor, sem estação; **fonte padrão do dashboard exportado**) | `https://api.open-meteo.com/v1/forecast` (POST em lote, sem captcha/autenticação) |
 
 A CPRM foi renomeada para **SGB**. Os domínios do enunciado original
 (`geoportal.cprm.gov.br`, `sace.cprm.gov.br`, `arcgisserver.cprm.gov.br`) ainda
@@ -108,13 +109,17 @@ flowchart LR
 ```
 
 `src/cli.py` expõe os comandos de ingestão e exportação por UF (`ingest-cprm`,
-`ingest-inmet`, `ingest-ana`, `exportar-dashboard`, `atualizar`) e o comando
-nacional (`atualizar-nacional`, ver
-[Cobertura nacional](#5-cobertura-nacional-27-ufs)), usados manualmente ou
-pelo cron diário
-([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml)), que também
-comita os dados exportados de volta no repositório para o GitHub Pages
-publicar. `tests/` cobre cada módulo com HTTP mockado, sem depender de rede.
+`ingest-inmet`, `ingest-ana`, `exportar-dashboard`, `atualizar`), o comando
+nacional de exportação (`atualizar-nacional`, ver
+[Cobertura nacional](#5-cobertura-nacional-27-ufs)) e o comando nacional de
+ingestão dos setores (`ingerir-setores`, ver
+[Cadências separadas](#6-cadências-separadas-setores-mensais-chuva-diária)).
+Os dois últimos rodam em workflows distintos, de propósito: `ingerir-setores`
+mensalmente ([`ingerir-setores.yml`](.github/workflows/ingerir-setores.yml)),
+publicando os GeoPackages na branch `dados-base`; `atualizar-nacional`
+diariamente ([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml)),
+lendo esses setores da `dados-base` e publicando o dashboard no `gh-pages`.
+`tests/` cobre cada módulo com HTTP mockado, sem depender de rede.
 
 A camada `src/storage/` do plano original chegou a ficar de fora (SQLite/DuckDB
 pareciam desnecessários para o volume de dados de um estado). Hoje ela existe
@@ -216,19 +221,14 @@ Um seletor de UF no topo troca entre as UFs com dados exportados (lidas de
 [Cobertura nacional](#5-cobertura-nacional-27-ufs)); sem esse manifesto, o
 dashboard cai de volta para mostrar só SP.
 
-O mapa também traz uma camada de **rajada de vento**, desligada por padrão;
-liga pelo controle de camadas no canto superior direito ("Rajada de vento").
-Ligada, ela mostra um choropleth: o polígono de cada município de SP que teve
-rajada relevante nas últimas 24h aparece preenchido, colorido pela severidade
-em três faixas (atenção, perigo, grande perigo) derivadas de uma escala
-Beaufort simplificada; passar o mouse num polígono mostra o nome do
-município, o valor em km/h e a faixa. A cobertura é todos os 645 municípios
-de SP, não só os que têm setor de risco geológico da CPRM. Os contornos
-municipais vêm da malha territorial pública do IBGE, buscada ao vivo pelo
-navegador na primeira vez que a camada é ligada, não é pré-computada nem
-versionada no repositório. Como o limiar de chuva, essa escala é ilustrativa:
-não é um critério oficial brasileiro calibrado para risco geológico, só uma
-referência de leitura rápida.
+O choropleth municipal do mapa (contornos e nomes de município) é montado no
+navegador a partir da malha territorial pública do **IBGE**, buscada ao vivo
+na primeira vez que a UF é aberta: não é pré-computada nem versionada no
+repositório. É a única dependência de IBGE que o projeto ainda tem, e ela
+vive só no front-end — o pipeline Python não consulta o IBGE. Se o IBGE
+estiver fora, o mapa degrada no navegador de quem está olhando (o render
+principal não espera por essa chamada), sem afetar a geração dos dados
+publicados.
 
 Abaixo do dashboard oficial, a seção **"Minhas áreas"** deixa qualquer visitante carregar um arquivo
 geolocalizado próprio (GeoJSON, KML ou shapefile em `.zip`) e ver chuva acumulada (24h/72h) e a
@@ -247,12 +247,16 @@ python scripts/atualizar_dados.py --uf SP --ano 2026
 ```
 
 Roda as ingestões (CPRM/SGB, INMET, ANA) e a exportação dos dados do
-dashboard em sequência, tolera a falha de uma fonte sem derrubar as outras e
-grava `data/ultima_atualizacao.txt`. É o mesmo script que
-[`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml) roda todo dia
-(cron `0 9 * * *`, mais `workflow_dispatch` manual): publica os dados como
-artefato do GitHub Actions **e** comita `docs/dashboard/data/*` de volta no
-repositório, para o GitHub Pages publicar a versão atualizada do dashboard.
+dashboard em sequência para **uma** UF, tolera a falha de uma fonte sem
+derrubar as outras e grava `data/ultima_atualizacao.txt`. É o caminho de uso
+local, para quem quer o ciclo completo de uma UF na própria máquina.
+
+Em produção o ciclo é outro, e separado por cadência: o cron diário
+([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml), `0 9 * * *`
+mais `workflow_dispatch`) não ingere fonte `.gov.br` nenhuma — lê os setores
+já ingeridos da branch `dados-base`, roda `atualizar-nacional` e publica o
+dashboard no `gh-pages` (ver
+[Cadências separadas](#6-cadências-separadas-setores-mensais-chuva-diária)).
 
 ### 5. Cobertura nacional (27 UFs)
 
@@ -261,27 +265,84 @@ python -m src.cli atualizar-nacional --ufs SP,RJ,MG --ano 2026
 # --ufs vazio/omitido = todas as 27 UFs (padrão)
 ```
 
-Ingere os setores da CPRM de cada UF pedida (incrementalmente, só o que
-mudou desde a última sincronização, ver
-[Decisões e investigações](#decisões-e-investigações)) e exporta o
-dashboard (fonte Open-Meteo) para todas de uma vez, calculando **uma única
+Exporta o dashboard (fonte Open-Meteo) para todas as UFs pedidas de uma vez,
+calculando **uma única
 grade espacial nacional** antes de exportar UF por UF: setores próximos
 (inclusive entre UFs vizinhas) compartilham o mesmo ponto de consulta à
 Open-Meteo, mantendo o total de pontos distintos dentro de
 `--orcamento-alvo` (padrão 6.000, teto do plano gratuito é 10.000/dia) em
 vez de estourar o rate limit ao consultar um ponto por setor em escala
-nacional. `--pausa-entre-ufs` (padrão 5s) espalha as chamadas entre UFs;
-isso é uma mitigação best-effort para os tetos de hora/minuto da Open-Meteo,
-não um agendador preciso. Gera `data/ufs_disponiveis.json`, que o dashboard
+nacional. As UFs são exportadas concorrentemente; quem garante não estourar
+os tetos de hora/minuto da Open-Meteo é o rate limiter compartilhado em
+`src/ingest/openmeteo.py`. Gera `data/ufs_disponiveis.json`, que o dashboard
 usa para popular o seletor de UF.
 
-Ingestão de INMET/ANA e a camada de vento continuam por UF (`ingest-inmet`,
-`ingest-ana`, `exportar-vento`, ou o comando `atualizar` de sempre) —
-`atualizar-nacional` só ingere CPRM e exporta pela fonte Open-Meteo (que não
-depende de estação), mas exporta a camada de vento por UF depois do export
-nacional. O cron diário ([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml))
-roda `atualizar-nacional` para todas as UFs; uma UF falhando (CPRM fora do
-ar, Open-Meteo com 429) não derruba a publicação das demais.
+`atualizar-nacional` **não ingere nada**: nem CPRM/SGB, nem INMET/ANA. Ele
+espera encontrar os GeoPackages de setores já em `--diretorio` (postos ali
+pelo `ingerir-setores` mensal, ou por `ingest-cprm` se você estiver rodando
+local) e consulta só a Open-Meteo, que não depende de estação. INMET/ANA
+continuam por UF (`ingest-inmet`, `ingest-ana`, ou o comando `atualizar` de
+sempre). O cron diário
+([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml)) roda
+`atualizar-nacional` para todas as UFs; uma UF falhando (Open-Meteo com 429,
+por exemplo) não derruba a publicação das demais — ela mantém no ar o dado
+da última exportação bem-sucedida (ver abaixo).
+
+### 6. Cadências separadas: setores mensais, chuva diária
+
+```bash
+python -m src.cli ingerir-setores --ufs SP,RJ,MG
+# --ufs vazio/omitido = todas as 27 UFs (padrão)
+# -> data/risco_<uf>.gpkg
+```
+
+Setor de risco é resultado de levantamento de campo: muda em escala de meses.
+Chuva muda em escala de horas. Rebaixar a camada inteira da CPRM/SGB todo dia
+só amarrava o dado diário à disponibilidade de um serviço instável — e
+amarrou: em 22 e 23/08/2026 dois runs publicaram 1 e 2 UFs de 27,
+respectivamente, fechando como `success`, porque a ingestão CPRM havia
+falhado por timeout em quase todas as UFs (diagnóstico completo em
+[`docs/superpowers/specs/2026-08-23-pipeline-confiavel-design.md`](docs/superpowers/specs/2026-08-23-pipeline-confiavel-design.md)).
+
+Hoje as duas cadências são workflows distintos:
+
+- **Mensal** ([`ingerir-setores.yml`](.github/workflows/ingerir-setores.yml),
+  `0 6 1 * *` mais `workflow_dispatch`): roda `ingerir-setores` para as 27 UFs
+  e publica os GeoPackages na branch `dados-base`. É o único ponto do projeto
+  que fala com a SGB. Como não há pressa num job mensal, os timeouts são
+  generosos: 120s por requisição, 5 tentativas, backoff de 5s
+  (`src/ingest/cprm.py`). O comando falha se **qualquer** UF falhar, e
+  desliga o fallback de cache local (`permitir_cache=False`) — o "cache"
+  nesse contexto é o próprio `dados-base` recém-extraído, então aceitá-lo
+  transformaria uma SGB fora do ar em 27 sucessos silenciosos.
+- **Diário** ([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml),
+  `0 9 * * *`): extrai os setores da `dados-base`, roda `atualizar-nacional`
+  e publica. Não toca em nenhuma fonte `.gov.br`.
+
+**O que acontece quando a SGB cai:** nada. O dashboard usa os setores
+persistidos em `dados-base`, que continuam válidos. Se a queda pegar o run
+mensal, a `dados-base` simplesmente mantém os setores do mês anterior e o
+workflow falha alto, para que alguém redisparte o `workflow_dispatch` quando
+o serviço voltar.
+
+**Publicação não-destrutiva.** Antes de publicar, o job diário busca o
+`gh-pages` atual e preserva os `data/*.json`/`*.geojson` das UFs que este run
+não regenerou (`scripts/mesclar_publicado.py`): UF que falhou não desaparece
+do dashboard, envelhece. Sobre a mescla há três guardas, e **toda recusa
+falha o run** em vez de fechar verde em silêncio:
+
+- a mescla recusa se este run não exportou UF nenhuma (completar tudo com
+  dado velho passaria pela guarda de regressão como se fosse novo);
+- a mescla recusa se a cobertura nova ficar abaixo de um piso do escopo
+  (padrão **60%**, ajustável por `ORCA_PISO_COBERTURA`, aceito só em
+  `(0, 1]`). O 0,6 vem dos 12 runs limpos entre 10 e 23/08/2026, em que a
+  cobertura Open-Meteo oscilou entre 70% e 100%: fica abaixo do pior caso
+  normal (74%) com margem, e ainda assim barra os cenários degenerados reais
+  (4% e 7%). Um piso de 90% dispararia em 4 desses 12 runs e seria aprendido
+  como ruído;
+- o passo de publicação recusa conjunto vazio, contagem publicada
+  indisponível/ilegível, ou regressão no total de UFs em relação ao que já
+  está no ar.
 
 ## Limitações conhecidas
 
@@ -307,31 +368,25 @@ ar, Open-Meteo com 429) não derruba a publicação das demais.
   comum na literatura de risco de deslizamento, não um valor oficial calibrado
   para os setores da CPRM/SGB. O próprio dashboard avisa isso e deixa o valor
   livremente ajustável.
-- **A camada de vento é observação recente, sem previsão.** Diferente da
-  chuva (que tem trajetória de alerta previsto para os próximos 3 dias), a
-  rajada de vento mostrada é só a máxima observada nas últimas 24h; não há
-  projeção futura de vento no momento. Consumir os avisos oficiais do INMET
-  diretamente (em vez de derivar severidade da Open-Meteo) é uma evolução
-  possível, fora do escopo desta fase.
-- **A camada de vento ainda não tem orçamento reservado na exportação
-  nacional.** `atualizar-nacional` exporta vento por UF depois do export
-  principal (ver [Cobertura nacional](#5-cobertura-nacional-27-ufs)), mas
-  essa chamada consulta todos os municípios do IBGE de cada UF (não só os
-  que têm setor de risco), sem passar pela grade nem pela pausa entre UFs —
-  em dias de pico isso pode consumir mais do teto diário da Open-Meteo do
-  que o previsto por `--orcamento-alvo`. Falha de forma graciosa (a UF
-  daquele dia fica sem camada de vento atualizada, o resto do dashboard não
-  é afetado), mas é um ponto conhecido a corrigir (reservar orçamento e
-  aplicar `--pausa-entre-ufs` também nessa chamada).
 - **INMET/ANA continuam por UF mesmo na cobertura nacional.**
-  `atualizar-nacional` só ingere CPRM e exporta pela fonte Open-Meteo, que
-  não depende de estação; `--fonte inmet` nacionalmente exigiria rodar
+  `atualizar-nacional` exporta só pela fonte Open-Meteo, que não depende de
+  estação; `--fonte inmet` nacionalmente exigiria rodar
   `ingest-inmet`/`ingest-ana` fonte por fonte, UF por UF (via `atualizar`),
   não é automatizado pelo cron nacional.
-- **O cron nacional comita os dados de até 27 UFs no repositório todo dia.**
-  Ainda não há estratégia de compactação/poda (gzip, Git LFS, branch órfã
-  com force-push, ou publicar só como artefato) para o crescimento do
-  histórico do repositório; por enquanto ele cresce sem limite.
+- **A publicação do `gh-pages` ainda não é reversível.** O deploy diário usa
+  `force_orphan: true`, então a branch tem um único commit e não há `git
+  revert` possível de uma publicação ruim. Isso existe só por causa do blob
+  de cache da Open-Meteo (~45MB) que muda todo dia junto com o dashboard;
+  tirar o cache do `gh-pages` é pré-requisito para abandonar o
+  `force_orphan`. Até lá a proteção é **preventiva** (as guardas de mescla e
+  de publicação descritas em
+  [Cadências separadas](#6-cadências-separadas-setores-mensais-chuva-diária)),
+  não reversível.
+- **O selo de defasagem e o teste de fumaça no site publicado ainda não
+  existem.** O dashboard mostra `gerado_em`/`referencia`, mas sem realce
+  quando o dado passa de um ciclo; e nada verifica, depois do deploy, que a
+  URL pública realmente serve as 27 UFs. Estão desenhados na spec e ficaram
+  para a fase seguinte.
 - **Sem autenticação/multiusuário.** É uma ferramenta local de portfólio, não
   um serviço multiusuário.
 - **O dashboard estático não atualiza sob demanda.** Diferente do antigo botão
@@ -358,7 +413,7 @@ ar, Open-Meteo com 429) não derruba a publicação das demais.
 pytest
 ```
 
-122 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
+174 testes cobrindo: parsing de resposta ArcGIS REST (CPRM/SGB), paginação,
 ingestão incremental por marcador d'água (`objectid`/`data_setor`) e fusão
 com o GeoPackage local, retry com backoff e fallback para cache local;
 calibração da grade espacial nacional por busca binária e o compartilhamento
@@ -376,7 +431,10 @@ próxima, incluindo o pareamento combinado INMET+ANA com desempate por
 recência) e temporal (chuva acumulada 24h/72h); a trajetória de alerta
 previsto (`src/processing/previsao.py`); e a exportação dos dados do
 dashboard nas duas fontes (GeoJSON de setores, recorte de 30 dias na série
-temporal, metadados). Toda chamada de rede é mockada, então a suíte roda sem
+temporal, metadados); e a mescla não-destrutiva com o `gh-pages`
+(`scripts/mesclar_publicado.py`: UF ausente no run preserva a anterior, UF
+presente sobrescreve, run vazio recusado, piso de cobertura e validação da
+faixa aceita para `ORCA_PISO_COBERTURA`). Toda chamada de rede é mockada, então a suíte roda sem
 internet. O dashboard em si (HTML/JS estático) não tem testes automatizados:
 não há framework de teste de frontend no projeto, a validação é manual.
 
@@ -439,9 +497,7 @@ ingestão incremental da CPRM por marcador d'água (`objectid`/`data_setor`,
 já que a API não expõe campo de edição nem Sync) e uma grade espacial
 calibrada por busca binária que agrupa setores próximos num único ponto de
 consulta, em vez de limiares de densidade escolhidos à mão. Detalhes
-completos e as decisões tomadas durante a implementação (inclusive um
-achado tardio: a exportação da camada de vento não estava coberta pelo
-orçamento, ver [Limitações conhecidas](#limitações-conhecidas)) estão em
+completos e as decisões tomadas durante a implementação estão em
 [`docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md`](docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md).
 
 ## Roadmap
@@ -456,11 +512,22 @@ orçamento, ver [Limitações conhecidas](#limitações-conhecidas)) estão em
   ingestão incremental da CPRM, grade espacial nacional compartilhada,
   comando `atualizar-nacional` e seletor de UF no dashboard (ver
   [Cobertura nacional](#5-cobertura-nacional-27-ufs)).
-- Reservar orçamento (e aplicar `--pausa-entre-ufs`) para a exportação da
-  camada de vento em `atualizar-nacional`, hoje fora do teto de chamadas à
-  Open-Meteo (ver [Limitações conhecidas](#limitações-conhecidas)).
-- Estratégia de compactação/poda para o crescimento do repositório com os
-  dados de até 27 UFs comitados diariamente pelo cron nacional.
+- ~~Tirar a ingestão CPRM/SGB do caminho diário, para que uma queda da SGB
+  não possa mais publicar um dashboard vazio~~: implementado em 23/08/2026
+  (v0.4.0) — comando `ingerir-setores` num workflow mensal que publica na
+  branch `dados-base`, cron diário lendo dela sem tocar em `.gov.br`,
+  publicação não-destrutiva com guardas de conjunto vazio, regressão e piso
+  de cobertura, e remoção da camada de rajada de vento (que era a segunda
+  fonte de falha do run diário). Ver
+  [Cadências separadas](#6-cadências-separadas-setores-mensais-chuva-diária)
+  e a
+  [spec](docs/superpowers/specs/2026-08-23-pipeline-confiavel-design.md).
+- Tirar o cache da Open-Meteo (~45MB) do `gh-pages` para abandonar o
+  `force_orphan` e recuperar o histórico da branch publicada — hoje nenhuma
+  publicação ruim é reversível por `git revert` (ver
+  [Limitações conhecidas](#limitações-conhecidas)).
+- Selo de defasagem no dashboard e teste de fumaça contra a URL pública
+  depois do deploy (spec §4.6 e §4.8).
 - Fallback municipal: camadas próprias de prefeituras em ArcGIS REST, sem
   reescrever o pipeline de ingestão. Investigado em 14/08/2026 para
   Itaquaquecetuba/SP: sem endpoint público confirmado, pendente de um
