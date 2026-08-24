@@ -201,8 +201,10 @@ jobs:
           publicado_dir=$(mktemp -d)
           # `git archive` falha se o caminho não existir na árvore (gh-pages
           # sem data/); e sem o pipefail acima o tar sairia 0 com entrada
-          # vazia, escondendo isso.
-          if ! git archive origin/gh-pages data | tar -x -C "$publicado_dir"; then
+          # vazia, escondendo isso. stderr silenciado porque esse caso é
+          # normal e esperado: três linhas de `fatal:`/`tar:` num passo que
+          # fecha verde ensinam o operador a ignorar log.
+          if ! git archive origin/gh-pages data 2>/dev/null | tar -x -C "$publicado_dir" 2>/dev/null; then
             echo "gh-pages não tem data/ publicado; nada a preservar."
             exit 0
           fi

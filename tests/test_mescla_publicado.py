@@ -41,14 +41,14 @@ def _montar(base: Path, publicadas: list[str], atuais: list[str]) -> tuple[Path,
 
 def test_uf_ausente_no_run_e_preservada(tmp_path):
     pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
-    preservadas = mp.mesclar(pub, atual, {"sp", "rj"})
+    preservadas, _ = mp.mesclar(pub, atual, {"sp", "rj"})
     assert preservadas == ["rj"]
     assert json.loads((atual / "meta_rj.json").read_text()) == {"marca": "velho"}
 
 
 def test_uf_presente_no_run_nao_e_sobrescrita_pela_publicada(tmp_path):
     pub, atual = _montar(tmp_path, ["sp"], ["sp"])
-    assert mp.mesclar(pub, atual, {"sp"}) == []
+    assert mp.mesclar(pub, atual, {"sp"})[0] == []
     assert json.loads((atual / "meta_sp.json").read_text()) == {"marca": "novo"}
 
 
@@ -60,7 +60,7 @@ def test_indice_reconcilia_run_mais_preservadas(tmp_path):
 
 def test_indice_nao_regride_quando_run_cresce(tmp_path):
     pub, atual = _montar(tmp_path, ["sp"], ["sp", "rj"])
-    assert mp.mesclar(pub, atual, {"sp", "rj"}) == []
+    assert mp.mesclar(pub, atual, {"sp", "rj"})[0] == []
     assert json.loads((atual / mp.INDICE).read_text()) == ["rj", "sp"]
 
 
@@ -68,7 +68,7 @@ def test_uf_fora_do_escopo_sai_do_dashboard(tmp_path):
     # Uma UF legitimamente retirada do dados-base precisa poder sumir:
     # preservar tudo pra sempre congelaria dado morto no ar.
     pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
-    assert mp.mesclar(pub, atual, {"sp"}) == []
+    assert mp.mesclar(pub, atual, {"sp"})[0] == []
     assert json.loads((atual / mp.INDICE).read_text()) == ["sp"]
     assert not (atual / "meta_rj.json").exists()
 
@@ -77,14 +77,14 @@ def test_uf_no_indice_publicado_sem_arquivos_nao_entra(tmp_path):
     pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
     for arquivo in pub.glob("*_rj.*"):
         arquivo.unlink()
-    assert mp.mesclar(pub, atual, {"sp", "rj"}) == []
+    assert mp.mesclar(pub, atual, {"sp", "rj"})[0] == []
     assert json.loads((atual / mp.INDICE).read_text()) == ["sp"]
 
 
 def test_uf_sem_previsao_ainda_e_preservada(tmp_path):
     pub, atual = _montar(tmp_path, ["sp"], ["rj"])
     (pub / "previsao_sp.json").unlink()
-    assert mp.mesclar(pub, atual, {"sp", "rj"}) == ["sp"]
+    assert mp.mesclar(pub, atual, {"sp", "rj"})[0] == ["sp"]
     assert (atual / "meta_sp.json").exists()
     assert not (atual / "previsao_sp.json").exists()
 
@@ -100,14 +100,14 @@ def test_residuo_de_geracao_antiga_nao_e_ressuscitado(tmp_path):
 def test_indice_publicado_ilegivel_nao_derruba_a_mescla(tmp_path):
     pub, atual = _montar(tmp_path, ["sp"], ["rj"])
     (pub / mp.INDICE).write_text("isto não é json")
-    assert mp.mesclar(pub, atual, {"sp", "rj"}) == []
+    assert mp.mesclar(pub, atual, {"sp", "rj"})[0] == []
     assert json.loads((atual / mp.INDICE).read_text()) == ["rj"]
 
 
 def test_indice_publicado_com_caixa_alta_e_normalizado(tmp_path):
     pub, atual = _montar(tmp_path, ["sp"], ["rj"])
     mp.escrever_indice(pub / mp.INDICE, ["SP"])
-    assert mp.mesclar(pub, atual, {"sp", "rj"}) == ["sp"]
+    assert mp.mesclar(pub, atual, {"sp", "rj"})[0] == ["sp"]
 
 
 def test_main_recusa_run_sem_indice(tmp_path, capsys):
@@ -127,13 +127,14 @@ def test_main_recusa_run_com_indice_vazio(tmp_path):
 
 
 def test_main_mescla_e_usa_os_gpkg_como_escopo(tmp_path):
-    pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
+    # 2 de 3 UFs do escopo (67%) passa o piso de cobertura; mg é preservada.
+    pub, atual = _montar(tmp_path, ["mg", "rj", "sp"], ["rj", "sp"])
     escopo = tmp_path / "data"
     escopo.mkdir()
-    for uf in ("sp", "rj"):
+    for uf in ("mg", "rj", "sp"):
         (escopo / f"risco_{uf}.gpkg").write_bytes(b"")
     assert mp.main(["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]) == 0
-    assert json.loads((atual / mp.INDICE).read_text()) == ["rj", "sp"]
+    assert json.loads((atual / mp.INDICE).read_text()) == ["mg", "rj", "sp"]
 
 
 def test_ufs_no_escopo_le_os_gpkg(tmp_path):
@@ -141,3 +142,77 @@ def test_ufs_no_escopo_le_os_gpkg(tmp_path):
     (tmp_path / "risco_rj.gpkg").write_bytes(b"")
     (tmp_path / "chuva_sp_2026.csv").write_text("")
     assert mp.ufs_no_escopo(tmp_path) == {"sp", "rj"}
+
+
+# --- Piso de cobertura nova (ruling R-12) -----------------------------------
+
+
+def _escopo(base: Path, ufs: list[str]) -> Path:
+    escopo = base / "escopo"
+    escopo.mkdir(parents=True, exist_ok=True)
+    for uf in ufs:
+        (escopo / f"risco_{uf}.gpkg").write_bytes(b"")
+    return escopo
+
+
+def test_main_recusa_run_degenerado(tmp_path):
+    # 1 de 5 UFs exportadas: sem o piso, a mescla completaria as outras 4 do
+    # gh-pages, o índice viraria união, a guarda anti-regressão veria
+    # atual >= publicado e o run fecharia verde com 1 UF nova.
+    todas = ["ac", "al", "am", "ap", "ba"]
+    pub, atual = _montar(tmp_path, todas, ["ac"])
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    assert mp.main(argv) == 1
+    assert json.loads((atual / mp.INDICE).read_text()) == ["ac"]
+    assert not (atual / "meta_al.json").exists()
+
+
+def test_main_aceita_cobertura_no_pior_caso_normal(tmp_path):
+    # 74% foi a pior cobertura de um run limpo (spec §2.4): tem que passar,
+    # senão o piso recria a catraca que a mescla veio remover.
+    todas = [f"u{i}" for i in range(100)]
+    exportadas = todas[:74]
+    pub, atual = _montar(tmp_path, todas, exportadas)
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    assert mp.main(argv) == 0
+    assert len(json.loads((atual / mp.INDICE).read_text())) == 100
+
+
+def test_piso_e_configuravel(tmp_path):
+    todas = ["ac", "al", "am", "ap", "ba"]
+    pub, atual = _montar(tmp_path, todas, ["ac", "al"])
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    assert mp.main(argv + ["--piso", "0.4"]) == 0
+    pub, atual = _montar(tmp_path / "b", todas, ["ac", "al"])
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    assert mp.main(argv + ["--piso", "0.8"]) == 1
+
+
+def test_piso_vem_do_ambiente(tmp_path, monkeypatch):
+    todas = ["ac", "al", "am", "ap", "ba"]
+    pub, atual = _montar(tmp_path, todas, ["ac", "al"])
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    monkeypatch.setenv("ORCA_PISO_COBERTURA", "0.4")
+    assert mp.main(argv) == 0
+
+
+def test_piso_nao_bloqueia_quando_escopo_e_desconhecido(tmp_path):
+    # Sem GeoPackages não dá para medir cobertura; quem barra esse caso é o
+    # passo "Baixar setores da branch dados-base", que é fatal.
+    todas = ["ac", "al"]
+    pub, atual = _montar(tmp_path, todas, ["ac"])
+    escopo = tmp_path / "vazio"
+    escopo.mkdir()
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    assert mp.main(argv) == 0
+
+
+def test_mesclar_relata_ufs_que_sairam_do_escopo(tmp_path):
+    pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
+    preservadas, fora = mp.mesclar(pub, atual, {"sp"})
+    assert preservadas == []
+    assert fora == ["rj"]
