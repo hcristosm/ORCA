@@ -174,13 +174,14 @@ def atualizar_nacional_cmd(
     diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
     saida: Path = typer.Option(DASHBOARD_DATA_DIR, "--saida", help="Diretório de saída do dashboard"),
 ) -> None:
-    """Ingere setores da CPRM (incremental) e exporta o dashboard para várias UFs
-    de uma vez, compartilhando 1 grade espacial nacional para caber no rate limit
-    da Open-Meteo.
+    """Exporta o dashboard para várias UFs de uma vez, compartilhando 1 grade
+    espacial nacional para caber no rate limit da Open-Meteo.
 
-    Não ingere INMET/ANA (essas fontes continuam por UF, via `atualizar`);
-    esta é a via nacional para setores + chuva Open-Meteo, ver
-    docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+    Não ingere CPRM/SGB nem INMET/ANA. Os setores de risco devem ter sido
+    ingeridos antes, pelo comando mensal `ingerir-setores` (essa fonte é
+    instável e passou a rodar separada da atualização diária); INMET/ANA
+    continuam por UF, via `atualizar`. Esta é a via nacional para chuva
+    Open-Meteo, ver docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
 
     `--orcamento-alvo` calibra só os pontos de grade dos setores; a série por
     município não entra nessa conta. As UFs são exportadas concorrentemente;
@@ -188,13 +189,6 @@ def atualizar_nacional_cmd(
     limiter compartilhado em `src/ingest/openmeteo.py`, não uma pausa fixa.
     """
     lista_ufs = [u.strip().upper() for u in ufs.split(",") if u.strip()]
-    falhas_cprm = []
-    for uf in lista_ufs:
-        try:
-            ingerir_cprm(uf, caminho_setores(uf, diretorio))
-        except (CPRMFetchError, ValueError) as exc:
-            typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc}", err=True)
-            falhas_cprm.append(uf)
 
     cache = CacheOpenMeteo()
     try:
@@ -208,12 +202,39 @@ def atualizar_nacional_cmd(
 
     typer.echo(f"{len(resultados)}/{len(lista_ufs)} UF(s) exportada(s) para {saida}.")
 
-    if falhas_cprm:
-        typer.echo(f"Falha na ingestão CPRM: {', '.join(falhas_cprm)}", err=True)
     ufs_com_falha = [uf for uf in lista_ufs if uf not in resultados]
     if ufs_com_falha:
         typer.echo(f"Falha na exportação do dashboard: {', '.join(ufs_com_falha)}", err=True)
     if not resultados:
+        raise typer.Exit(code=1)
+
+
+@app.command("ingerir-setores")
+def ingerir_setores_cmd(
+    ufs: str = typer.Option(",".join(sorted(UFS_VALIDAS)), "--ufs", help="UFs separadas por vírgula. Padrão: todas as 27."),
+    diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
+    backoff_factor: float = typer.Option(5.0, "--backoff-factor", help="Fator de backoff entre tentativas (0 nos testes)"),
+) -> None:
+    """Ingere os setores de risco da CPRM/SGB para o branch `dados-base`.
+
+    Roda mensalmente, separado da atualização diária: setor de risco é
+    resultado de levantamento de campo e muda em escala de meses, então
+    rebaixá-lo todo dia só expunha o dashboard à instabilidade da SGB.
+    Sai com código 1 se qualquer UF falhar -- dado congelado por um mês é
+    pior que uma notificação a mais.
+    """
+    lista_ufs = [u.strip().upper() for u in ufs.split(",") if u.strip()]
+    falhas = []
+    for uf in lista_ufs:
+        try:
+            ingerir_cprm(uf, caminho_setores(uf, diretorio), backoff_factor=backoff_factor)
+        except (CPRMFetchError, ValueError) as exc:
+            typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc}", err=True)
+            falhas.append(uf)
+
+    typer.echo(f"{len(lista_ufs) - len(falhas)}/{len(lista_ufs)} UF(s) ingerida(s).")
+    if falhas:
+        typer.echo(f"Falha na ingestão CPRM: {', '.join(falhas)}", err=True)
         raise typer.Exit(code=1)
 
 

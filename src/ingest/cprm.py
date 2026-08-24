@@ -24,6 +24,12 @@ from src.storage import ler_setores, salvar_setores
 
 logger = logging.getLogger(__name__)
 
+# Timeouts generosos de propósito: a ingestão roda uma vez por mês
+# (.github/workflows/ingerir-setores.yml), então esperar minutos é barato,
+# enquanto desistir cedo custa uma UF congelada até o mês seguinte. No run
+# #29 (2026-08-23), 25 das 27 UFs morreram em `Read timed out` com
+# timeout=30 e backoff de 1s/2s/4s -- sete segundos de espera total para um
+# serviço brasileiro alcançado da rede do GitHub.
 FEATURE_LAYER_URL = (
     "https://geoportal.sgb.gov.br/server/rest/services/"
     "gestaoterritorial/risco/FeatureServer/0/query"
@@ -80,9 +86,9 @@ def _query_pagina(
 
 def fetch_setores_risco(
     uf: str,
-    timeout: float = 30.0,
-    max_retries: int = 3,
-    backoff_factor: float = 1.0,
+    timeout: float = 120.0,
+    max_retries: int = 5,
+    backoff_factor: float = 5.0,
     session: requests.Session | None = None,
     where_extra: str | None = None,
 ) -> gpd.GeoDataFrame:
@@ -183,9 +189,9 @@ def ingerir_uf(
     uf: str,
     output: Path,
     manifesto_path: Path | None = None,
-    timeout: float = 30.0,
-    max_retries: int = 3,
-    backoff_factor: float = 1.0,
+    timeout: float = 120.0,
+    max_retries: int = 5,
+    backoff_factor: float = 5.0,
 ) -> gpd.GeoDataFrame:
     """Busca (incrementalmente) os setores de risco de uma UF e salva em GeoPackage.
 

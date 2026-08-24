@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import responses
+from responses import matchers
 from typer.testing import CliRunner
 
 from src.cli import app
@@ -44,10 +45,19 @@ def test_atualizar_nacional_ingere_e_exporta_varias_ufs(tmp_path: Path, monkeypa
     for uf in ("SP", "RJ"):
         responses.add(
             responses.GET, FEATURE_LAYER_URL,
-            match=[responses.matchers.query_param_matcher({"where": f"uf='{uf}'"}, strict_match=False)],
+            match=[matchers.query_param_matcher({"where": f"uf='{uf}'"}, strict_match=False)],
             json={"type": "FeatureCollection", "features": [_feature(1, uf)], "properties": {"exceededTransferLimit": False}},
             status=200,
         )
+
+    # `atualizar-nacional` não ingere mais CPRM (ver ingerir-setores): os
+    # setores precisam já estar no diretório local antes de invocá-lo.
+    resultado_ingestao = runner.invoke(
+        app, ["ingerir-setores", "--ufs", "SP,RJ", "--diretorio", str(tmp_path / "data"),
+              "--backoff-factor", "0"],
+    )
+    assert resultado_ingestao.exit_code == 0, resultado_ingestao.output
+
     # exportar_dashboard roda por UF (setores + série por município cada) --
     # 2 UFs = 4 POSTs, 1 ponto cada.
     responses.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # SP setores
@@ -64,3 +74,29 @@ def test_atualizar_nacional_ingere_e_exporta_varias_ufs(tmp_path: Path, monkeypa
     assert (saida / "ufs_disponiveis.json").exists()
     disponiveis = json.loads((saida / "ufs_disponiveis.json").read_text())
     assert disponiveis == ["RJ", "SP"]
+
+
+@responses.activate
+def test_ingerir_setores_falha_se_alguma_uf_falhar(tmp_path: Path):
+    """O job mensal deve gritar quando uma UF não vem: dado congelado por um
+    mês é pior que uma notificação a mais."""
+    responses.add(
+        responses.GET, FEATURE_LAYER_URL,
+        json={"type": "FeatureCollection", "features": [_feature(1, "AP")]},
+        status=200,
+        match=[matchers.query_param_matcher({"where": "uf='AP'"}, strict_match=False)],
+    )
+    responses.add(
+        responses.GET, FEATURE_LAYER_URL, status=500,
+        match=[matchers.query_param_matcher({"where": "uf='BA'"}, strict_match=False)],
+    )
+
+    resultado = runner.invoke(
+        app,
+        ["ingerir-setores", "--ufs", "AP,BA", "--diretorio", str(tmp_path),
+         "--backoff-factor", "0"],
+    )
+
+    assert resultado.exit_code == 1
+    assert "BA" in resultado.output
+    assert caminho_setores("AP", tmp_path).exists()
