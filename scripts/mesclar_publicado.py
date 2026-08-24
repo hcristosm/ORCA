@@ -147,12 +147,51 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--publicado", required=True, type=Path, help="data/ extraído do gh-pages")
     parser.add_argument("--atual", required=True, type=Path, help="docs/dashboard/data deste run")
     parser.add_argument("--escopo", required=True, type=Path, help="diretório com os risco_<uf>.gpkg")
+    # `default=None` e resolução depois de `parse_args`: com o `float(...)`
+    # no `default=`, avaliado ansiosamente, um valor inválido no ambiente
+    # derrubava o script com traceback cru mesmo quando `--piso` era passado
+    # explicitamente -- e derrubava até o `--help`.
     parser.add_argument(
-        "--piso", type=float,
-        default=float(os.environ.get("ORCA_PISO_COBERTURA", PISO_COBERTURA_PADRAO)),
-        help="fração mínima do escopo exportada por este run (padrão %(default)s)",
+        "--piso", type=str, default=None,
+        help=f"fração mínima do escopo exportada por este run, em (0, 1] "
+             f"(padrão {PISO_COBERTURA_PADRAO}; ou ORCA_PISO_COBERTURA)",
     )
     args = parser.parse_args(argv)
+
+    bruto, origem = args.piso, "--piso"
+    if bruto is None:
+        bruto, origem = os.environ.get("ORCA_PISO_COBERTURA"), "ORCA_PISO_COBERTURA"
+    if bruto is None:
+        piso = PISO_COBERTURA_PADRAO
+    else:
+        # Valor vazio NÃO cai no padrão em silêncio: variável definida e
+        # vazia é quase sempre fiação errada no workflow, e silenciar isso
+        # esconderia justamente o caso em que o operador acha que
+        # configurou o piso e não configurou.
+        try:
+            piso = float(bruto)
+        except ValueError:
+            print(
+                f"::error::{origem}='{bruto}' não é um número. Valor esperado em "
+                f"(0, 1] (padrão {PISO_COBERTURA_PADRAO}). Mescla recusada.",
+                file=sys.stderr,
+            )
+            return 1
+    # Faixa validada dos DOIS lados, e antes de qualquer cópia. `piso <= 0`
+    # desliga o único detector de run degenerado e devolve exatamente o
+    # comportamento que R-12 corrigiu: 1 UF de 27 publicada fechando verde.
+    # `piso > 1` falha fechado (recusa tudo), o que é seguro mas igualmente
+    # não intencional. Uma proteção contra degradação silenciosa que pode
+    # ser desativada em silêncio não é proteção -- este dashboard já foi
+    # destruído duas vezes fechando como `success`.
+    if not 0 < piso <= 1:
+        print(
+            f"::error::Piso de cobertura inválido ({origem}={piso}): precisa estar em "
+            f"(0, 1]. Valor <= 0 desarmaria a proteção contra run degenerado e > 1 "
+            "recusaria toda publicação. Mescla recusada.",
+            file=sys.stderr,
+        )
+        return 1
 
     # Recusar quando este run não produziu UF nenhuma é a decisão de
     # desenho mais importante daqui. Mesclar nesse caso montaria um
@@ -175,11 +214,15 @@ def main(argv: list[str] | None = None) -> int:
     # fatal. Recusar aqui de novo só trocaria a mensagem certa por uma
     # confusa.
     if escopo:
-        minimo = args.piso * len(escopo)
-        if len(exportadas) < minimo:
+        # Interseção, não `len(exportadas)`: o denominador vem dos gpkg do
+        # escopo, então o numerador precisa vir do mesmo conjunto -- uma UF
+        # no índice que não está no escopo inflaria a cobertura medida.
+        novas = len(set(exportadas) & escopo)
+        minimo = piso * len(escopo)
+        if novas < minimo:
             print(
-                f"::error::Run degenerado: {len(exportadas)} de {len(escopo)} UF(s) do escopo "
-                f"exportadas nesta execução, abaixo do piso de {args.piso:.0%}. Mesclar "
+                f"::error::Run degenerado: {novas} de {len(escopo)} UF(s) do escopo "
+                f"exportadas nesta execução, abaixo do piso de {piso:.0%}. Mesclar "
                 "completaria o resto com dado velho e o run fecharia verde sem sinal nenhum. "
                 "Mescla e publicação recusadas.",
                 file=sys.stderr,

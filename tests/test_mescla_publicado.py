@@ -10,6 +10,7 @@ seletor de UF.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -216,3 +217,89 @@ def test_mesclar_relata_ufs_que_sairam_do_escopo(tmp_path):
     preservadas, fora = mp.mesclar(pub, atual, {"sp"})
     assert preservadas == []
     assert fora == ["rj"]
+
+
+# --- Validação da faixa do piso ---------------------------------------------
+#
+# Uma proteção contra degradação silenciosa que pode ser DESLIGADA em
+# silêncio não é proteção: neste projeto o dashboard já foi destruído duas
+# vezes fechando como `success`.
+
+
+def _argv_degenerado(tmp_path: Path) -> list[str]:
+    todas = ["ac", "al", "am", "ap", "ba"]
+    pub, atual = _montar(tmp_path, todas, ["ac"])
+    escopo = _escopo(tmp_path, todas)
+    return ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+
+
+def test_piso_zero_ou_negativo_e_rejeitado(tmp_path, capsys):
+    for valor in ("0", "-1", "-0.5"):
+        argv = _argv_degenerado(tmp_path / valor)
+        assert mp.main(argv + ["--piso", valor]) == 1
+        assert "piso" in capsys.readouterr().err.lower()
+
+
+def test_piso_negativo_no_ambiente_nao_desarma_a_protecao(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORCA_PISO_COBERTURA", "-1")
+    argv = _argv_degenerado(tmp_path)
+    assert mp.main(argv) == 1
+    # a mescla não pode ter acontecido
+    assert json.loads((Path(argv[3]) / mp.INDICE).read_text()) == ["ac"]
+
+
+def test_piso_maior_que_um_e_rejeitado(tmp_path):
+    argv = _argv_degenerado(tmp_path)
+    assert mp.main(argv + ["--piso", "1.5"]) == 1
+
+
+def test_piso_igual_a_um_e_aceito(tmp_path):
+    todas = ["ac", "al"]
+    pub, atual = _montar(tmp_path, todas, todas)
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    assert mp.main(argv + ["--piso", "1"]) == 0
+
+
+def test_piso_nao_numerico_no_ambiente_da_mensagem_legivel(tmp_path, capsys):
+    for valor in ("", "abc"):
+        argv = _argv_degenerado(tmp_path / f"x{valor}")
+        os.environ["ORCA_PISO_COBERTURA"] = valor
+        try:
+            assert mp.main(argv) == 1
+        finally:
+            del os.environ["ORCA_PISO_COBERTURA"]
+        erro = capsys.readouterr().err
+        assert "ORCA_PISO_COBERTURA" in erro
+        assert "Traceback" not in erro
+
+
+def test_ambiente_invalido_nao_impede_piso_explicito(tmp_path, monkeypatch):
+    # `default=` avaliado ansiosamente derrubava o script mesmo com --piso
+    # passado, e derrubava até o --help.
+    monkeypatch.setenv("ORCA_PISO_COBERTURA", "abc")
+    todas = ["ac", "al"]
+    pub, atual = _montar(tmp_path, todas, todas)
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    assert mp.main(argv + ["--piso", "0.6"]) == 0
+
+
+def test_numerador_do_piso_ignora_uf_fora_do_escopo(tmp_path):
+    # Denominador vem dos gpkg; o numerador tem que vir da interseção, senão
+    # UFs de fora do escopo no índice inflariam a cobertura medida.
+    todas = ["ac", "al", "am", "ap", "ba"]
+    pub, atual = _montar(tmp_path, todas, ["ac", "zz", "yy", "xx"])
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+    assert mp.main(argv) == 1
+
+
+def test_aviso_de_escopo_reduzido_orienta_o_operador(tmp_path, capsys):
+    pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
+    mp.mesclar(pub, atual, {"sp"})
+    saida = capsys.readouterr().out
+    assert "::warning::" in saida
+    assert "rj" in saida
+    assert "ingerir-setores.yml" in saida
+    assert "regressão" in saida
