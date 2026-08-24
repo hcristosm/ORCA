@@ -47,12 +47,25 @@ jobs:
         # `bash -e`: sem ele, o próprio ls-remote falhando abortaria o
         # passo antes de lermos `$?` (mesmo padrão usado em
         # atualizar-dados.yml).
+        #
+        # `shell: bash -eo pipefail` porque o padrão do GitHub é `bash -e`
+        # SEM pipefail: em `git archive | tar -x`, o `git archive` falhando
+        # (ref corrompida, objeto faltando) deixaria o `tar` sair 0 com
+        # entrada vazia, o passo seguiria, `anterior` viraria 0 e a guarda
+        # aprovaria republicar por cima de dados-base com o que a ingestão
+        # conseguisse. Mesma correção já feita em atualizar-dados.yml --
+        # deixar a máscara viva só num dos dois arquivos é exatamente como
+        # a divergência entre eles reintroduziu defeitos neste plano.
+        shell: bash -eo pipefail {0}
         run: |
           mkdir -p data
           codigo=0
           git ls-remote --exit-code origin dados-base > /dev/null 2>&1 || codigo=$?
           if [ "$codigo" -eq 0 ]; then
-            git fetch origin dados-base:refs/remotes/origin/dados-base
+            if ! git fetch origin dados-base:refs/remotes/origin/dados-base; then
+              echo "::error::Falha ao buscar o branch dados-base (rede/git). Abortando: sem o estado anterior a guarda não tem contra o que comparar."
+              exit 1
+            fi
             git archive origin/dados-base | tar -x -C data
             anterior=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
             echo "Branch dados-base encontrada. Setores anteriores: ${anterior} UF(s)."
@@ -89,10 +102,11 @@ jobs:
         if: "!cancelled()"
         run: |
           anterior="${{ steps.baixar.outputs.anterior }}"
-          # `find | wc -l` e não `ls data/*.gpkg | wc -l`: este passo hoje roda
-          # sem `pipefail`, então o `ls` saindo 2 no glob vazio é engolido --
-          # mas basta alguém acrescentar `pipefail` para o `errexit` matar o
-          # passo antes das mensagens de recusa. `find` não tem esse gatilho.
+          # `find | wc -l` e não `ls data/*.gpkg | wc -l`: sob `pipefail` o
+          # `ls` saindo 2 no glob vazio faria o `errexit` matar o passo antes
+          # das mensagens de recusa -- justamente no caso (data/ vazio) em que
+          # a anotação mais importa. `find` não tem esse gatilho, então a
+          # contagem fica correta com ou sem `pipefail`.
           atual=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
           echo "Setores nesta execução: ${atual} UF(s) (anterior: ${anterior:-<vazio>})."
 

@@ -237,9 +237,9 @@ jobs:
         # `peaceiris/actions-gh-pages` com force_orphan publica só o que
         # estiver dentro de publish_dir no momento do deploy; o cache
         # precisa estar copiado pra lá pra sobreviver ao próximo run.
-        # `always()` porque mesmo uma execução com UFs faltando ainda
-        # avançou o cache das UFs que deram certo — vale publicar assim
-        # mesmo. Publica o que existir em data/cache/openmeteo.sqlite neste
+        # `!cancelled()` (não `always()`) porque mesmo uma execução com UFs
+        # faltando ainda avançou o cache das UFs que deram certo — vale
+        # publicar assim mesmo, desde que a guarda tenha aprovado. Publica o que existir em data/cache/openmeteo.sqlite neste
         # ponto, sem se importar se ele veio do download do início do job ou
         # foi reconstruído do zero durante "Rodar atualização nacional"
         # (ambos os casos produzem um cache válido — a gravação no cache não
