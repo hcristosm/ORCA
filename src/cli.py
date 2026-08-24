@@ -1,8 +1,16 @@
 """CLI unificada do ORCA: ingestão de dados e atualização periódica.
 
-Uso:
+Os dois comandos invocados pelos workflows:
+
+    python -m src.cli ingerir-setores --diretorio data   # mensal (CPRM/SGB)
+    python -m src.cli atualizar-nacional --ufs SP,RJ     # diário (Open-Meteo)
+
+Comandos por UF, de uso manual/pontual:
+
     python -m src.cli ingest-cprm --uf SP
     python -m src.cli ingest-inmet --uf SP --ano 2026
+    python -m src.cli ingest-ana --uf SP
+    python -m src.cli exportar-dashboard --uf SP
     python -m src.cli atualizar --uf SP --ano 2026
 """
 
@@ -96,8 +104,10 @@ def atualizar(
 ) -> None:
     """Atualiza os dados locais de setores de risco (CPRM/SGB) e chuva (INMET e, como fonte complementar, ANA).
 
-    Pensado para ser chamado manualmente, via cron, ou por uma GitHub Action
-    (ver .github/workflows/atualizar-dados.yml).
+    Caminho manual, por UF: nenhum workflow o invoca desde que a ingestão
+    CPRM virou mensal (`ingerir-setores`) e a exportação diária virou
+    nacional (`atualizar-nacional`). Use via linha de comando ou cron
+    próprio.
     """
     uf_norm = uf.strip().upper()
     falhas = []
@@ -227,7 +237,13 @@ def ingerir_setores_cmd(
     falhas = []
     for uf in lista_ufs:
         try:
-            ingerir_cprm(uf, caminho_setores(uf, diretorio), backoff_factor=backoff_factor)
+            # `permitir_cache=False`: o cache local aqui é o próprio
+            # `dados-base` recém-extraído pelo workflow, então aceitá-lo
+            # transformaria a SGB fora do ar em 27 sucessos silenciosos.
+            ingerir_cprm(
+                uf, caminho_setores(uf, diretorio),
+                backoff_factor=backoff_factor, permitir_cache=False,
+            )
         except (CPRMFetchError, ValueError) as exc:
             typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc}", err=True)
             falhas.append(uf)
