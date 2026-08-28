@@ -13,7 +13,7 @@
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
   style-src 'self' 'unsafe-inline' https://unpkg.com;
-  img-src 'self' data: https://*.basemaps.cartocdn.com;
+  img-src 'self' data: https://*.tile.openstreetmap.org;
   font-src 'self';
   connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com;
   object-src 'none';
@@ -28,107 +28,172 @@
 </head>
 <body>
 
-<header class="filtros">
-  <div class="marca">
-    <img id="logoImg" src="../logo/orca-logo-claro.png" alt="Logo do ORCA" height="32">
-    <div class="texto"><b>ORCA</b><span>risco geológico × chuva</span></div>
-  </div>
+<!-- Hachuras do grau de risco. Ficam num SVG do documento para que o Leaflet
+     possa referenciá-las como fill="url(#...)" nos polígonos: assim a cor
+     vermelha fica reservada para uma coisa só, limiar ultrapassado. -->
+<svg class="defs-hachura" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hach-alto" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="9" height="9" fill="var(--hachura-fundo)"></rect>
+      <line x1="0" y1="0" x2="0" y2="9" stroke="var(--hachura-traco)" stroke-width="1.6"></line>
+    </pattern>
+    <pattern id="hach-muito-alto" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="7" height="7" fill="var(--hachura-fundo)"></rect>
+      <line x1="0" y1="0" x2="0" y2="7" stroke="var(--hachura-traco)" stroke-width="1.7"></line>
+      <line x1="0" y1="0" x2="7" y2="0" stroke="var(--hachura-traco)" stroke-width="1.7"></line>
+    </pattern>
+    <pattern id="hach-padrao" width="9" height="9" patternUnits="userSpaceOnUse">
+      <rect width="9" height="9" fill="var(--hachura-fundo)"></rect>
+    </pattern>
+  </defs>
+</svg>
 
-  <button class="botao-tema" id="botaoTema" type="button" aria-label="Alternar tema claro/escuro">
-    <svg class="icone icone-sol"><use href="icons/sprite.svg#icon-sun"></use></svg>
-    <svg class="icone icone-lua"><use href="icons/sprite.svg#icon-moon"></use></svg>
-  </button>
-
-  <div class="campo campo-uf">
-    <label for="ufSelect">UF</label>
-    <select id="ufSelect"></select>
-  </div>
-
-  <div class="campo campo-busca-municipio">
-    <label for="buscaMunicipio">Município</label>
-    <div class="busca-municipio">
-      <input type="text" id="buscaMunicipio" autocomplete="off" placeholder="Todos (buscar município…)">
-      <ul class="sugestoes" id="buscaMunicipioSugestoes" role="listbox" hidden></ul>
+<header class="faceplate">
+  <div class="faceplate-interno">
+    <div class="marca">
+      <img id="logoImg" src="../logo/orca-logo-claro.png" alt="Logo do ORCA" height="34">
+      <span class="marca-texto">
+        <b>ORCA</b>
+        <span>risco geológico &times; chuva</span>
+      </span>
     </div>
-  </div>
 
-  <div class="campo">
-    <label><svg class="icone"><use href="icons/sprite.svg#icon-clock"></use></svg>Janela de chuva acumulada</label>
-    <div class="toggle-janela" id="janelaToggle">
-      <button data-janela="24">24h</button>
-      <button data-janela="72" class="ativo">72h</button>
+<div class="controles">
+    <div class="campo campo-uf">
+      <label for="ufSelect">Estado</label>
+      <select id="ufSelect"></select>
     </div>
-  </div>
 
-  <div class="campo campo-limiar">
-    <label>Limiar de atenção: <span class="valor" id="limiarValor">100</span>mm</label>
-    <input type="range" id="limiarSlider" min="0" max="300" step="5" value="100">
+    <div class="campo campo-municipio">
+      <label for="buscaMunicipio">Município</label>
+      <div class="busca">
+        <input type="text" id="buscaMunicipio" autocomplete="off" placeholder="Todos do estado">
+        <ul class="sugestoes" id="buscaMunicipioSugestoes" role="listbox" hidden></ul>
+      </div>
+    </div>
+
+    <div class="campo">
+      <label><svg class="icone"><use href="icons/sprite.svg#icon-clock"></use></svg>Janela</label>
+      <div class="toggle-janela" id="janelaToggle">
+        <button data-janela="24" type="button">24h</button>
+        <button data-janela="72" type="button" class="ativo">72h</button>
+      </div>
+    </div>
+
+    <button class="botao-tema" id="botaoTema" type="button" aria-label="Alternar tema claro e escuro">
+      <svg class="icone icone-sol"><use href="icons/sprite.svg#icon-sun"></use></svg>
+      <svg class="icone icone-lua"><use href="icons/sprite.svg#icon-moon"></use></svg>
+    </button>
+    </div>
   </div>
 </header>
 
+<!-- A régua: onde o estado está, em relação à linha que você desenhou. -->
+<div class="regua-faixa">
+  <div class="regua">
+    <div class="regua-cabecalho">
+      <h1 class="regua-titulo" id="reguaTitulo">Chuva acumulada por setor de risco</h1>
+      <p class="regua-leitura" id="reguaLeitura"></p>
+    </div>
+
+    <div class="escala" id="escala">
+      <div class="escala-faixa" id="escalaFaixa" hidden></div>
+      <div class="escala-marcas" id="escalaMarcas"></div>
+      <div class="escala-trilho"></div>
+      <div id="escalaTicks"></div>
+      <div class="escala-limiar" id="escalaLimiar"></div>
+      <span class="escala-limiar-valor" id="escalaLimiarValor"></span>
+      <input type="range" id="limiarSlider" min="0" max="300" step="5" value="100"
+             aria-label="Limiar de atenção, em milímetros">
+    </div>
+  </div>
+</div>
+
+<p class="selo" id="selo">Carregando dados…</p>
+
 <main>
-  <p class="selo" id="selo">Carregando dados…</p>
+  <div class="painel">
+    <div id="mapa"></div>
 
-  <div class="cards" id="cards"></div>
+    <div class="trilho">
+      <section class="bloco">
+        <div class="bloco-cabecalho">
+          <h2 id="tituloRecorte">Estado inteiro</h2>
+          <span class="contagem" id="contagemRecorte"></span>
+        </div>
+        <div class="contadores" id="cards"></div>
+      </section>
 
-  <div id="mapa"></div>
-
-  <div class="painel-inferior">
-    <div>
-      <h2 id="tituloTabela">Setores em atenção</h2>
-      <div class="tabela-scroll">
-        <table>
-          <thead>
-            <tr><th>Município</th><th>Setor</th><th>Grau</th><th>Chuva (mm)</th><th>Fonte</th></tr>
-          </thead>
-          <tbody id="tabelaCorpo"></tbody>
-        </table>
-        <div class="vazio" id="tabelaVazia" hidden>Nenhum setor ultrapassa o limiar configurado.</div>
-      </div>
-
-      <div id="blocoAlertaPrevisto" hidden style="margin-top: var(--space-6)">
-        <h2><svg class="icone"><use href="icons/sprite.svg#icon-triangle-alert"></use></svg>Alerta previsto (próximos 3 dias)</h2>
+      <section class="bloco">
+        <div class="bloco-cabecalho">
+          <h2 id="tituloTabela">Setores em atenção</h2>
+          <span class="contagem" id="contagemAtencao"></span>
+        </div>
         <div class="tabela-scroll">
           <table>
             <thead>
-              <tr><th>Município</th><th>Setor</th><th>Grau</th><th>Quando</th></tr>
+              <tr><th>Município</th><th>Grau</th><th>Chuva</th></tr>
+            </thead>
+            <tbody id="tabelaCorpo"></tbody>
+          </table>
+        </div>
+        <div class="vazio" id="tabelaVazia">
+          <strong>Nenhum setor passou de <span id="vazioLimiar">100</span>mm.</strong>
+          Arraste a régua acima para baixar o limiar e ver o que está mais perto dele.
+        </div>
+      </section>
+
+      <section class="bloco" id="blocoAlertaPrevisto" hidden>
+        <div class="bloco-cabecalho">
+          <h2><svg class="icone"><use href="icons/sprite.svg#icon-triangle-alert"></use></svg>Alerta previsto</h2>
+          <span class="contagem viva" id="contagemPrevisto"></span>
+        </div>
+        <div class="tabela-scroll">
+          <table>
+            <thead>
+              <tr><th>Município</th><th>Grau</th><th>Cruza o limiar</th></tr>
             </thead>
             <tbody id="tabelaPrevistoCorpo"></tbody>
           </table>
         </div>
-      </div>
-    </div>
-    <div>
-      <div class="grafico-cabecalho">
-        <h2>Série temporal de chuva</h2>
-        <span class="grafico-rotulo" id="estacaoRotulo">Busque um município acima</span>
-      </div>
-      <div class="grafico-container">
-        <canvas id="grafico" hidden></canvas>
-        <p class="vazio" id="graficoVazio">Busque um município no filtro acima para ver o histórico de chuva.</p>
-      </div>
+      </section>
+
+      <section class="bloco">
+        <div class="bloco-cabecalho">
+          <h2 id="tituloSerie">Municípios com mais chuva</h2>
+          <span class="contagem" id="estacaoRotulo"></span>
+        </div>
+        <div class="grafico-caixa" id="graficoCaixa" hidden>
+          <canvas id="grafico"></canvas>
+        </div>
+        <ul class="lista-municipios" id="listaMunicipios"></ul>
+        <div class="vazio" id="graficoVazio" hidden></div>
+      </section>
     </div>
   </div>
 
-  <section class="areas-customizadas" id="areasCustomizadas">
-    <h2><svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>Minhas áreas</h2>
-    <p class="aviso-privacidade">
-      <svg class="icone"><use href="icons/sprite.svg#icon-info"></use></svg>
-      Carregue um arquivo com sua área (GeoJSON, KML ou shapefile em .zip) e veja chuva acumulada e
-      alerta previsto nela, calculados na hora pelo seu navegador. Nada que você envia é salvo em
-      lugar nenhum, some ao recarregar a página. Limite de 5 áreas por vez, até 10MB por arquivo.
+  <section class="areas" id="areasCustomizadas">
+    <div class="areas-cabecalho">
+      <h2>Minhas áreas</h2>
+      <span class="rotulo-inst">roda no seu navegador</span>
+    </div>
+    <p class="areas-intro">
+      A setorização da CPRM/SGB não cobre tudo. Carregue uma área sua (GeoJSON, KML ou shapefile
+      em .zip) para ver a chuva acumulada e o alerta previsto nela. O arquivo é lido pelo seu
+      navegador e a chuva vem direto da Open-Meteo: nada passa por um servidor do ORCA nem fica
+      salvo, e tudo some quando você recarregar. Até 5 áreas, 10MB por arquivo.
     </p>
 
-    <div class="upload-area">
+    <div class="upload-linha">
       <label for="uploadArquivo" class="botao-upload">
         <svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>
-        Carregar arquivo (.geojson, .kml, .zip)
+        Carregar arquivo
       </label>
       <input type="file" id="uploadArquivo" accept=".geojson,.json,.kml,.zip" hidden>
       <div class="campo campo-classificacao">
-        <label for="classificacaoSelect">Classificação de risco (opcional, autodeclarada)</label>
+        <label for="classificacaoSelect">Classificação (opcional, sua)</label>
         <select id="classificacaoSelect">
-          <option value="">Não informado</option>
+          <option value="">Não informada</option>
           <option value="alto">Alto</option>
           <option value="muito alto">Muito alto</option>
         </select>
@@ -144,9 +209,11 @@
 </main>
 
 <footer>
-  ORCA: dados públicos da CPRM/SGB, INMET e ANA. Site estático, atualizado
-  diariamente. <a href="https://github.com/hcristosm/ORCA#readme">Sobre o projeto</a> ·
-  <a href="https://github.com/hcristosm/ORCA">GitHub <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg></a>
+  <span>Dados públicos da CPRM/SGB, INMET, ANA e Open-Meteo. Site estático, atualizado diariamente.</span>
+  <span>
+    <a href="https://github.com/hcristosm/ORCA#readme">Sobre o projeto</a> ·
+    <a href="https://github.com/hcristosm/ORCA">GitHub <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg></a>
+  </span>
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -164,6 +231,8 @@
 
   let UF = "sp";
   let ufsDisponiveis = ["sp"];
+
+  const ESCALA_MAX = 300;
 
   async function carregarUfsDisponiveis() {
     try {
@@ -214,12 +283,18 @@
   function token(nome) {
     return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
   }
-  function coresGrau() {
-    return { "alto": token("--risco-alto"), "muito alto": token("--risco-muito-alto") };
-  }
   function corPadrao() { return token("--risco-padrao"); }
   function corAtencao() { return token("--contorno-atencao"); }
   function corSerie() { return token("--serie-chuva"); }
+
+  // Grau de risco vira trama, não cor: no mapa a cor fica reservada ao limiar.
+  const HACHURA_POR_GRAU = {
+    "alto": "url(#hach-alto)",
+    "muito alto": "url(#hach-muito-alto)",
+  };
+  function hachuraPorGrau(grau) {
+    return HACHURA_POR_GRAU[(grau || "").toLowerCase()] || "url(#hach-padrao)";
+  }
 
   const estado = { janela: 72, limiar: 100, municipio: "" };
   let setoresGeoJSON = null;
@@ -245,10 +320,21 @@
       .trim();
   }
 
+  function escaparHtml(texto) {
+    const div = document.createElement("div");
+    div.textContent = texto == null ? "" : String(texto);
+    return div.innerHTML;
+  }
+
   const CHAVE_TEMA = "orca-tema";
 
   function temaAtual() {
-    const salvo = localStorage.getItem(CHAVE_TEMA);
+    let salvo = null;
+    try {
+      salvo = localStorage.getItem(CHAVE_TEMA);
+    } catch (e) {
+      // navegador com armazenamento bloqueado: cai na preferência do sistema.
+    }
     if (salvo === "claro" || salvo === "escuro") return salvo;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro";
   }
@@ -261,7 +347,11 @@
 
   function alternarTema() {
     const novo = temaAtual() === "escuro" ? "claro" : "escuro";
-    localStorage.setItem(CHAVE_TEMA, novo);
+    try {
+      localStorage.setItem(CHAVE_TEMA, novo);
+    } catch (e) {
+      // sem persistência: o tema ainda vale para esta visita.
+    }
     aplicarTema(novo);
     if (setoresGeoJSON) {
       inicializarMapa();
@@ -285,7 +375,8 @@
     if (UF !== ufAlvo) return;
     if (!setoresResp.ok || !seriesResp.ok || !metaResp.ok) {
       document.getElementById("selo").textContent =
-        "Não foi possível carregar os dados. Rode `python -m src.cli exportar-dashboard --uf SP` primeiro.";
+        "Não foi possível carregar os dados desta UF. Rode `python -m src.cli exportar-dashboard --uf " +
+        ufAlvo.toUpperCase() + "` para gerá-los.";
       return;
     }
     const setoresCarregados = await setoresResp.json();
@@ -308,12 +399,11 @@
     previsao = previsaoCarregada;
 
     const detalheFonte = meta.fonte === "openmeteo"
-      ? "Fonte: Open-Meteo (consulta direta por setor)"
-      : `${meta.total_estacoes_inmet} estações INMET, ${meta.total_estacoes_ana} estações ANA`;
+      ? "Open-Meteo, consulta direta por setor"
+      : `${meta.total_estacoes_inmet} estações INMET e ${meta.total_estacoes_ana} da ANA`;
     document.getElementById("selo").innerHTML =
-      `<b>Referência da chuva:</b> ${formatarData(meta.referencia)} · ` +
-      `<b>Dados gerados em:</b> ${formatarData(meta.gerado_em)} · ` +
-      detalheFonte;
+      `<b>Chuva até</b> ${formatarData(meta.referencia)} · ` +
+      `<b>gerado em</b> ${formatarData(meta.gerado_em)} · ${detalheFonte}`;
 
     popularBuscaMunicipios();
     inicializarMapa();
@@ -333,6 +423,10 @@
     } catch (e) {
       return iso;
     }
+  }
+
+  function formatarMm(valor) {
+    return typeof valor === "number" ? valor.toFixed(1) : "—";
   }
 
   const TIMEOUT_IBGE_MS = 6000;
@@ -531,7 +625,7 @@
     }
 
     document.addEventListener("click", ev => {
-      if (!ev.target.closest(".busca-municipio")) fecharEReconciliar();
+      if (!ev.target.closest(".busca")) fecharEReconciliar();
     });
 
     input.addEventListener("blur", () => {
@@ -576,33 +670,43 @@
   function atualizarGraficoParaMunicipio(nome) {
     const codigo = encontrarCodigoEstacao(nome);
     const rotulo = document.getElementById("estacaoRotulo");
+    document.getElementById("tituloSerie").textContent = "Chuva em " + nome;
+    document.getElementById("listaMunicipios").hidden = true;
+
     if (!codigo) {
-      limparGrafico();
-      rotulo.textContent = `Sem série de chuva disponível para ${nome}.`;
+      document.getElementById("graficoCaixa").hidden = true;
+      const vazio = document.getElementById("graficoVazio");
+      vazio.hidden = false;
+      vazio.innerHTML = "<strong>Sem série de chuva para " + escaparHtml(nome) + ".</strong>" +
+        "O cruzamento não encontrou estação com dado utilizável para este município.";
+      rotulo.textContent = "";
+      if (grafico) { grafico.destroy(); grafico = null; }
       return;
     }
-    rotulo.textContent = `${series[codigo].nome}: ${series[codigo].fonte.toUpperCase()}`;
+    rotulo.textContent = series[codigo].fonte.toUpperCase();
     renderizarGrafico(codigo);
   }
 
   function limparGrafico() {
     if (grafico) { grafico.destroy(); grafico = null; }
-    document.getElementById("grafico").hidden = true;
-    document.getElementById("graficoVazio").hidden = false;
-    document.getElementById("estacaoRotulo").textContent = "Busque um município acima";
+    document.getElementById("graficoCaixa").hidden = true;
+    document.getElementById("graficoVazio").hidden = true;
+    document.getElementById("listaMunicipios").hidden = false;
+    document.getElementById("tituloSerie").textContent = "Municípios com mais chuva";
+    document.getElementById("estacaoRotulo").textContent = `${estado.janela}h acumuladas`;
+    if (setoresGeoJSON) renderizarListaMunicipios();
   }
 
-  const TILE_URLS = {
-    claro: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    escuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-  };
+  const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
   function inicializarMapa() {
     clearTimeout(idAgendaSetoresCompleto);
     if (mapa) { mapa.remove(); mapa = null; camadaSetores = null; camadaChoropleth = null; camadaSetoresTodos = null; }
     mapa = L.map("mapa");
-    L.tileLayer(TILE_URLS[temaAtual()], {
-      attribution: "© OpenStreetMap, © CARTO", maxZoom: 19,
+    // Base neutralizada por filtro CSS (ver .leaflet-tile-pane no style.css): o
+    // basemap é fundo, o dado é figura, nos dois temas e sem depender de chave.
+    L.tileLayer(TILE_URL, {
+      attribution: "© OpenStreetMap", maxZoom: 19,
     }).addTo(mapa);
 
     const legenda = L.control({ position: "bottomleft" });
@@ -614,14 +718,14 @@
     legenda.addTo(mapa);
 
     camadaSetoresTodos = L.layerGroup();
-    const overlays = { "Setores de risco (estado completo)": camadaSetoresTodos };
+    const overlays = { "Setores do estado inteiro": camadaSetoresTodos };
     L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
 
     mapa.on("overlayadd", ev => {
-      if (ev.name === "Setores de risco (estado completo)") { renderizarSetoresCompletoEstado(); atualizarLegenda(); }
+      if (ev.name === "Setores do estado inteiro") { renderizarSetoresCompletoEstado(); atualizarLegenda(); }
     });
     mapa.on("overlayremove", ev => {
-      if (ev.name === "Setores de risco (estado completo)") { camadaSetoresTodos.clearLayers(); atualizarLegenda(); }
+      if (ev.name === "Setores do estado inteiro") { camadaSetoresTodos.clearLayers(); atualizarLegenda(); }
     });
   }
 
@@ -666,37 +770,121 @@
   function renderizarTudo() {
     const { filtrados, emAtencao, alertaPrevisto } = calcularRecorte(estado.municipio);
 
+    renderizarRegua(filtrados, emAtencao);
     renderizarCards(filtrados, emAtencao, alertaPrevisto);
     renderizarMapa(filtrados, emAtencao, alertaPrevisto);
     renderizarTabela(emAtencao, alertaPrevisto);
+    if (!estado.municipio) renderizarListaMunicipios();
     agendarRenderizarSetoresCompletoEstado();
   }
 
-  let idAgendaSetoresCompleto = null;
-  function agendarRenderizarSetoresCompletoEstado() {
-    if (!mapa || !camadaSetoresTodos || !mapa.hasLayer(camadaSetoresTodos)) return;
-    // Debounced: essa camada opcional reconstrói ~900 polígonos/tooltips, custosa
-    // demais para rodar a cada evento "input" do slider de limiar.
-    clearTimeout(idAgendaSetoresCompleto);
-    idAgendaSetoresCompleto = setTimeout(renderizarSetoresCompletoEstado, 200);
+  /* -------------------------------------------------------------- a régua */
+
+  const BINS = 150;
+
+  // Histograma dos setores ao longo da escala de chuva, com o limiar como
+  // linha. Mostra de uma vez a distância entre o que está acontecendo e o
+  // valor que dispara atenção.
+  function renderizarRegua(filtrados, emAtencao) {
+    const valores = filtrados
+      .map(r => r.chuva)
+      .filter(v => typeof v === "number");
+
+    const contagem = new Array(BINS).fill(0);
+    for (const v of valores) {
+      const idx = Math.min(BINS - 1, Math.floor((Math.min(v, ESCALA_MAX) / ESCALA_MAX) * BINS));
+      contagem[idx]++;
+    }
+    const maxContagem = Math.max(1, ...contagem);
+    const binLimiar = Math.floor((estado.limiar / ESCALA_MAX) * BINS);
+
+    const alturaMax = 46;
+    const marcas = [];
+    for (let i = 0; i < BINS; i++) {
+      if (!contagem[i]) continue;
+      // Raiz quadrada: sem isso um pico de centenas de setores num bin achata
+      // todo o resto da distribuição contra o zero.
+      const altura = Math.max(3, Math.round(Math.sqrt(contagem[i] / maxContagem) * alturaMax));
+      const esquerda = ((i + 0.5) / BINS) * 100;
+      const acima = i >= binLimiar ? " acima" : "";
+      marcas.push(
+        `<span class="escala-marca${acima}" style="left:${esquerda.toFixed(3)}%;height:${altura}px"></span>`
+      );
+    }
+    document.getElementById("escalaMarcas").innerHTML = marcas.join("");
+
+    const pct = (estado.limiar / ESCALA_MAX) * 100;
+    document.getElementById("escalaLimiar").style.left = pct + "%";
+    const rotuloLimiar = document.getElementById("escalaLimiarValor");
+    rotuloLimiar.style.left = pct + "%";
+    rotuloLimiar.textContent = estado.limiar + "mm";
+
+    const maximo = valores.length ? Math.max(...valores) : 0;
+
+    // A faixa realmente ocupada pelos dados. Sem isso, num dia calmo a régua
+    // parece quebrada: 90% dela fica vazia sem dizer por quê.
+    const faixa = document.getElementById("escalaFaixa");
+    if (valores.length && maximo > 0) {
+      const larguraPct = Math.max(1.2, (Math.min(maximo, ESCALA_MAX) / ESCALA_MAX) * 100);
+      faixa.style.width = larguraPct + "%";
+      faixa.hidden = false;
+    } else {
+      faixa.hidden = true;
+    }
+    const nomeRecorte = estado.municipio || (UF ? UF.toUpperCase() : "");
+    document.getElementById("reguaLeitura").innerHTML =
+      `<span>${escaparHtml(nomeRecorte)} · <b>${filtrados.length}</b> setores</span>` +
+      `<span>máxima <b>${formatarMm(maximo)}mm</b> em ${estado.janela}h</span>` +
+      `<span class="${emAtencao.length ? "em-atencao" : ""}">` +
+      `<b>${emAtencao.length}</b> acima do limiar</span>`;
+
+    document.getElementById("vazioLimiar").textContent = estado.limiar;
   }
+
+  function montarTicks() {
+    const alvo = document.getElementById("escalaTicks");
+    const partes = [];
+    for (let mm = 0; mm <= ESCALA_MAX; mm += 10) {
+      const pct = (mm / ESCALA_MAX) * 100;
+      const maior = mm % 50 === 0;
+      partes.push(`<span class="escala-tick ${maior ? "maior" : "menor"}" style="left:${pct}%"></span>`);
+      if (maior) {
+        partes.push(
+          `<span class="escala-rotulo" style="left:${pct}%">${mm === ESCALA_MAX ? mm + "mm" : mm}</span>`
+        );
+      }
+    }
+    alvo.innerHTML = partes.join("");
+  }
+
+  /* ------------------------------------------------------------ contadores */
 
   function renderizarCards(filtrados, emAtencao, alertaPrevisto) {
     const grauAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "alto").length;
     const grauMuitoAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "muito alto").length;
+
     const cards = [
-      { rotulo: "Setores no recorte", valor: filtrados.length },
       { rotulo: "Grau alto", valor: grauAlto },
       { rotulo: "Grau muito alto", valor: grauMuitoAlto },
-      { rotulo: `Em atenção (≥ ${estado.limiar}mm)`, valor: emAtencao.length },
+      { rotulo: `Em atenção (≥ ${estado.limiar}mm)`, valor: emAtencao.length, destaque: true },
     ];
     if (previsao) {
-      cards.push({ rotulo: "Alerta previsto (72h)", valor: alertaPrevisto.length });
+      cards.push({ rotulo: "Alerta previsto em 72h", valor: alertaPrevisto.length, destaque: true });
     }
-    document.getElementById("cards").innerHTML = cards.map(c =>
-      `<div class="card"><div class="rotulo">${c.rotulo}</div><div class="valor">${c.valor}</div></div>`
-    ).join("");
+
+    document.getElementById("cards").innerHTML = cards.map(c => {
+      const classe = c.destaque ? (c.valor > 0 ? "contador destaque" : "contador zerado") : "contador";
+      return `<div class="${classe}"><span class="valor">${c.valor}</span>` +
+        `<span class="rotulo">${c.rotulo}</span></div>`;
+    }).join("");
+
+    document.getElementById("tituloRecorte").textContent =
+      estado.municipio || "Estado inteiro";
+    document.getElementById("contagemRecorte").textContent =
+      `${filtrados.length} setor${filtrados.length === 1 ? "" : "es"}`;
   }
+
+  /* ------------------------------------------------------------------ mapa */
 
   function choroplethDisponivel() {
     return !!(malhaMunicipios && codareaPorNome && codareaPorNome.size);
@@ -715,24 +903,24 @@
       !!(camadaSetoresTodos && mapa && mapa.hasLayer(camadaSetoresTodos));
   }
 
+  function amostraHachura(idPattern) {
+    return `<svg class="amostra" viewBox="0 0 22 11" preserveAspectRatio="none">` +
+      `<rect width="22" height="11" fill="${idPattern}"></rect></svg>`;
+  }
+
   function conteudoLegenda() {
-    const cores = coresGrau();
     const linhasSetor = modoSetoresVisivel()
-      ? '<span style="border:2px solid ' + corAtencao() + ';padding:0 4px">Em atenção</span><br>' +
-        '<span style="border:2px dashed ' + corAtencao() + ';padding:0 4px">Alerta previsto</span>'
-      : '<i>Busque um município para ver setores em atenção/alerta previsto</i>';
-    return '<b>Grau de risco</b><br>' +
-      '<span class="amostra" style="background:' + cores["alto"] + '"></span>Alto<br>' +
-      '<span class="amostra" style="background:' + cores["muito alto"] + '"></span>Muito alto<br>' +
+      ? `<div><span class="amostra" style="background:${corAtencao()}"></span>Acima do limiar</div>` +
+        `<div><span class="amostra" style="background:transparent;border:2px dashed ${corAtencao()}"></span>Alerta previsto</div>`
+      : `<span class="nota">Escolha um município para ver setor por setor.</span>`;
+    return `<span class="titulo">Grau de risco</span>` +
+      `<div>${amostraHachura("url(#hach-alto)")}Alto</div>` +
+      `<div>${amostraHachura("url(#hach-muito-alto)")}Muito alto</div>` +
       linhasSetor;
   }
 
   function atualizarLegenda() {
     if (legendaDiv) legendaDiv.innerHTML = conteudoLegenda();
-  }
-
-  function corPorGrau(grau) {
-    return coresGrau()[(grau || "").toLowerCase()] || corPadrao();
   }
 
   function rotuloGrau(grau) {
@@ -750,28 +938,31 @@
         const numSetor = feature.properties.num_setor;
         const emAtencaoAgora = codigosAtencao.has(numSetor);
         const previstoAgora = codigosPrevisto.has(numSetor);
-        const cor = corPorGrau(feature.properties.grau_risco);
+        // Trama = grau de risco. Cor cheia = passou do limiar. Uma coisa de cada vez.
         return {
-          fillColor: cor, fillOpacity: 0.75,
-          color: emAtencaoAgora ? corAtencao() : cor,
-          weight: emAtencaoAgora || previstoAgora ? 3 : 1,
-          dashArray: previstoAgora && !emAtencaoAgora ? "6 4" : null,
+          fillColor: emAtencaoAgora ? corAtencao() : hachuraPorGrau(feature.properties.grau_risco),
+          fillOpacity: emAtencaoAgora ? 0.8 : 0.9,
+          color: emAtencaoAgora || previstoAgora ? corAtencao() : corPadrao(),
+          weight: emAtencaoAgora ? 2.5 : (previstoAgora ? 2 : 0.8),
+          dashArray: previstoAgora && !emAtencaoAgora ? "5 4" : null,
         };
       },
       onEachFeature: (feature, layer) => {
         const p = feature.properties;
         const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
-        const chuva = typeof p[campo] === "number" ? p[campo].toFixed(1) : "—";
+        const chuva = formatarMm(p[campo]);
         const linhaFonte = p.fonte_estacao === "openmeteo"
-          ? `Fonte: ${(p.fonte_estacao || "—").toUpperCase()}<br>`
+          ? `Fonte: ${(p.fonte_estacao || "—").toUpperCase()}`
           : `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
-            `(${(p.fonte_estacao || "—").toUpperCase()})<br>`;
+            `(${(p.fonte_estacao || "—").toUpperCase()})`;
         const quando = quandoPorSetor.get(p.num_setor);
-        const linhaPrevisao = quando ? `<br><b>Alerta previsto:</b> ${formatarData(quando)}` : "";
+        const linhaPrevisao = quando ? `<br>Cruza o limiar em ${formatarData(quando)}` : "";
         layer.bindTooltip(
-          `<b>${p.munic}</b><br>Setor: ${p.num_setor}<br>Grau: ${p.grau_risco}<br>` +
+          `<b>${escaparHtml(p.munic)}</b><br>` +
+          `<span class="mono">${escaparHtml(p.num_setor)}</span><br>` +
+          `Grau: ${escaparHtml(p.grau_risco)}<br>` +
+          `Chuva ${estado.janela}h: <span class="mono">${chuva}mm</span><br>` +
           linhaFonte +
-          `Chuva ${estado.janela}h: ${chuva}mm` +
           linhaPrevisao
         );
       },
@@ -789,7 +980,7 @@
     } else {
       if (camadaChoropleth) { mapa.removeLayer(camadaChoropleth); camadaChoropleth = null; }
       camadaSetores = criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(mapa);
-      if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [20, 20] });
+      if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [24, 24] });
     }
     atualizarLegenda();
   }
@@ -830,19 +1021,28 @@
     camadaChoropleth = L.geoJSON(colecao, {
       style: feature => {
         const r = riscoPorCodarea.get(String(feature.properties.codarea));
-        return { fillColor: corPorGrau(r.grauMax), fillOpacity: 0.7, color: corPadrao(), weight: 1 };
+        return { fillColor: hachuraPorGrau(r.grauMax), fillOpacity: 0.9, color: corPadrao(), weight: 0.8 };
       },
       onEachFeature: (feature, layer) => {
         const r = riscoPorCodarea.get(String(feature.properties.codarea));
         layer.bindTooltip(
-          `<b>${r.nome}</b><br>Grau máximo: ${rotuloGrau(r.grauMax)}<br>` +
-          `Setores mapeados: ${r.qtdSetores}<br><i>Clique para ver o detalhe</i>`
+          `<b>${escaparHtml(r.nome)}</b><br>Grau máximo: ${rotuloGrau(r.grauMax)}<br>` +
+          `<span class="mono">${r.qtdSetores}</span> setores mapeados<br>Clique para abrir`
         );
         layer.on("click", () => selecionarMunicipio(r.nome));
       },
     }).addTo(mapa);
 
-    if (colecao.features.length) mapa.fitBounds(camadaChoropleth.getBounds(), { padding: [20, 20] });
+    if (colecao.features.length) mapa.fitBounds(camadaChoropleth.getBounds(), { padding: [24, 24] });
+  }
+
+  let idAgendaSetoresCompleto = null;
+  function agendarRenderizarSetoresCompletoEstado() {
+    if (!mapa || !camadaSetoresTodos || !mapa.hasLayer(camadaSetoresTodos)) return;
+    // Debounced: essa camada opcional reconstrói ~900 polígonos/tooltips, custosa
+    // demais para rodar a cada evento "input" do slider de limiar.
+    clearTimeout(idAgendaSetoresCompleto);
+    idAgendaSetoresCompleto = setTimeout(renderizarSetoresCompletoEstado, 200);
   }
 
   function renderizarSetoresCompletoEstado() {
@@ -858,11 +1058,17 @@
     criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(camadaSetoresTodos);
   }
 
+  /* --------------------------------------------------------------- tabelas */
+
   function renderizarTabela(emAtencao, alertaPrevisto) {
     const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
     const ordenado = emAtencao.slice().sort((a, b) => (b.chuva || 0) - (a.chuva || 0));
     const corpo = document.getElementById("tabelaCorpo");
     const vazio = document.getElementById("tabelaVazia");
+
+    document.getElementById("contagemAtencao").textContent =
+      ordenado.length ? `${ordenado.length} de ${estado.limiar}mm para cima` : "";
+    document.getElementById("contagemAtencao").classList.toggle("viva", ordenado.length > 0);
 
     if (!ordenado.length) {
       corpo.innerHTML = "";
@@ -871,8 +1077,10 @@
       vazio.hidden = true;
       corpo.innerHTML = ordenado.map(r => {
         const p = r.f.properties;
-        return `<tr><td>${p.munic}</td><td>${p.num_setor}</td><td>${p.grau_risco}</td>` +
-          `<td>${(p[campo] || 0).toFixed(1)}</td><td>${(p.fonte_estacao || "—").toUpperCase()}</td></tr>`;
+        return `<tr><td><span class="municipio-celula">${escaparHtml(p.munic)}</span><br>` +
+          `<span class="setor-codigo">${escaparHtml(p.num_setor)}</span></td>` +
+          `<td>${escaparHtml(p.grau_risco)}</td>` +
+          `<td class="num mm">${formatarMm(p[campo])}</td></tr>`;
       }).join("");
     }
 
@@ -882,18 +1090,50 @@
       return;
     }
     blocoPrevisto.hidden = false;
+    document.getElementById("contagemPrevisto").textContent = `${alertaPrevisto.length} setores`;
     document.getElementById("tabelaPrevistoCorpo").innerHTML = alertaPrevisto.map(r => {
       const p = r.f.properties;
-      return `<tr><td>${p.munic}</td><td>${p.num_setor}</td><td>${p.grau_risco}</td>` +
-        `<td>${formatarData(r.quando)}</td></tr>`;
+      return `<tr><td><span class="municipio-celula">${escaparHtml(p.munic)}</span><br>` +
+        `<span class="setor-codigo">${escaparHtml(p.num_setor)}</span></td>` +
+        `<td>${escaparHtml(p.grau_risco)}</td>` +
+        `<td class="mono">${formatarData(r.quando)}</td></tr>`;
+    }).join("");
+  }
+
+  // Ocupa o painel da série quando nenhum município está escolhido: no lugar de
+  // uma caixa vazia pedindo uma busca, o ranking que responde "onde choveu mais".
+  function renderizarListaMunicipios() {
+    const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+    const porMunicipio = new Map();
+    for (const f of setoresGeoJSON.features) {
+      const v = f.properties[campo];
+      if (typeof v !== "number") continue;
+      const atual = porMunicipio.get(f.properties.munic);
+      if (atual === undefined || v > atual) porMunicipio.set(f.properties.munic, v);
+    }
+    const ordenado = Array.from(porMunicipio.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12);
+    const maximo = ordenado.length ? ordenado[0][1] : 0;
+
+    document.getElementById("estacaoRotulo").textContent = `${estado.janela}h acumuladas`;
+    document.getElementById("listaMunicipios").innerHTML = ordenado.map(([nome, mm]) => {
+      const largura = maximo > 0 ? Math.max(2, (mm / maximo) * 100) : 0;
+      const acima = mm >= estado.limiar;
+      return `<li data-municipio="${escaparHtml(nome)}">` +
+        `<span class="nome">${escaparHtml(nome)}</span>` +
+        `<span class="barra-linha"><span class="barra">` +
+        `<span style="width:${largura.toFixed(1)}%${acima ? ";background:var(--sinal)" : ""}"></span>` +
+        `</span><span class="mm">${formatarMm(mm)}mm</span></span></li>`;
     }).join("");
   }
 
   function renderizarGrafico(codigoEstacao) {
     const dados = series[codigoEstacao];
     if (!dados) return;
-    document.getElementById("grafico").hidden = false;
+    document.getElementById("graficoCaixa").hidden = false;
     document.getElementById("graficoVazio").hidden = true;
+    document.getElementById("listaMunicipios").hidden = true;
     const ctx = document.getElementById("grafico").getContext("2d");
     const labels = dados.serie.map(p => new Date(p[0]).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", timeZone: "UTC" }));
     const valores = dados.serie.map(p => p[1]);
@@ -901,14 +1141,26 @@
     if (grafico) grafico.destroy();
     grafico = new Chart(ctx, {
       type: "bar",
-      data: { labels, datasets: [{ label: "Chuva (mm)", data: valores, backgroundColor: corSerie() }] },
+      data: { labels, datasets: [{ label: "Chuva (mm)", data: valores, backgroundColor: corSerie(), borderWidth: 0 }] },
       options: {
         responsive: true, maintainAspectRatio: false,
-        scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } },
+        scales: {
+          x: {
+            ticks: { maxTicksLimit: 8, color: token("--tinta-fraca"), font: { size: 10 } },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: token("--tinta-fraca"), font: { size: 10 } },
+            grid: { color: token("--fio-cor") },
+          },
+        },
         plugins: { legend: { display: false } },
       },
     });
   }
+
+  /* -------------------------------------------------------------- controles */
 
   document.getElementById("janelaToggle").addEventListener("click", ev => {
     const btn = ev.target.closest("button[data-janela]");
@@ -916,15 +1168,21 @@
     estado.janela = Number(btn.dataset.janela);
     document.querySelectorAll("#janelaToggle button").forEach(b => b.classList.toggle("ativo", b === btn));
     renderizarTudo();
+    if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
   });
 
   document.getElementById("limiarSlider").addEventListener("input", ev => {
     estado.limiar = Number(ev.target.value);
-    document.getElementById("limiarValor").textContent = estado.limiar;
     renderizarTudo();
   });
 
+  document.getElementById("listaMunicipios").addEventListener("click", ev => {
+    const li = ev.target.closest("li[data-municipio]");
+    if (li) selecionarMunicipio(li.dataset.municipio);
+  });
+
   aplicarTema(temaAtual());
+  montarTicks();
   document.getElementById("botaoTema").addEventListener("click", alternarTema);
   configurarBuscaMunicipios();
 

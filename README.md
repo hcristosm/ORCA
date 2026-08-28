@@ -13,7 +13,7 @@
 
 [![Release](https://img.shields.io/github/v/release/hcristosm/ORCA)](https://github.com/hcristosm/ORCA/releases/latest)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](#instalação)
-[![Dashboard ao vivo](https://img.shields.io/badge/dashboard-ao%20vivo%20no%20GitHub%20Pages-c0472f)](https://hcristosm.github.io/ORCA/dashboard/)
+[![Dashboard ao vivo](https://img.shields.io/badge/dashboard-ao%20vivo%20no%20GitHub%20Pages-c0472f)](https://hcristosm.github.io/ORCA/)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Licença](https://img.shields.io/badge/licença-BSD%203--Clause-blue)](LICENSE)
 
@@ -50,7 +50,10 @@ publicado no GitHub Pages e atualizado todo dia por cron.
 - Calcula acumulado de 24h e 72h e uma trajetória de alerta previsto para as
   próximas 72h.
 - Exporta tudo como GeoJSON/JSON estático e serve um dashboard em HTML, CSS e JS
-  puro, com mapa (Leaflet), tabela, cards e gráfico (Chart.js).
+  puro, com mapa (Leaflet), tabela, contadores e gráfico (Chart.js). O grau de
+  risco aparece como hachura, no estilo de carta geológica, para que a cor fique
+  reservada a uma coisa só: setor acima do limiar. Uma régua no topo plota todos
+  os setores contra o limiar, que você arrasta.
 - Deixa o visitante subir uma área própria (GeoJSON, KML ou shapefile em `.zip`)
   e ver a chuva calculada pra ela, tudo dentro do navegador, sem enviar o arquivo
   pra lugar nenhum.

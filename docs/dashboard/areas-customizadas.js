@@ -262,16 +262,10 @@
     }
   }
 
-  const TILE_URLS_AREAS = {
-    claro: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    escuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-  };
-
-  function temaAtualAreas() {
-    const atributo = document.documentElement.getAttribute("data-tema");
-    if (atributo === "claro" || atributo === "escuro") return atributo;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro";
-  }
+  // Mesma base do mapa principal: os tiles do CARTO passaram a exigir chave de
+  // API (voltavam carimbados) e a CSP só libera o OpenStreetMap. Claro e escuro
+  // saem do filtro CSS em .leaflet-tile-pane, não de URLs diferentes.
+  const TILE_URL_AREAS = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
   let mapaAreas = null;
 
@@ -286,8 +280,8 @@
 
     if (mapaAreas) { mapaAreas.remove(); mapaAreas = null; }
     mapaAreas = L.map("mapaAreas");
-    L.tileLayer(TILE_URLS_AREAS[temaAtualAreas()], {
-      attribution: "© OpenStreetMap, © CARTO", maxZoom: 19,
+    L.tileLayer(TILE_URL_AREAS, {
+      attribution: "© OpenStreetMap", maxZoom: 19,
     }).addTo(mapaAreas);
 
     const colecao = { type: "FeatureCollection", features: areas.map(a => a.feature) };
