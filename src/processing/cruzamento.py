@@ -103,8 +103,7 @@ def encontrar_estacao_mais_proxima_combinada(
 ) -> gpd.GeoDataFrame:
     """Para cada setor, acha a estação mais próxima entre INMET e ANA combinadas.
 
-    Regra de prioridade (ver
-    docs/superpowers/specs/2026-08-09-ingestao-ana-design.md): a distância
+    Regra de prioridade: a distância
     manda: a estação mais próxima do centróide do setor vence, seja ela
     INMET ou ANA. O desempate por recência de leitura só entra em jogo
     quando as duas fontes têm uma estação a uma distância praticamente igual

@@ -21,7 +21,7 @@ A cada execução, buscar o ano inteiro do zero seria caro sem necessidade: um
 `HEAD` real no ZIP confirmou que o servidor suporta `Range`/`ETag`, mas cada
 estação tem um único arquivo cobrindo o ano inteiro; não há como pedir só
 "os últimos N dias" de uma estação ao servidor. A otimização é inteiramente
-local (ver docs/superpowers/specs/2026-08-09-ingestao-inmet-incremental-design.md):
+local:
 o ZIP é baixado com GET condicional (pula a transferência se não mudou desde
 a última execução) e, por estação, o CRC32 da entrada no ZIP é comparado a
 um manifesto local (`data/inmet_manifest_<uf>_<ano>.json`); sem mudança,

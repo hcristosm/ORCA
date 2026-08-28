@@ -4,8 +4,7 @@ O dashboard (`docs/dashboard/`) é um site estático em HTML/CSS/JS puro, sem
 backend, este módulo pré-computa o que ele precisa como arquivos estáticos:
 setores com a estação mais próxima (INMET+ANA combinados, via
 `calcular_cruzamento`) e chuva acumulada em GeoJSON, série temporal recente
-por estação em JSON, e metadados de geração. Ver
-docs/superpowers/specs/2026-08-09-dashboard-estatico-design.md.
+por estação em JSON, e metadados de geração.
 """
 
 from __future__ import annotations
@@ -199,8 +198,7 @@ def _municipios_com_chuva_relevante(
     """Municípios com ao menos um setor cuja trajetória de 72h prevista
     (`previsao`, ver `_calcular_chuva_openmeteo`) ultrapassa `limiar_mm` em
     algum ponto futuro -- usado por `_series_openmeteo_por_municipio` para
-    decidir quem pede JANELA_SERIE_DIAS completos vs. DIAS_HISTORICO_CRUZAMENTO
-    (ver docs/superpowers/specs/2026-08-23-triagem-chuva-serie-municipio-design.md).
+    decidir quem pede JANELA_SERIE_DIAS completos vs. DIAS_HISTORICO_CRUZAMENTO.
     """
     relevantes: set[str] = set()
     for num_setor, munic in zip(setores["num_setor"], setores["munic"]):
@@ -221,8 +219,7 @@ def _series_openmeteo_por_municipio(
 
     `municipios_dias_completos`, se informado, restringe quais municípios
     pedem `JANELA_SERIE_DIAS` (30) dias de histórico; os demais pedem só
-    `DIAS_HISTORICO_CRUZAMENTO` (4) -- ver
-    docs/superpowers/specs/2026-08-23-triagem-chuva-serie-municipio-design.md.
+    `DIAS_HISTORICO_CRUZAMENTO` (4).
     `None` (padrão) mantém o comportamento anterior: todos pedem 30 dias.
     """
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")

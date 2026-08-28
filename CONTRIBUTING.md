@@ -98,6 +98,5 @@ redundante com o código).
 
 Se sua contribuição adicionar uma nova fonte de dados (novo endpoint, nova
 UF, nova API), documente no PR: a URL usada, se exige autenticação/captcha,
-e qualquer rate limit observado, seguindo o padrão já estabelecido em
-[`docs/investigacoes.md`](docs/investigacoes.md) para as fontes atuais
-(CPRM/SGB, INMET, ANA, Open-Meteo).
+e qualquer rate limit observado, no mesmo nível de detalhe com que as fontes
+atuais (CPRM/SGB, INMET, ANA, Open-Meteo) estão descritas no README.

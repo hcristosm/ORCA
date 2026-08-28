@@ -1,6 +1,6 @@
 """Cache local incremental para respostas horárias da Open-Meteo.
 
-Ver docs/superpowers/specs/2026-08-22-cache-openmeteo-design.md. Uma tabela
+Uma tabela
 SQLite `(lat, lon, variavel, data_hora) -> valor`: hora passada não muda
 mais, então uma vez cacheada nunca precisa ser rebuscada — quem decide o que
 ainda é elegível para vir do cache é `src/ingest/openmeteo.py`, não este
@@ -121,8 +121,7 @@ class CacheOpenMeteo:
         """Remove linhas mais velhas que `retencao_dias` -- nada hoje pede
         histórico além de JANELA_SERIE_DIAS (30 dias), então o resto é peso
         morto que faria o arquivo crescer sem limite (o arquivo é publicado
-        no gh-pages, e o GitHub rejeita push acima de 100MB; ver
-        docs/superpowers/specs/2026-08-22-cache-openmeteo-design.md)."""
+        no gh-pages, e o GitHub rejeita push acima de 100MB)."""
         corte_epoch = _hora_para_epoch(
             (datetime.now(timezone.utc) - timedelta(days=self._retencao_dias)).strftime("%Y-%m-%dT%H:%M")
         )

@@ -1,8 +1,7 @@
 name: Atualizar dados do ORCA
 
 on:
-  # Rearmado na Tarefa 6 do plano docs/superpowers/plans/2026-08-23-isolamento-fontes.md:
-  # a ingestão CPRM/SGB saiu do caminho diário (agora lê a branch dados-base),
+  # A ingestão CPRM/SGB saiu do caminho diário (agora lê a branch dados-base),
   # então uma queda da SGB não afeta mais esta execução agendada.
   schedule:
     # 09:00 UTC (06:00 em São Paulo) todo dia; CPRM/SGB e INMET raramente mudam
@@ -23,8 +22,7 @@ on:
 # Impede duas execuções (agendada + manual) rodando ao mesmo tempo: além de
 # disputar cota de rate limit da Open-Meteo (observado em 22/08/2026), duas
 # escritas concorrentes no arquivo de cache fariam a última a publicar
-# apagar silenciosamente o progresso da outra (ver
-# docs/superpowers/specs/2026-08-22-cache-openmeteo-design.md).
+# apagar silenciosamente o progresso da outra.
 concurrency:
   group: atualizar-dados
   cancel-in-progress: false

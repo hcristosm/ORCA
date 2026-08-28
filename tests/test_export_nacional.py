@@ -97,8 +97,7 @@ def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
 @responses.activate
 def test_exportar_nacional_segunda_execucao_pede_menos_historico(tmp_path: Path):
     """A 2a execução não faz menos chamadas (a janela recente/previsão é
-    sempre buscada ao vivo, ver docs/superpowers/specs/2026-08-22-cache-
-    openmeteo-design.md), mas o past_days de cada chamada encolhe porque o
+    sempre buscada ao vivo), mas o past_days de cada chamada encolhe porque o
     histórico da 1a execução já está cacheado.
     """
     salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))

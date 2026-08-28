@@ -1,7 +1,6 @@
 """Grade espacial adaptativa para consultas em lote à Open-Meteo.
 
-Ver docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md. Em vez
-de "1 consulta por centroide de setor", agrupa setores próximos numa célula
+Em vez de "1 consulta por centroide de setor", agrupa setores próximos numa célula
 de grade e consulta 1 ponto por célula ocupada, o que mantém o total de
 chamadas diárias à Open-Meteo dentro do orçamento mesmo em escala nacional.
 O tamanho da célula é calibrado automaticamente por busca binária contra os

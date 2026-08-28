@@ -4,7 +4,7 @@ name: Ingerir setores da CPRM/SGB
 # escala de meses. Rebaixar as 27 UFs todo dia gastava 14 minutos do job
 # diário e, pior, expunha o dashboard inteiro à instabilidade da SGB: nos
 # runs #23 e #29 isso derrubou 22 e 25 UFs, e o dashboard foi republicado
-# quase vazio. Ver docs/superpowers/specs/2026-08-23-pipeline-confiavel-design.md
+# quase vazio.
 on:
   schedule:
     - cron: "0 6 1 * *"

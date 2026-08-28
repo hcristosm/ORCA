@@ -6,7 +6,7 @@ captcha, sem autenticação. `ListaEstacoesTelemetricas` lista as estações de
 uma UF; `DadosHidrometeorologicos` devolve leituras de chuva em intervalos de
 15 minutos por estação.
 
-O levantamento em scripts/investigar_ana.py (ver README) mostrou que nem toda
+Um levantamento com requisições reais (08/08/2026) mostrou que nem toda
 estação listada como "Ativo" transmite dado recente: de 437 estações
 cadastradas em SP, 271 (62%) tinham leitura de chuva nas últimas 48h. A
 maioria das estações com dado vivo são hidrelétricas/fluviométricas (nomes
@@ -136,9 +136,8 @@ def fetch_serie_estacao(
     """Busca a série de chuva de uma estação nos últimos `dias_historico` dias.
 
     Faz retry com backoff em erro de rede/HTTP (inclusive 429 Too Many
-    Requests, que o serviço da ANA devolve com facilidade sob concorrência;
-    lógica validada com requisições reais em scripts/investigar_ana.py) para
-    não confundir "rate limit" com "estação sem dado".
+    Requests, que o serviço da ANA devolve com facilidade sob concorrência)
+    para não confundir "rate limit" com "estação sem dado".
 
     Retorna um DataFrame com colunas `data_hora` (UTC) e `chuva_mm`, ordenado
     por data. Vazio se a estação não tiver nenhuma leitura no período ou se

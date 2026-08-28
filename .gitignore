@@ -5,9 +5,12 @@ __pycache__/
 *.egg-info/
 data/*
 !data/.gitkeep
-!data/samples/
 data/cache/
 docs/dashboard/data/
+
+# artefatos de ferramenta de agente, não versionados
 .superpowers/
-.claude/settings.local.json
+docs/superpowers/
 docs/.superpowers/
+.claude/
+.agents/

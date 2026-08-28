@@ -200,8 +200,7 @@ def ingerir_uf(
     do marcador d'água salvo em `manifesto_path` (padrão:
     `caminho_manifesto_cprm(uf, output.parent)`), mescla com o GeoPackage
     existente e atualiza o marcador. Uma edição de atributo que não altera
-    `data_setor` não é capturada por este filtro — ver
-    docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+    `data_setor` não é capturada por este filtro.
 
     Se a busca remota falhar e já existir um GeoPackage em cache local
     (`output`), usa o cache e avisa, em vez de quebrar a ingestão inteira.

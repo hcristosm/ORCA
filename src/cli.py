@@ -191,7 +191,7 @@ def atualizar_nacional_cmd(
     ingeridos antes, pelo comando mensal `ingerir-setores` (essa fonte é
     instável e passou a rodar separada da atualização diária); INMET/ANA
     continuam por UF, via `atualizar`. Esta é a via nacional para chuva
-    Open-Meteo, ver docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+    Open-Meteo.
 
     `--orcamento-alvo` calibra só os pontos de grade dos setores; a série por
     município não entra nessa conta. As UFs são exportadas concorrentemente;

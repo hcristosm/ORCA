@@ -16,8 +16,7 @@ em vez de uma só. Isso não compromete o orçamento (o total de pontos
 distintos por UF nunca passa do que a calibração previu) nem a
 corretude — é só uma pequena perda de eficiência de rede, aceita aqui para
 não precisar reescrever `_calcular_chuva_openmeteo` para trabalhar com séries
-pré-buscadas. Ver
-docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+pré-buscadas.
 """
 
 from __future__ import annotations
@@ -41,8 +40,7 @@ logger = logging.getLogger(__name__)
 # setor de risco) e eventuais retries ficam FORA dessa conta. 6000 é uma
 # reserva conservadora, não um cálculo preciso: deixa ~4000 de folga no teto
 # de 10.000 chamadas/dia da Open-Meteo para essas duas parcelas não
-# contabilizadas. Ver
-# docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+# contabilizadas.
 ORCAMENTO_ALVO_PADRAO = 6000
 
 UF_WORKERS_PADRAO = 4
@@ -70,8 +68,7 @@ def exportar_nacional(
 
     `cache_openmeteo`, se informado, é repassado para `exportar_dashboard` de
     cada UF — mesma instância compartilhada entre todas, para que o cache de
-    uma UF beneficie a leitura/escrita das outras (ver
-    docs/superpowers/specs/2026-08-22-cache-openmeteo-design.md). Grava
+    uma UF beneficie a leitura/escrita das outras. Grava
     `ufs_disponiveis.json` em `saida_dir` com as UFs exportadas com sucesso
     (ordem alfabética, mesmo se vazio), para o front-end popular o seletor.
     Retorna `{uf: meta}` só das UFs exportadas com sucesso (após as 2
@@ -88,7 +85,7 @@ def exportar_nacional(
     garante não estourar os tetos de hora/minuto da Open-Meteo (5.000/hora,
     600/minuto) é `LIMITER_PADRAO` em `src/ingest/openmeteo.py`, compartilhado
     por todo o processo (entre UFs e entre lotes dentro de cada UF), não uma
-    pausa fixa aqui; ver docs/superpowers/specs/2026-08-14-cobertura-nacional-design.md.
+    pausa fixa aqui.
     """
     setores_por_uf = {}
     for uf in ufs:
