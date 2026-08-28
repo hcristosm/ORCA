@@ -14,10 +14,6 @@ import pandas as pd
 from src.config import CAMADA_SETORES
 
 
-def setores_existem(caminho: Path) -> bool:
-    return caminho.exists()
-
-
 def ler_setores(caminho: Path) -> gpd.GeoDataFrame:
     return gpd.read_file(caminho, layer=CAMADA_SETORES)
 

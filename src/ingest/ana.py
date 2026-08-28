@@ -63,6 +63,40 @@ def _parse_float(texto: str | None) -> float | None:
         return None
 
 
+def _buscar_xml(
+    url: str,
+    params: dict,
+    descricao: str,
+    timeout: float,
+    session: requests.Session,
+    max_retries: int,
+    backoff_factor: float,
+) -> ET.Element:
+    """GET numa das rotas XML da ANA, com retry e backoff exponencial.
+
+    O serviço retorna 429 com facilidade sob concorrência (ver docstring do
+    módulo), então erro de rede/HTTP e XML malformado são tratados igual:
+    nova tentativa. Levanta `ANAFetchError` se todas falharem; `descricao`
+    (ex.: "estações da ANA para SP") entra nas mensagens de log e de erro.
+    """
+    for tentativa in range(1, max_retries + 1):
+        try:
+            resp = session.get(url, params=params, timeout=timeout)
+            resp.raise_for_status()
+            return ET.fromstring(resp.content)
+        except (requests.RequestException, ET.ParseError) as exc:
+            if tentativa == max_retries:
+                raise ANAFetchError(
+                    f"Não foi possível consultar {descricao} após {max_retries} tentativas"
+                ) from exc
+            espera = backoff_factor * (2 ** (tentativa - 1))
+            logger.debug(
+                "Falha ao consultar %s (tentativa %d/%d): %s. Aguardando %.1fs.",
+                descricao, tentativa, max_retries, exc, espera,
+            )
+            time.sleep(espera)
+
+
 def fetch_estacoes(
     uf: str,
     timeout: float = 60.0,
@@ -76,29 +110,15 @@ def fetch_estacoes(
     facilidade sob concorrência, ver módulo docstring), levantando
     ANAFetchError se todas as tentativas falharem.
     """
-    sess = session or requests.Session()
-
-    root = None
-    for tentativa in range(1, max_retries + 1):
-        try:
-            resp = sess.get(
-                LISTA_ESTACOES_URL, params={"statusEstacoes": "", "origem": ""}, timeout=timeout
-            )
-            resp.raise_for_status()
-            root = ET.fromstring(resp.content)
-            break
-        except (requests.RequestException, ET.ParseError) as exc:
-            espera = backoff_factor * (2 ** (tentativa - 1))
-            if tentativa < max_retries:
-                logger.debug(
-                    "Falha ao listar estações da ANA para %s (tentativa %d/%d): %s. Aguardando %.1fs.",
-                    uf, tentativa, max_retries, exc, espera,
-                )
-                time.sleep(espera)
-            else:
-                raise ANAFetchError(
-                    f"Não foi possível listar estações da ANA para {uf} após {max_retries} tentativas"
-                ) from exc
+    root = _buscar_xml(
+        LISTA_ESTACOES_URL,
+        {"statusEstacoes": "", "origem": ""},
+        f"estações da ANA para {uf}",
+        timeout,
+        session or requests.Session(),
+        max_retries,
+        backoff_factor,
+    )
 
     sufixo = f"-{uf.upper()}"
     estacoes = []
@@ -143,36 +163,23 @@ def fetch_serie_estacao(
     por data. Vazio se a estação não tiver nenhuma leitura no período ou se
     todas as tentativas falharem.
     """
-    sess = session or requests.Session()
     agora = datetime.now(timezone.utc)
     data_fim = agora.strftime("%d/%m/%Y")
     data_inicio = (agora - timedelta(days=dias_historico)).strftime("%d/%m/%Y")
 
-    root = None
-    for tentativa in range(1, max_retries + 1):
-        try:
-            resp = sess.get(
-                DADOS_URL,
-                params={"codEstacao": codigo, "dataInicio": data_inicio, "dataFim": data_fim},
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            root = ET.fromstring(resp.content)
-            break
-        except (requests.RequestException, ET.ParseError) as exc:
-            espera = backoff_factor * (2 ** (tentativa - 1))
-            if tentativa < max_retries:
-                logger.debug(
-                    "Falha ao consultar estação %s (tentativa %d/%d): %s. Aguardando %.1fs.",
-                    codigo, tentativa, max_retries, exc, espera,
-                )
-                time.sleep(espera)
-            else:
-                logger.warning(
-                    "Falha ao consultar estação %s após %d tentativas: %s",
-                    codigo, max_retries, exc,
-                )
-                return pd.DataFrame(columns=["data_hora", "chuva_mm"])
+    try:
+        root = _buscar_xml(
+            DADOS_URL,
+            {"codEstacao": codigo, "dataInicio": data_inicio, "dataFim": data_fim},
+            f"estação {codigo}",
+            timeout,
+            session or requests.Session(),
+            max_retries,
+            backoff_factor,
+        )
+    except ANAFetchError as exc:
+        logger.warning("Falha ao consultar estação %s após %d tentativas: %s", codigo, max_retries, exc)
+        return pd.DataFrame(columns=["data_hora", "chuva_mm"])
 
     registros = []
     for linha in root.iter("DadosHidrometereologicos"):

@@ -22,12 +22,15 @@ exceeded` de forma consistente, mesmo aguardando um minuto inteiro. O
 limite prático parece ser sobre o *tamanho* do lote, não só sobre a
 frequência de chamadas. Testado e confirmado estável: lotes de até 100
 pontos, inclusive em sequência rápida (1s de intervalo). Por isso este
-cliente divide `pontos` em lotes de `tamanho_lote` (padrão 100) e faz uma
-chamada por lote, com uma pequena pausa entre elas.
+cliente divide `pontos` em lotes de `tamanho_lote` (ver
+`TAMANHO_LOTE_PADRAO`) e faz uma chamada por lote, com uma pequena pausa
+entre elas.
 
-Sem cache/armazenamento local: cada exportação consulta a API ao vivo, o que
-é viável porque o custo por chamada é baixo; não há aqui o problema de
-"baixar o ano inteiro de novo" que motivou a ingestão incremental do INMET.
+O parâmetro opcional `cache` (`src/storage_cache_openmeteo.py`) encolhe o
+`past_days` pedido à API para só as horas que ainda faltam; sem ele, cada
+exportação consulta a janela inteira ao vivo, o que também é viável porque o
+custo por chamada é baixo — não há aqui o problema de "baixar o ano inteiro
+de novo" que motivou a ingestão incremental do INMET.
 """
 
 from __future__ import annotations
@@ -315,8 +318,9 @@ def fetch_precipitacao_batch(
     "é futuro" é responsabilidade de quem consome o DataFrame, não deste
     cliente.
 
-    Internamente, `pontos` é dividido em lotes de `tamanho_lote` (padrão 100,
-    ver docstring do módulo sobre o limite prático da API), buscados em
+    Internamente, `pontos` é dividido em lotes de `tamanho_lote` (padrão
+    `TAMANHO_LOTE_PADRAO`, ver docstring do módulo sobre o limite prático da
+    API), buscados em
     paralelo (`max_workers_lote` threads) e pautados por `LIMITER_PADRAO`.
     `cache`, se informado, reduz o histórico de fato pedido à API (ver
     `_fetch_variavel_batch`); `agora` é parametrizável para testes

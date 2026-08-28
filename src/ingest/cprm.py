@@ -210,7 +210,7 @@ def ingerir_uf(
     para o diretório de trabalho ANTES de ingerir, então `output` sempre
     existe a partir da 2a execução: com o fallback ligado, a SGB fora do ar
     viraria 27 quedas silenciosas e um run verde, com os setores congelados
-    por mais um mês. Ver spec §4.7 (o mensal falha se qualquer UF falhar).
+    por mais um mês (o job mensal falha se qualquer UF falhar).
     O fallback continua ligado por padrão para o uso manual (`atualizar`),
     onde ficar com o dado do mês passado é melhor que ficar sem nada.
     """

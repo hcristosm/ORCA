@@ -225,24 +225,19 @@ def _series_openmeteo_por_municipio(
     agora = agora if agora is not None else pd.Timestamp.now(tz="UTC")
     municipios, pontos = centroides_municipio(setores)
 
-    if municipios_dias_completos is None:
-        grupos = [(municipios, pontos, JANELA_SERIE_DIAS)]
-    else:
-        completos_idx = [i for i, m in enumerate(municipios) if m in municipios_dias_completos]
-        reduzidos_idx = [i for i, m in enumerate(municipios) if m not in municipios_dias_completos]
-        grupos = []
-        if completos_idx:
-            grupos.append((
-                [municipios[i] for i in completos_idx],
-                [pontos[i] for i in completos_idx],
-                JANELA_SERIE_DIAS,
-            ))
-        if reduzidos_idx:
-            grupos.append((
-                [municipios[i] for i in reduzidos_idx],
-                [pontos[i] for i in reduzidos_idx],
-                DIAS_HISTORICO_CRUZAMENTO,
-            ))
+    # `None` = todos os municípios pedem a série completa.
+    completos = set(municipios) if municipios_dias_completos is None else municipios_dias_completos
+    idx_completos = [i for i, m in enumerate(municipios) if m in completos]
+    idx_reduzidos = [i for i, m in enumerate(municipios) if m not in completos]
+
+    grupos = [
+        ([municipios[i] for i in indices], [pontos[i] for i in indices], dias)
+        for indices, dias in (
+            (idx_completos, JANELA_SERIE_DIAS),
+            (idx_reduzidos, DIAS_HISTORICO_CRUZAMENTO),
+        )
+        if indices
+    ]
 
     limite = agora - timedelta(days=JANELA_SERIE_DIAS)
     series = {}
