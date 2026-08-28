@@ -51,7 +51,7 @@
 <header class="faceplate">
   <div class="faceplate-interno">
     <div class="marca">
-      <img id="logoImg" src="../logo/orca-logo-claro.png" alt="Logo do ORCA" height="34">
+      <img id="logoImg" src="logo/orca-logo-claro.png" alt="Logo do ORCA" height="34">
       <span class="marca-texto">
         <b>ORCA</b>
         <span>risco geológico &times; chuva</span>
@@ -342,7 +342,7 @@
   function aplicarTema(tema) {
     document.documentElement.setAttribute("data-tema", tema);
     document.getElementById("logoImg").src =
-      tema === "escuro" ? "../logo/orca-logo-escuro.png" : "../logo/orca-logo-claro.png";
+      tema === "escuro" ? "logo/orca-logo-escuro.png" : "logo/orca-logo-claro.png";
   }
 
   function alternarTema() {
