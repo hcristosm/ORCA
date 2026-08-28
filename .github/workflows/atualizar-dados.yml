@@ -14,10 +14,6 @@ on:
         description: "UFs a atualizar, separadas por vírgula (vazio = todas as 27)"
         required: false
         default: ""
-      ano:
-        description: "Ano dos dados históricos do INMET"
-        required: false
-        default: "2026"
 
 # Impede duas execuções (agendada + manual) rodando ao mesmo tempo: além de
 # disputar cota de rate limit da Open-Meteo (observado em 22/08/2026), duas
@@ -39,6 +35,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+          # Cacheia o diretório do pip entre execuções. geopandas/shapely
+          # trazem binários grandes e reinstalá-los do zero todo dia é o
+          # passo mais lento do job. `cache-dependency-path` explícito
+          # porque a chave sai do pyproject.toml (o projeto não tem
+          # requirements.txt, que é o que o default procura primeiro).
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Instalar dependências
         run: pip install -e .
@@ -155,18 +158,6 @@ jobs:
         run: >
           python scripts/atualizar_dados.py
           --ufs "${{ github.event.inputs.ufs || '' }}"
-          --ano "${{ github.event.inputs.ano || '2026' }}"
-
-      - name: Publicar dados como artefato
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: dados-orca-nacional
-          path: |
-            data/*.gpkg
-            data/*.csv
-            data/ultima_atualizacao.txt
-          retention-days: 14
 
       - name: Preservar UFs não regeneradas (mescla com o gh-pages)
         # Spec §4.5. Com force_orphan, o gh-pages vira EXATAMENTE

@@ -158,15 +158,6 @@ scripts/rodar_dashboard.sh    # atalho pra python -m http.server 8000 --director
 
 Precisa servir por HTTP porque o `fetch()` do navegador não lê `file://`.
 
-### Ciclo completo local, uma UF
-
-```bash
-python scripts/atualizar_dados.py --uf SP --ano 2026
-```
-
-Roda as ingestões e a exportação em sequência, tolera a falha de uma fonte sem
-derrubar as outras.
-
 ## Como roda em produção
 
 Setor de risco muda em escala de meses. Chuva muda em escala de horas. Por isso
