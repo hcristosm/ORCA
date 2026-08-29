@@ -941,7 +941,7 @@
         // Trama = grau de risco. Cor cheia = passou do limiar. Uma coisa de cada vez.
         return {
           fillColor: emAtencaoAgora ? corAtencao() : hachuraPorGrau(feature.properties.grau_risco),
-          fillOpacity: emAtencaoAgora ? 0.8 : 0.9,
+          fillOpacity: emAtencaoAgora ? 0.8 : 0.55,
           color: emAtencaoAgora || previstoAgora ? corAtencao() : corPadrao(),
           weight: emAtencaoAgora ? 2.5 : (previstoAgora ? 2 : 0.8),
           dashArray: previstoAgora && !emAtencaoAgora ? "5 4" : null,
@@ -1021,7 +1021,7 @@
     camadaChoropleth = L.geoJSON(colecao, {
       style: feature => {
         const r = riscoPorCodarea.get(String(feature.properties.codarea));
-        return { fillColor: hachuraPorGrau(r.grauMax), fillOpacity: 0.9, color: corPadrao(), weight: 0.8 };
+        return { fillColor: hachuraPorGrau(r.grauMax), fillOpacity: 0.55, color: corPadrao(), weight: 0.8 };
       },
       onEachFeature: (feature, layer) => {
         const r = riscoPorCodarea.get(String(feature.properties.codarea));
