@@ -17,6 +17,8 @@
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Licença](https://img.shields.io/badge/licença-BSD%203--Clause-blue)](LICENSE)
 
+*[Read in English](README.en.md)*
+
 </div>
 
 ---
