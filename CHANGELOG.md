@@ -7,8 +7,15 @@ e o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-29
+
+Primeira versão estável: pipeline de ingestão nacional (27 UFs), dashboard
+estático publicado via GitHub Pages e gates de qualidade (testes, lint,
+tipos, segurança) reforçados em CI.
+
 ### Added
 - `ruff`, `mypy` e `bandit` como gates de qualidade, rodando em CI a cada push/PR.
+- Empacotamento formal (`build-system`/wheel e sdist via `python -m build`), publicado como artefato da release no GitHub.
 
 ### Changed
 - Parsing de XML da ANA migrado para `defusedxml`, eliminando a superfície de ataque de expansão de entidade.
@@ -69,7 +76,8 @@ e o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 ### Added
 - Primeira versão do ORCA: dashboard local de risco geológico x chuva, cruzando setores de risco da CPRM/SGB com dados de chuva do INMET.
 
-[Unreleased]: https://github.com/hcristosm/ORCA/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/hcristosm/ORCA/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/hcristosm/ORCA/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/hcristosm/ORCA/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hcristosm/ORCA/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hcristosm/ORCA/compare/v0.1.0...v0.2.0
