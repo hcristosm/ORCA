@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-import mesclar_publicado as mp  # noqa: E402
+import mesclar_publicado as mp
 
 
 def _escrever_uf(diretorio: Path, uf: str, marca: str, com_previsao: bool = True) -> None:

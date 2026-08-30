@@ -8,6 +8,7 @@ dependencies = [
     "shapely>=2.1.2",
     "requests>=2.34.2",
     "typer>=0.27.1",
+    "defusedxml>=0.7.1",
 ]
 
 [project.scripts]
@@ -17,7 +18,25 @@ orca = "src.cli:app"
 dev = [
     "pytest>=9.1.1",
     "responses>=0.26.2",
+    "ruff>=0.14.0",
+    "mypy>=1.19.0",
+    "bandit>=1.9.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+ignore = [
+    "B008", # typer.Option(...) in argument defaults is the required typer pattern
+]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]

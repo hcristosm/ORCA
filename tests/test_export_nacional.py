@@ -8,11 +8,11 @@ import pytest
 import responses
 from shapely.geometry import Polygon
 
-import src.export.nacional as nacional
-import src.ingest.openmeteo as openmeteo
 from src.config import caminho_setores
+from src.export import nacional
 from src.export.dashboard_data import ExportacaoDashboardError
 from src.export.nacional import exportar_nacional
+from src.ingest import openmeteo
 from src.ingest.openmeteo import FORECAST_URL
 from src.storage import salvar_setores
 from src.storage_cache_openmeteo import CacheOpenMeteo

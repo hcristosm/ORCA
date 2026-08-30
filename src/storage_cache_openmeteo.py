@@ -24,7 +24,7 @@ import logging
 import sqlite3
 import threading
 from contextlib import suppress
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -49,19 +49,19 @@ def _lat_lon_inteiros(ponto: Ponto) -> tuple[int, int]:
 
 
 def _hora_para_epoch(hora: str) -> int:
-    dt = datetime.strptime(hora, "%Y-%m-%dT%H:%M").replace(tzinfo=timezone.utc)
+    dt = datetime.strptime(hora, "%Y-%m-%dT%H:%M").replace(tzinfo=UTC)
     return int(dt.timestamp()) // 3600
 
 
 def _epoch_para_hora(epoch: int) -> str:
-    dt = datetime.fromtimestamp(epoch * 3600, tz=timezone.utc)
+    dt = datetime.fromtimestamp(epoch * 3600, tz=UTC)
     return dt.strftime("%Y-%m-%dT%H:%M")
 
 
 def _buscado_em_para_epoch_dia(buscado_em: str) -> int:
     dt = datetime.fromisoformat(buscado_em)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return int(dt.timestamp()) // 86400
 
 
@@ -123,7 +123,7 @@ class CacheOpenMeteo:
         morto que faria o arquivo crescer sem limite (o arquivo é publicado
         no gh-pages, e o GitHub rejeita push acima de 100MB)."""
         corte_epoch = _hora_para_epoch(
-            (datetime.now(timezone.utc) - timedelta(days=self._retencao_dias)).strftime("%Y-%m-%dT%H:%M")
+            (datetime.now(UTC) - timedelta(days=self._retencao_dias)).strftime("%Y-%m-%dT%H:%M")
         )
         try:
             cursor = conn.execute("DELETE FROM cache_horario WHERE data_hora < ?", (corte_epoch,))
@@ -161,7 +161,7 @@ class CacheOpenMeteo:
                 try:
                     cursor = self._conn.execute(
                         f"SELECT data_hora FROM cache_horario WHERE lat = ? AND lon = ? "
-                        f"AND variavel_id = ? AND data_hora IN ({placeholders})",
+                        f"AND variavel_id = ? AND data_hora IN ({placeholders})",  # nosec B608 - placeholders é só "?,?,...", valores vão parametrizados abaixo
                         (lat, lon, variavel_id, *horas_epoch),
                     )
                     presentes = {row[0] for row in cursor.fetchall()}
@@ -197,7 +197,7 @@ class CacheOpenMeteo:
                 try:
                     cursor = self._conn.execute(
                         f"SELECT data_hora, valor FROM cache_horario WHERE lat = ? AND lon = ? "
-                        f"AND variavel_id = ? AND data_hora IN ({placeholders})",
+                        f"AND variavel_id = ? AND data_hora IN ({placeholders})",  # nosec B608 - placeholders é só "?,?,...", valores vão parametrizados abaixo
                         (lat, lon, variavel_id, *horas_epoch),
                     )
                     linhas = {_epoch_para_hora(row[0]): row[1] for row in cursor.fetchall()}

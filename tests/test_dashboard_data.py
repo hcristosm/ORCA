@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from shapely.geometry import Polygon
 
-from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores, LIMIAR_ATENCAO_MM_PADRAO
+from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores
 from src.export.dashboard_data import (
     ExportacaoDashboardError,
     _calcular_chuva_openmeteo,
@@ -133,6 +133,7 @@ def test_exportar_dashboard_levanta_erro_se_chuva_inmet_nao_existe(tmp_path: Pat
 
 def test_calcular_chuva_openmeteo_consulta_centroide_e_acumula(tmp_path: Path, setores):
     import responses
+
     from src.ingest.openmeteo import FORECAST_URL
 
     agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
@@ -157,6 +158,7 @@ def test_calcular_chuva_openmeteo_consulta_centroide_e_acumula(tmp_path: Path, s
 
 def test_exportar_dashboard_fonte_openmeteo_fim_a_fim(tmp_path: Path, setores):
     import responses
+
     from src.ingest.openmeteo import FORECAST_URL
 
     salvar_setores(setores, caminho_setores("SP", tmp_path))
@@ -193,8 +195,9 @@ def test_exportar_dashboard_fonte_openmeteo_fim_a_fim(tmp_path: Path, setores):
 
 def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_path: Path, setores, caplog):
     import responses
+
+    from src.export.dashboard_data import DIAS_HISTORICO_CRUZAMENTO, JANELA_SERIE_DIAS
     from src.ingest.openmeteo import FORECAST_URL
-    from src.export.dashboard_data import JANELA_SERIE_DIAS, DIAS_HISTORICO_CRUZAMENTO
 
     salvar_setores(setores, caminho_setores("SP", tmp_path))
 
@@ -226,12 +229,14 @@ def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_p
         return (200, {}, _json.dumps(resposta))
 
     saida = tmp_path / "export"
-    with caplog.at_level(logging.INFO, logger="src.export.dashboard_data"):
-        with responses.RequestsMock() as rsps:
-            rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # setores
-            rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (completo)
-            rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (reduzido)
-            meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="openmeteo")
+    with (
+        caplog.at_level(logging.INFO, logger="src.export.dashboard_data"),
+        responses.RequestsMock() as rsps,
+    ):
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # setores
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (completo)
+        rsps.add_callback(responses.POST, FORECAST_URL, callback=_callback)  # município (reduzido)
+        meta = exportar_dashboard("SP", 2026, tmp_path, saida, fonte="openmeteo")
 
     assert len(corpos_capturados) == 3
     # A 1a chamada é sempre a de setores (dias_historico=DIAS_HISTORICO_CRUZAMENTO).
@@ -250,6 +255,7 @@ def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_p
 
 def test_exportar_dashboard_aceita_cache_openmeteo(tmp_path: Path, setores):
     import responses
+
     from src.ingest.openmeteo import FORECAST_URL
     from src.storage_cache_openmeteo import CacheOpenMeteo
 
@@ -285,6 +291,7 @@ def test_exportar_dashboard_fonte_invalida_levanta_erro(tmp_path: Path, setores)
 
 def test_calcular_chuva_openmeteo_retorna_previsao_por_setor(tmp_path: Path, setores):
     import responses
+
     from src.ingest.openmeteo import FORECAST_URL
 
     agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
@@ -306,6 +313,7 @@ def test_calcular_chuva_openmeteo_retorna_previsao_por_setor(tmp_path: Path, set
 
 def test_exportar_dashboard_fonte_openmeteo_gera_previsao(tmp_path: Path, setores):
     import responses
+
     from src.ingest.openmeteo import FORECAST_URL
 
     salvar_setores(setores, caminho_setores("SP", tmp_path))
@@ -370,6 +378,7 @@ def test_exportar_dashboard_preserva_bloco_vento_existente_no_meta(tmp_path: Pat
 
 def test_calcular_chuva_openmeteo_deduplica_pontos_repetidos(tmp_path: Path, setores):
     import responses
+
     from src.ingest.openmeteo import FORECAST_URL
 
     agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
@@ -405,6 +414,7 @@ def test_calcular_chuva_openmeteo_grade_reporta_distancia_real_ate_a_celula(
     tmp_path: Path, setores
 ):
     import responses
+
     from src.ingest.openmeteo import FORECAST_URL
 
     agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
@@ -440,6 +450,7 @@ def test_calcular_chuva_openmeteo_grade_reporta_distancia_real_ate_a_celula(
 
 def test_calcular_chuva_openmeteo_sem_pontos_mantem_centro_do_setor(tmp_path: Path, setores):
     import responses
+
     from src.ingest.openmeteo import FORECAST_URL
 
     agora = pd.Timestamp("2026-08-10 12:00", tz="UTC")
@@ -525,8 +536,13 @@ def test_municipios_com_chuva_relevante_respeita_limiar_customizado(setores):
 
 def test_series_openmeteo_por_municipio_divide_em_dois_grupos(tmp_path: Path, setores):
     import responses
+
+    from src.export.dashboard_data import (
+        DIAS_HISTORICO_CRUZAMENTO,
+        JANELA_SERIE_DIAS,
+        _series_openmeteo_por_municipio,
+    )
     from src.ingest.openmeteo import FORECAST_URL
-    from src.export.dashboard_data import _series_openmeteo_por_municipio, JANELA_SERIE_DIAS, DIAS_HISTORICO_CRUZAMENTO
 
     agora = pd.Timestamp.now(tz="UTC").floor("h")
     horas = pd.date_range(agora - pd.Timedelta(hours=23), periods=24, freq="h", tz="UTC")
@@ -557,8 +573,9 @@ def test_series_openmeteo_por_municipio_divide_em_dois_grupos(tmp_path: Path, se
 
 def test_series_openmeteo_por_municipio_grupo_vazio_nao_gera_chamada(tmp_path: Path, setores):
     import responses
-    from src.ingest.openmeteo import FORECAST_URL
+
     from src.export.dashboard_data import _series_openmeteo_por_municipio
+    from src.ingest.openmeteo import FORECAST_URL
 
     agora = pd.Timestamp.now(tz="UTC").floor("h")
     horas = pd.date_range(agora - pd.Timedelta(hours=23), periods=24, freq="h", tz="UTC")
@@ -582,8 +599,9 @@ def test_series_openmeteo_por_municipio_grupo_vazio_nao_gera_chamada(tmp_path: P
 
 def test_series_openmeteo_por_municipio_sem_filtro_mantem_comportamento_antigo(tmp_path: Path, setores):
     import responses
+
+    from src.export.dashboard_data import JANELA_SERIE_DIAS, _series_openmeteo_por_municipio
     from src.ingest.openmeteo import FORECAST_URL
-    from src.export.dashboard_data import _series_openmeteo_por_municipio, JANELA_SERIE_DIAS
 
     agora = pd.Timestamp.now(tz="UTC").floor("h")
     horas = pd.date_range(agora - pd.Timedelta(hours=23), periods=24, freq="h", tz="UTC")

@@ -38,6 +38,7 @@ from __future__ import annotations
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 import pandas as pd
 import requests
@@ -129,7 +130,7 @@ def _post_lote(
     limiter: RateLimiter = LIMITER_PADRAO,
 ) -> list[dict]:
     """Um único POST para um lote de pontos. Retorna a lista de objetos da resposta (um por ponto)."""
-    corpo = {
+    corpo: dict[str, Any] = {
         "latitude": [lat for lat, _ in pontos],
         "longitude": [lon for _, lon in pontos],
         "hourly": variaveis_hourly,

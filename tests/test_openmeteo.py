@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 import responses
 
-import src.ingest.openmeteo as openmeteo
+from src.ingest import openmeteo
 from src.ingest.openmeteo import FORECAST_URL, OpenMeteoFetchError, fetch_precipitacao_batch
 from src.storage_cache_openmeteo import CacheOpenMeteo
 
@@ -194,7 +194,11 @@ def test_dias_historico_efetivo_cache_vazio_retorna_original(tmp_path):
 
 
 def test_dias_historico_efetivo_tudo_cacheado_retorna_minimo(tmp_path):
-    from src.ingest.openmeteo import DIAS_HISTORICO_MINIMO, _dias_historico_efetivo, _horas_no_intervalo
+    from src.ingest.openmeteo import (
+        DIAS_HISTORICO_MINIMO,
+        _dias_historico_efetivo,
+        _horas_no_intervalo,
+    )
     from src.storage_cache_openmeteo import CacheOpenMeteo
 
     cache = CacheOpenMeteo(tmp_path / "cache.sqlite")

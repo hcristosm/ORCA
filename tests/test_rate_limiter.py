@@ -1,5 +1,6 @@
 import threading
 import time
+from itertools import pairwise
 
 from src.ingest.rate_limiter import RateLimiter
 
@@ -115,7 +116,7 @@ def test_acquire_intervalo_minimo_evita_rajadas_sob_concorrencia_real():
         t.join(timeout=5)
 
     instantes.sort()
-    intervalos = [b - a for a, b in zip(instantes, instantes[1:])]
+    intervalos = [b - a for a, b in pairwise(instantes)]
     assert all(intervalo >= 0.045 for intervalo in intervalos)
 
 

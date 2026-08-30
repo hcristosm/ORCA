@@ -19,7 +19,8 @@ import geopandas as gpd
 import pandas as pd
 import requests
 
-from src.config import caminho_manifesto_cprm, validar_uf as _validar_uf
+from src.config import caminho_manifesto_cprm
+from src.config import validar_uf as _validar_uf
 from src.storage import ler_setores, salvar_setores
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ def _query_pagina(
     max_retries: int,
     backoff_factor: float,
 ) -> dict:
-    params = {
+    params: dict[str, str | int] = {
         "where": where,
         "outFields": "*",
         "outSR": "4326",

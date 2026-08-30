@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
 
-from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores, LIMIAR_ATENCAO_MM_PADRAO
+from src.config import LIMIAR_ATENCAO_MM_PADRAO, caminho_chuva, caminho_chuva_ana, caminho_setores
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_precipitacao_batch
 from src.processing.cruzamento import (
     CRS_METRICO,
@@ -146,7 +146,7 @@ def _calcular_chuva_openmeteo(
 
     modo_grade = pontos is not None
     centroides = centroides_4326(setores)
-    pontos = pontos if modo_grade else [(pt.y, pt.x) for pt in centroides]
+    pontos = pontos if pontos is not None else [(pt.y, pt.x) for pt in centroides]
 
     if len(pontos) != len(setores):
         raise ValueError(
@@ -287,7 +287,7 @@ def _exportar_openmeteo(
     meta = {
         "fonte": "openmeteo",
         "referencia": referencia.isoformat(),
-        "total_setores": int(len(cruzado)),
+        "total_setores": len(cruzado),
         "total_municipios": len(series),
         "horizonte_previsao_horas": HORIZONTE_PREVISAO_HORAS,
     }
@@ -325,7 +325,7 @@ def _exportar_inmet(
     meta = {
         "fonte": "inmet",
         "referencia": referencia.isoformat(),
-        "total_setores": int(len(cruzado)),
+        "total_setores": len(cruzado),
         "total_estacoes_inmet": int(chuva_inmet["codigo_estacao"].nunique()),
         "total_estacoes_ana": int(chuva_ana["codigo_estacao"].nunique()) if chuva_ana is not None else 0,
     }
@@ -375,11 +375,12 @@ def exportar_dashboard(
     setores = ler_setores(caminho_setores_path)
     saida_dir.mkdir(parents=True, exist_ok=True)
 
+    previsao: dict | None
     if fonte == "openmeteo":
         cruzado, series, previsao, meta = _exportar_openmeteo(setores, pontos=pontos_grade, cache=cache_openmeteo)
     else:
         cruzado, series, previsao, meta = _exportar_inmet(setores, uf_norm, ano, diretorio_dados)
-    meta["gerado_em"] = datetime.now(timezone.utc).isoformat()
+    meta["gerado_em"] = datetime.now(UTC).isoformat()
 
     _exportar_setores(cruzado, saida_dir / f"setores_{uf_norm.lower()}.geojson")
     (saida_dir / f"series_{uf_norm.lower()}.json").write_text(

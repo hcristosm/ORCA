@@ -190,8 +190,7 @@ def baixar_zip_ano_condicional(
 
     destino.parent.mkdir(parents=True, exist_ok=True)
     with open(destino, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=1024 * 1024):
-            f.write(chunk)
+        f.writelines(resp.iter_content(chunk_size=1024 * 1024))
     return destino, resp.headers.get("ETag")
 
 

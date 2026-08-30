@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from src.storage_cache_openmeteo import CacheOpenMeteo
@@ -104,12 +104,12 @@ def test_retencao_remove_linhas_mais_velhas_que_retencao_dias(tmp_path: Path):
 
     # 1a instância grava uma linha "velha" (fora da retenção) e uma "nova".
     cache1 = CacheOpenMeteo(caminho, retencao_dias=35)
-    agora_na_hora = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    agora_na_hora = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     velha = (agora_na_hora - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M")
     nova = (agora_na_hora - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
     cache1.gravar(
         [(ponto, velha, 1.0), (ponto, nova, 2.0)], "chuva_mm",
-        datetime.now(timezone.utc).isoformat(),
+        datetime.now(UTC).isoformat(),
     )
 
     # 2a instância (nova conexão, dispara _podar de novo no open) não deve

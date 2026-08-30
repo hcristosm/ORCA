@@ -21,14 +21,15 @@ from __future__ import annotations
 
 import logging
 import time
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 - só para tipos/exceções; o parsing real usa defusedxml (abaixo)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
 import requests
+from defusedxml.ElementTree import fromstring as _xml_fromstring
 
 from src.config import caminho_chuva_ana
 from src.storage import ler_chuva, salvar_chuva
@@ -83,7 +84,7 @@ def _buscar_xml(
         try:
             resp = session.get(url, params=params, timeout=timeout)
             resp.raise_for_status()
-            return ET.fromstring(resp.content)
+            return _xml_fromstring(resp.content)
         except (requests.RequestException, ET.ParseError) as exc:
             if tentativa == max_retries:
                 raise ANAFetchError(
@@ -95,6 +96,7 @@ def _buscar_xml(
                 descricao, tentativa, max_retries, exc, espera,
             )
             time.sleep(espera)
+    raise ANAFetchError(f"Não foi possível consultar {descricao}: max_retries={max_retries} inválido")
 
 
 def fetch_estacoes(
@@ -163,7 +165,7 @@ def fetch_serie_estacao(
     por data. Vazio se a estação não tiver nenhuma leitura no período ou se
     todas as tentativas falharem.
     """
-    agora = datetime.now(timezone.utc)
+    agora = datetime.now(UTC)
     data_fim = agora.strftime("%d/%m/%Y")
     data_inicio = (agora - timedelta(days=dias_historico)).strftime("%d/%m/%Y")
 
@@ -203,7 +205,7 @@ def fetch_serie_estacao(
 def _tem_dado_recente(serie: pd.DataFrame, janela_horas: int) -> bool:
     if serie.empty:
         return False
-    limite = datetime.now(timezone.utc) - timedelta(hours=janela_horas)
+    limite = datetime.now(UTC) - timedelta(hours=janela_horas)
     return bool((serie["data_hora"] >= limite).any())
 
 
@@ -250,7 +252,7 @@ def ingerir_uf(
     adapter = requests.adapters.HTTPAdapter(pool_connections=max_workers, pool_maxsize=max_workers)
     session.mount("https://", adapter)
 
-    partes = []
+    partes: list[pd.DataFrame] = []
     falhas_series = 0
     inicio = time.monotonic()
     with ThreadPoolExecutor(max_workers=max_workers) as pool:

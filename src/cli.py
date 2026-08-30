@@ -16,7 +16,7 @@ Comandos por UF, de uso manual/pontual:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -24,9 +24,12 @@ import typer
 from src.config import DASHBOARD_DATA_DIR, DATA_DIR, UFS_VALIDAS, caminho_setores
 from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
 from src.export.nacional import ORCAMENTO_ALVO_PADRAO, exportar_nacional
-from src.ingest.cprm import CPRMFetchError, ingerir_uf as ingerir_cprm
-from src.ingest.inmet import INMETFetchError, ingerir_uf as ingerir_inmet
-from src.ingest.ana import ANAFetchError, ingerir_uf as ingerir_ana
+from src.ingest.ana import ANAFetchError
+from src.ingest.ana import ingerir_uf as ingerir_ana
+from src.ingest.cprm import CPRMFetchError
+from src.ingest.cprm import ingerir_uf as ingerir_cprm
+from src.ingest.inmet import INMETFetchError
+from src.ingest.inmet import ingerir_uf as ingerir_inmet
 from src.storage_cache_openmeteo import CacheOpenMeteo
 
 app = typer.Typer(add_completion=False)
@@ -76,7 +79,7 @@ def ingest_ana(
 def exportar_dashboard_cmd(
     uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
     ano: int = typer.Option(
-        datetime.now(timezone.utc).year, "--ano", help="Ano dos dados do INMET a exportar (só usado com --fonte inmet)"
+        datetime.now(UTC).year, "--ano", help="Ano dos dados do INMET a exportar (só usado com --fonte inmet)"
     ),
     fonte: str = typer.Option(
         "openmeteo", "--fonte",
@@ -112,7 +115,7 @@ def atualizar(
     uf_norm = uf.strip().upper()
     falhas = []
 
-    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Atualizando setores de risco ({uf_norm})...")
+    typer.echo(f"[{datetime.now(UTC).isoformat()}] Atualizando setores de risco ({uf_norm})...")
     try:
         setores = ingerir_cprm(uf_norm, caminho_setores(uf_norm, DATA_DIR))
         typer.echo(f"  {len(setores)} setores de risco salvos.")
@@ -120,7 +123,7 @@ def atualizar(
         typer.echo(f"  FALHA na CPRM/SGB: {exc}", err=True)
         falhas.append("cprm")
 
-    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Atualizando chuva do INMET ({uf_norm}/{ano})...")
+    typer.echo(f"[{datetime.now(UTC).isoformat()}] Atualizando chuva do INMET ({uf_norm}/{ano})...")
     try:
         chuva = ingerir_inmet(uf_norm, ano, DATA_DIR)
         typer.echo(f"  {len(chuva)} leituras horárias salvas.")
@@ -128,7 +131,7 @@ def atualizar(
         typer.echo(f"  FALHA no INMET: {exc}", err=True)
         falhas.append("inmet")
 
-    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Atualizando chuva da ANA ({uf_norm})...")
+    typer.echo(f"[{datetime.now(UTC).isoformat()}] Atualizando chuva da ANA ({uf_norm})...")
     try:
         chuva_ana = ingerir_ana(uf_norm, DATA_DIR)
         typer.echo(f"  {len(chuva_ana)} leituras da ANA salvas.")
@@ -136,7 +139,7 @@ def atualizar(
         typer.echo(f"  FALHA na ANA: {exc}", err=True)
         falhas.append("ana")
 
-    typer.echo(f"[{datetime.now(timezone.utc).isoformat()}] Exportando dados do dashboard ({uf_norm}, fonte={fonte})...")
+    typer.echo(f"[{datetime.now(UTC).isoformat()}] Exportando dados do dashboard ({uf_norm}, fonte={fonte})...")
     cache = CacheOpenMeteo()
     try:
         meta = exportar_dashboard(uf_norm, ano, DATA_DIR, DASHBOARD_DATA_DIR, fonte=fonte, cache_openmeteo=cache)
@@ -149,7 +152,7 @@ def atualizar(
 
     marcador = DATA_DIR / "ultima_atualizacao.txt"
     marcador.write_text(
-        f"uf={uf_norm}\nano={ano}\natualizado_em={datetime.now(timezone.utc).isoformat()}\n"
+        f"uf={uf_norm}\nano={ano}\natualizado_em={datetime.now(UTC).isoformat()}\n"
         f"falhas={','.join(falhas) if falhas else 'nenhuma'}\n"
     )
 
@@ -172,7 +175,7 @@ def atualizar_nacional_cmd(
         help="Lista de UFs separada por vírgula, ex.: SP,RJ,MG. Padrão: todas as 27.",
     ),
     ano: int = typer.Option(
-        datetime.now(timezone.utc).year, "--ano", help="Ano dos dados do INMET (não usado pela fonte openmeteo)"
+        datetime.now(UTC).year, "--ano", help="Ano dos dados do INMET (não usado pela fonte openmeteo)"
     ),
     orcamento_alvo: int = typer.Option(
         ORCAMENTO_ALVO_PADRAO, "--orcamento-alvo",

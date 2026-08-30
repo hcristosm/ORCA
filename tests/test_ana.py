@@ -15,7 +15,7 @@ from src.ingest.ana import (
     ingerir_uf,
 )
 
-XML_ESTACOES_SP_E_RJ = """<?xml version="1.0" encoding="utf-8"?>
+XML_ESTACOES_SP_E_RJ = b"""<?xml version="1.0" encoding="utf-8"?>
 <DataTable>
   <Table>
     <CodEstacao>58040000</CodEstacao>
@@ -34,7 +34,7 @@ XML_ESTACOES_SP_E_RJ = """<?xml version="1.0" encoding="utf-8"?>
     <StatusEstacao>Ativo</StatusEstacao>
   </Table>
 </DataTable>
-""".encode("utf-8")
+"""
 
 
 def _xml_dados(leituras: list[tuple[str, str]]) -> bytes:
@@ -44,7 +44,7 @@ def _xml_dados(leituras: list[tuple[str, str]]) -> bytes:
         f"<Chuva>{chuva}</Chuva></DadosHidrometereologicos>"
         for dh, chuva in leituras
     )
-    return f'<?xml version="1.0" encoding="utf-8"?><DataTable>{linhas}</DataTable>'.encode("utf-8")
+    return f'<?xml version="1.0" encoding="utf-8"?><DataTable>{linhas}</DataTable>'.encode()
 
 
 @responses.activate
@@ -128,7 +128,7 @@ def test_tem_dado_recente_falso_para_leitura_fora_da_janela_ou_serie_vazia():
 
 @responses.activate
 def test_ingerir_uf_mantem_so_estacoes_com_dado_vivo_e_usa_schema_do_inmet(tmp_path: Path):
-    xml_estacoes = """<?xml version="1.0" encoding="utf-8"?>
+    xml_estacoes = b"""<?xml version="1.0" encoding="utf-8"?>
 <DataTable>
   <Table>
     <CodEstacao>VIVA01</CodEstacao>
@@ -147,7 +147,7 @@ def test_ingerir_uf_mantem_so_estacoes_com_dado_vivo_e_usa_schema_do_inmet(tmp_p
     <StatusEstacao>Ativo</StatusEstacao>
   </Table>
 </DataTable>
-""".encode("utf-8")
+"""
     responses.add(responses.GET, LISTA_ESTACOES_URL, body=xml_estacoes, status=200)
 
     agora = pd.Timestamp.now(tz="UTC")
@@ -178,7 +178,7 @@ def test_ingerir_uf_mantem_so_estacoes_com_dado_vivo_e_usa_schema_do_inmet(tmp_p
 
 @responses.activate
 def test_ingerir_uf_levanta_erro_se_nenhuma_estacao_tem_dado_vivo(tmp_path: Path):
-    xml_estacoes = """<?xml version="1.0" encoding="utf-8"?>
+    xml_estacoes = b"""<?xml version="1.0" encoding="utf-8"?>
 <DataTable>
   <Table>
     <CodEstacao>MORTA01</CodEstacao>
@@ -189,7 +189,7 @@ def test_ingerir_uf_levanta_erro_se_nenhuma_estacao_tem_dado_vivo(tmp_path: Path
     <StatusEstacao>Ativo</StatusEstacao>
   </Table>
 </DataTable>
-""".encode("utf-8")
+"""
     responses.add(responses.GET, LISTA_ESTACOES_URL, body=xml_estacoes, status=200)
     responses.add(responses.GET, DADOS_URL, body=_xml_dados([]), status=200)
 
@@ -199,7 +199,7 @@ def test_ingerir_uf_levanta_erro_se_nenhuma_estacao_tem_dado_vivo(tmp_path: Path
 
 @responses.activate
 def test_ingerir_uf_muitas_falhas_de_serie_levanta_erro_distinto_de_sem_dado_vivo(tmp_path: Path):
-    xml_estacoes = """<?xml version="1.0" encoding="utf-8"?>
+    xml_estacoes = b"""<?xml version="1.0" encoding="utf-8"?>
 <DataTable>
   <Table>
     <CodEstacao>FALHA01</CodEstacao>
@@ -218,7 +218,7 @@ def test_ingerir_uf_muitas_falhas_de_serie_levanta_erro_distinto_de_sem_dado_viv
     <StatusEstacao>Ativo</StatusEstacao>
   </Table>
 </DataTable>
-""".encode("utf-8")
+"""
     responses.add(responses.GET, LISTA_ESTACOES_URL, body=xml_estacoes, status=200)
     responses.add(responses.GET, DADOS_URL, status=500)
 
