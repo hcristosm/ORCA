@@ -11,7 +11,7 @@
 
 **Setores de risco geológico da CPRM/SGB cruzados com chuva recente, num dashboard estático.**
 
-[![Release](https://img.shields.io/github/v/release/hcristosm/ORCA)](https://github.com/hcristosm/ORCA/releases/latest)
+[![Release](https://img.shields.io/github/v/release/hcristosm/ORCA)](CHANGELOG.md)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](#instalação)
 [![Dashboard ao vivo](https://img.shields.io/badge/dashboard-ao%20vivo%20no%20GitHub%20Pages-c0472f)](https://hcristosm.github.io/ORCA/)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
