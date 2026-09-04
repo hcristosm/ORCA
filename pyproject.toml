@@ -27,7 +27,7 @@ dev = [
     "responses>=0.26.2",
     "ruff>=0.14.0",
     "mypy>=1.19.0",
-    "bandit>=1.9.0",
+    "bandit>=1.9.4",
 ]
 
 [tool.pytest.ini_options]
