@@ -11,7 +11,7 @@ dependencies = [
     "geopandas>=1.1.4",
     "shapely>=2.1.2",
     "requests>=2.34.2",
-    "typer>=0.27.1",
+    "typer>=0.27.2",
     "defusedxml>=0.7.1",
 ]
 
