@@ -757,9 +757,11 @@ td.mm { color: var(--sinal); font-weight: 500; }
   margin-bottom: var(--s3);
 }
 .card-area-cabecalho b { font-family: var(--font-cond); font-size: var(--step-1); font-weight: 600; }
+.card-area-acoes { display: flex; align-items: center; gap: var(--s1); flex: none; }
 
 .botao-remover,
-.botao-retentar {
+.botao-retentar,
+.botao-exportar {
   display: inline-flex;
   align-items: center;
   gap: var(--s1);
@@ -771,7 +773,21 @@ td.mm { color: var(--sinal); font-weight: 500; }
   font-size: var(--step-0);
   padding: var(--s1);
 }
-.botao-remover:hover, .botao-retentar:hover { color: var(--sinal); }
+.botao-remover:hover, .botao-retentar:hover, .botao-exportar:hover { color: var(--sinal); }
+.botao-exportar:disabled { opacity: 0.4; cursor: default; }
+.botao-exportar:disabled:hover { color: var(--tinta-fraca); }
+
+.bloco-cabecalho-acoes { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+
+.botao-exportar-linha {
+  display: inline-flex;
+  background: none;
+  border: 0;
+  color: var(--tinta-fraca);
+  cursor: pointer;
+  padding: var(--s1);
+}
+.botao-exportar-linha:hover { color: var(--sinal); }
 
 .card-area-estado { font-size: var(--step-0); color: var(--tinta-media); margin: 0; }
 .card-area-estado.erro { color: var(--sinal); }

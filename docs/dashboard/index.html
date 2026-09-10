@@ -127,12 +127,18 @@
       <section class="bloco">
         <div class="bloco-cabecalho">
           <h2 id="tituloTabela">Setores em atenção</h2>
-          <span class="contagem" id="contagemAtencao"></span>
+          <div class="bloco-cabecalho-acoes">
+            <span class="contagem" id="contagemAtencao"></span>
+            <button class="botao-exportar" type="button" id="botaoExportarTabelaCSV" title="Exportar tabela como CSV">
+              <svg class="icone"><use href="icons/sprite.svg#icon-download"></use></svg>CSV</button>
+            <button class="botao-exportar" type="button" id="botaoExportarTabelaPDF" title="Exportar tabela como PDF">
+              <svg class="icone"><use href="icons/sprite.svg#icon-printer"></use></svg>PDF</button>
+          </div>
         </div>
         <div class="tabela-scroll">
           <table>
             <thead>
-              <tr><th>Município</th><th>Grau</th><th>Chuva</th></tr>
+              <tr><th>Município</th><th>Grau</th><th>Chuva</th><th></th></tr>
             </thead>
             <tbody id="tabelaCorpo"></tbody>
           </table>
@@ -223,6 +229,7 @@
         integrity="sha384-All+uTLkqRBeyGd6OkVGJGbq2ChIKDWUrewcZ+uQDZzF11/b9sgw5p714836LTKO" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"
         integrity="sha384-4a+9x4ql6wch9epMfqnC3bSjASMJDDqpSuVblbNd6thkfnwdBucHgePPyl0exaFY" crossorigin="anonymous"></script>
+<script src="relatorio.js"></script>
 <script src="areas-customizadas.js"></script>
 
 <script>
@@ -1060,27 +1067,49 @@
 
   /* --------------------------------------------------------------- tabelas */
 
+  // Setores da última renderização da tabela "em atenção", na ordem exibida —
+  // os botões de exportar (lote e por linha) leem daqui em vez de recalcular.
+  let tabelaSetoresAtual = [];
+
+  function setorParaRelatorio(p) {
+    return {
+      nome: `${p.munic} — ${p.num_setor}`,
+      tipo: "Setor de risco geológico (CPRM/SGB)",
+      classificacao: p.grau_risco,
+      chuva24: p.chuva_24h,
+      chuva72: p.chuva_72h,
+      distanciaKm: p.distancia_km,
+      fonteEstacao: p.fonte_estacao,
+    };
+  }
+
   function renderizarTabela(emAtencao, alertaPrevisto) {
     const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
     const ordenado = emAtencao.slice().sort((a, b) => (b.chuva || 0) - (a.chuva || 0));
     const corpo = document.getElementById("tabelaCorpo");
     const vazio = document.getElementById("tabelaVazia");
 
+    tabelaSetoresAtual = ordenado.map(r => r.f.properties);
+
     document.getElementById("contagemAtencao").textContent =
       ordenado.length ? `${ordenado.length} de ${estado.limiar}mm para cima` : "";
     document.getElementById("contagemAtencao").classList.toggle("viva", ordenado.length > 0);
+    document.getElementById("botaoExportarTabelaCSV").disabled = !ordenado.length;
+    document.getElementById("botaoExportarTabelaPDF").disabled = !ordenado.length;
 
     if (!ordenado.length) {
       corpo.innerHTML = "";
       vazio.hidden = false;
     } else {
       vazio.hidden = true;
-      corpo.innerHTML = ordenado.map(r => {
+      corpo.innerHTML = ordenado.map((r, i) => {
         const p = r.f.properties;
         return `<tr><td><span class="municipio-celula">${escaparHtml(p.munic)}</span><br>` +
           `<span class="setor-codigo">${escaparHtml(p.num_setor)}</span></td>` +
           `<td>${escaparHtml(p.grau_risco)}</td>` +
-          `<td class="num mm">${formatarMm(p[campo])}</td></tr>`;
+          `<td class="num mm">${formatarMm(p[campo])}</td>` +
+          `<td><button class="botao-exportar-linha" type="button" data-exportar-setor="${i}" title="Exportar este setor (PDF)">` +
+          `<svg class="icone"><use href="icons/sprite.svg#icon-printer"></use></svg></button></td></tr>`;
       }).join("");
     }
 
@@ -1179,6 +1208,21 @@
   document.getElementById("listaMunicipios").addEventListener("click", ev => {
     const li = ev.target.closest("li[data-municipio]");
     if (li) selecionarMunicipio(li.dataset.municipio);
+  });
+
+  document.getElementById("botaoExportarTabelaCSV").addEventListener("click", () => {
+    if (!tabelaSetoresAtual.length) return;
+    window.ORCA_relatorio.exportarCSV(tabelaSetoresAtual.map(setorParaRelatorio), "orca-setores-em-atencao.csv");
+  });
+  document.getElementById("botaoExportarTabelaPDF").addEventListener("click", () => {
+    if (!tabelaSetoresAtual.length) return;
+    window.ORCA_relatorio.abrirRelatorioImpressao(tabelaSetoresAtual.map(setorParaRelatorio), "ORCA — Setores em atenção");
+  });
+  document.getElementById("tabelaCorpo").addEventListener("click", ev => {
+    const botao = ev.target.closest("button[data-exportar-setor]");
+    if (!botao) return;
+    const p = tabelaSetoresAtual[Number(botao.dataset.exportarSetor)];
+    if (p) window.ORCA_relatorio.abrirRelatorioImpressao([setorParaRelatorio(p)], `ORCA — Setor ${p.num_setor}`);
   });
 
   aplicarTema(temaAtual());

@@ -195,6 +195,17 @@
     if (area) processarArea(area).then(renderizarMapaAreas);
   }
 
+  function areaParaRelatorio(area) {
+    return {
+      nome: area.nome,
+      tipo: "Área customizada (enviada pelo usuário)",
+      classificacao: area.classificacao,
+      chuva24: area.chuva24,
+      chuva72: area.chuva72,
+      trajetoria: area.trajetoria,
+    };
+  }
+
   function desenharGraficoArea(area) {
     const canvas = document.getElementById(`grafico-area-${area.id}`);
     if (!canvas || !area.trajetoria) return;
@@ -241,11 +252,19 @@
         `<div class="card-area-grafico"><canvas id="grafico-area-${area.id}"></canvas></div>`;
     }
 
+    const acoesExportar = area.estado === "pronto"
+      ? `<button class="botao-exportar" type="button" data-exportar-csv="${area.id}" title="Exportar CSV">` +
+        `<svg class="icone"><use href="icons/sprite.svg#icon-download"></use></svg></button>` +
+        `<button class="botao-exportar" type="button" data-exportar-pdf="${area.id}" title="Exportar PDF">` +
+        `<svg class="icone"><use href="icons/sprite.svg#icon-printer"></use></svg></button>`
+      : "";
+
     return (
       `<div class="card-area">` +
       `<div class="card-area-cabecalho"><b>${escaparHtml(area.nome)}</b>` +
+      `<div class="card-area-acoes">` + acoesExportar +
       `<button class="botao-remover" type="button" data-remover="${area.id}" aria-label="Remover área">` +
-      `<svg class="icone"><use href="icons/sprite.svg#icon-trash-2"></use></svg></button></div>` +
+      `<svg class="icone"><use href="icons/sprite.svg#icon-trash-2"></use></svg></button></div></div>` +
       badge + corpo + `</div>`
     );
   }
@@ -306,7 +325,18 @@
     const remover = ev.target.closest("button[data-remover]");
     if (remover) { removerArea(Number(remover.dataset.remover)); return; }
     const retentar = ev.target.closest("button[data-retentar]");
-    if (retentar) retentarArea(Number(retentar.dataset.retentar));
+    if (retentar) { retentarArea(Number(retentar.dataset.retentar)); return; }
+    const exportarCSV = ev.target.closest("button[data-exportar-csv]");
+    if (exportarCSV) {
+      const area = areas.find(a => a.id === Number(exportarCSV.dataset.exportarCsv));
+      if (area) window.ORCA_relatorio.exportarCSV([areaParaRelatorio(area)], `orca-area-${area.id}.csv`);
+      return;
+    }
+    const exportarPDF = ev.target.closest("button[data-exportar-pdf]");
+    if (exportarPDF) {
+      const area = areas.find(a => a.id === Number(exportarPDF.dataset.exportarPdf));
+      if (area) window.ORCA_relatorio.abrirRelatorioImpressao([areaParaRelatorio(area)], `ORCA — ${area.nome}`);
+    }
   });
 
   const limiarSliderEl = document.getElementById("limiarSlider");
