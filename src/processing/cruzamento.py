@@ -13,8 +13,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
 
-from src.config import JANELAS_CHUVA as JANELAS_PADRAO
-from src.config import LIMIAR_ATENCAO_MM_PADRAO
+from src.config import JANELAS_CHUVA, LIMIAR_ATENCAO_MM_PADRAO
 
 CRS_METRICO = "EPSG:5880"  # SIRGAS 2000 / Brasil Polícônica, boa para distâncias em todo o país
 
@@ -95,6 +94,25 @@ def encontrar_estacao_mais_proxima(
     return resultado
 
 
+def _fonte_vencedora(
+    dist_inmet: float,
+    dist_ana: float,
+    leitura_inmet: pd.Timestamp,
+    leitura_ana: pd.Timestamp,
+    limiar_empate_m: float,
+) -> str:
+    """`"inmet"` ou `"ana"` para um setor: vence a estação mais próxima; num
+    empate técnico (diferença abaixo de `limiar_empate_m`), a leitura mais
+    recente desempata."""
+    if pd.isna(dist_ana):
+        return "inmet"
+    if pd.isna(dist_inmet):
+        return "ana"
+    if abs(dist_inmet - dist_ana) * 1000 <= limiar_empate_m:
+        return "ana" if leitura_ana >= leitura_inmet else "inmet"
+    return "inmet" if dist_inmet < dist_ana else "ana"
+
+
 def encontrar_estacao_mais_proxima_combinada(
     setores: gpd.GeoDataFrame,
     chuva_inmet: pd.DataFrame,
@@ -125,28 +143,20 @@ def encontrar_estacao_mais_proxima_combinada(
     ultima_leitura_ana = chuva_ana.groupby("codigo_estacao")["data_hora"].max()
     epoca = pd.Timestamp.min.tz_localize("UTC")
 
+    pareado_por_fonte = {"inmet": inmet_pareado, "ana": ana_pareado}
+
     codigos, nomes, distancias, fontes = [], [], [], []
     for i in range(len(setores)):
-        dist_inmet = inmet_pareado["distancia_km"].iloc[i]
-        dist_ana = ana_pareado["distancia_km"].iloc[i]
-
-        if pd.isna(dist_ana):
-            vencedor, fonte = inmet_pareado, "inmet"
-        elif pd.isna(dist_inmet):
-            vencedor, fonte = ana_pareado, "ana"
-        elif abs(dist_inmet - dist_ana) * 1000 <= limiar_empate_m:
-            cod_inmet = inmet_pareado["codigo_estacao"].iloc[i]
-            cod_ana = ana_pareado["codigo_estacao"].iloc[i]
-            leitura_inmet = ultima_leitura_inmet.get(cod_inmet, epoca)
-            leitura_ana = ultima_leitura_ana.get(cod_ana, epoca)
-            if leitura_ana >= leitura_inmet:
-                vencedor, fonte = ana_pareado, "ana"
-            else:
-                vencedor, fonte = inmet_pareado, "inmet"
-        elif dist_inmet < dist_ana:
-            vencedor, fonte = inmet_pareado, "inmet"
-        else:
-            vencedor, fonte = ana_pareado, "ana"
+        cod_inmet = inmet_pareado["codigo_estacao"].iloc[i]
+        cod_ana = ana_pareado["codigo_estacao"].iloc[i]
+        fonte = _fonte_vencedora(
+            inmet_pareado["distancia_km"].iloc[i],
+            ana_pareado["distancia_km"].iloc[i],
+            ultima_leitura_inmet.get(cod_inmet, epoca),
+            ultima_leitura_ana.get(cod_ana, epoca),
+            limiar_empate_m,
+        )
+        vencedor = pareado_por_fonte[fonte]
 
         codigos.append(vencedor["codigo_estacao"].iloc[i])
         nomes.append(vencedor["nome_estacao"].iloc[i])
@@ -166,7 +176,7 @@ def calcular_cruzamento(
     chuva_df: pd.DataFrame,
     chuva_ana: pd.DataFrame | None = None,
     referencia: pd.Timestamp | None = None,
-    janelas: tuple[int, ...] = JANELAS_PADRAO,
+    janelas: tuple[int, ...] = JANELAS_CHUVA,
 ) -> gpd.GeoDataFrame:
     """Cruza setores de risco com chuva: acha a estação mais próxima de cada setor
     (combinando INMET e, se fornecida, a ANA como fonte complementar, ver

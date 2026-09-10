@@ -142,6 +142,46 @@ def mesclar(publicado_dir: Path, atual_dir: Path, escopo: set[str]) -> tuple[lis
     return preservadas, fora_do_escopo
 
 
+def _resolver_piso(piso_cli: str | None) -> float:
+    """Piso de cobertura a partir de `--piso`, senão de `ORCA_PISO_COBERTURA`,
+    senão do padrão. Levanta `ValueError` com a mensagem pronta para o
+    operador se o valor não for um número em (0, 1].
+
+    Valor vazio NÃO cai no padrão em silêncio: variável definida e vazia é
+    quase sempre fiação errada no workflow, e silenciar isso esconderia
+    justamente o caso em que o operador acha que configurou o piso e não
+    configurou.
+    """
+    bruto, origem = piso_cli, "--piso"
+    if bruto is None:
+        bruto, origem = os.environ.get("ORCA_PISO_COBERTURA"), "ORCA_PISO_COBERTURA"
+    if bruto is None:
+        return PISO_COBERTURA_PADRAO
+
+    try:
+        piso = float(bruto)
+    except ValueError:
+        raise ValueError(
+            f"::error::{origem}='{bruto}' não é um número. Valor esperado em "
+            f"(0, 1] (padrão {PISO_COBERTURA_PADRAO}). Mescla recusada."
+        ) from None
+
+    # Faixa validada dos DOIS lados, e antes de qualquer cópia. `piso <= 0`
+    # desliga o único detector de run degenerado e devolve exatamente o
+    # comportamento que R-12 corrigiu: 1 UF de 27 publicada fechando verde.
+    # `piso > 1` falha fechado (recusa tudo), o que é seguro mas igualmente
+    # não intencional. Uma proteção contra degradação silenciosa que pode
+    # ser desativada em silêncio não é proteção -- este dashboard já foi
+    # destruído duas vezes fechando como `success`.
+    if not 0 < piso <= 1:
+        raise ValueError(
+            f"::error::Piso de cobertura inválido ({origem}={piso}): precisa estar em "
+            f"(0, 1]. Valor <= 0 desarmaria a proteção contra run degenerado e > 1 "
+            "recusaria toda publicação. Mescla recusada."
+        )
+    return piso
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Mescla o dashboard publicado no run atual.")
     parser.add_argument("--publicado", required=True, type=Path, help="data/ extraído do gh-pages")
@@ -158,39 +198,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    bruto, origem = args.piso, "--piso"
-    if bruto is None:
-        bruto, origem = os.environ.get("ORCA_PISO_COBERTURA"), "ORCA_PISO_COBERTURA"
-    if bruto is None:
-        piso = PISO_COBERTURA_PADRAO
-    else:
-        # Valor vazio NÃO cai no padrão em silêncio: variável definida e
-        # vazia é quase sempre fiação errada no workflow, e silenciar isso
-        # esconderia justamente o caso em que o operador acha que
-        # configurou o piso e não configurou.
-        try:
-            piso = float(bruto)
-        except ValueError:
-            print(
-                f"::error::{origem}='{bruto}' não é um número. Valor esperado em "
-                f"(0, 1] (padrão {PISO_COBERTURA_PADRAO}). Mescla recusada.",
-                file=sys.stderr,
-            )
-            return 1
-    # Faixa validada dos DOIS lados, e antes de qualquer cópia. `piso <= 0`
-    # desliga o único detector de run degenerado e devolve exatamente o
-    # comportamento que R-12 corrigiu: 1 UF de 27 publicada fechando verde.
-    # `piso > 1` falha fechado (recusa tudo), o que é seguro mas igualmente
-    # não intencional. Uma proteção contra degradação silenciosa que pode
-    # ser desativada em silêncio não é proteção -- este dashboard já foi
-    # destruído duas vezes fechando como `success`.
-    if not 0 < piso <= 1:
-        print(
-            f"::error::Piso de cobertura inválido ({origem}={piso}): precisa estar em "
-            f"(0, 1]. Valor <= 0 desarmaria a proteção contra run degenerado e > 1 "
-            "recusaria toda publicação. Mescla recusada.",
-            file=sys.stderr,
-        )
+    try:
+        piso = _resolver_piso(args.piso)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
         return 1
 
     # Recusar quando este run não produziu UF nenhuma é a decisão de
@@ -203,12 +214,12 @@ def main(argv: list[str] | None = None) -> int:
     if not (args.atual / INDICE).is_file():
         print("Este run não gerou ufs_disponiveis.json; recusando mesclar dado inteiramente velho.", file=sys.stderr)
         return 1
-    if not ler_indice(args.atual / INDICE):
+    exportadas = ler_indice(args.atual / INDICE)
+    if not exportadas:
         print("Este run não exportou UF nenhuma; recusando mesclar dado inteiramente velho.", file=sys.stderr)
         return 1
 
     escopo = ufs_no_escopo(args.escopo)
-    exportadas = ler_indice(args.atual / INDICE)
     # Escopo desconhecido (nenhum GeoPackage) não é medível: quem barra
     # esse caso é o passo "Baixar setores da branch dados-base", que é
     # fatal. Recusar aqui de novo só trocaria a mensagem certa por uma

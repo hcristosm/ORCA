@@ -80,23 +80,25 @@ def _buscar_xml(
     nova tentativa. Levanta `ANAFetchError` se todas falharem; `descricao`
     (ex.: "estações da ANA para SP") entra nas mensagens de log e de erro.
     """
+    last_exc: Exception | None = None
     for tentativa in range(1, max_retries + 1):
         try:
             resp = session.get(url, params=params, timeout=timeout)
             resp.raise_for_status()
             return _xml_fromstring(resp.content)
         except (requests.RequestException, ET.ParseError) as exc:
-            if tentativa == max_retries:
-                raise ANAFetchError(
-                    f"Não foi possível consultar {descricao} após {max_retries} tentativas"
-                ) from exc
+            last_exc = exc
             espera = backoff_factor * (2 ** (tentativa - 1))
             logger.debug(
                 "Falha ao consultar %s (tentativa %d/%d): %s. Aguardando %.1fs.",
                 descricao, tentativa, max_retries, exc, espera,
             )
-            time.sleep(espera)
-    raise ANAFetchError(f"Não foi possível consultar {descricao}: max_retries={max_retries} inválido")
+            if tentativa < max_retries:
+                time.sleep(espera)
+
+    raise ANAFetchError(
+        f"Não foi possível consultar {descricao} após {max_retries} tentativas"
+    ) from last_exc
 
 
 def fetch_estacoes(

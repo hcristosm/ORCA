@@ -19,8 +19,7 @@ import geopandas as gpd
 import pandas as pd
 import requests
 
-from src.config import caminho_manifesto_cprm
-from src.config import validar_uf as _validar_uf
+from src.config import caminho_manifesto_cprm, validar_uf
 from src.storage import ler_setores, salvar_setores
 
 logger = logging.getLogger(__name__)
@@ -102,7 +101,7 @@ def fetch_setores_risco(
     pela ingestão incremental para pedir só `objectid`/`data_setor` acima do
     marcador d'água salvo, ver `ingerir_uf`).
     """
-    uf_norm = _validar_uf(uf)
+    uf_norm = validar_uf(uf)
     where = f"uf='{uf_norm}'"
     if where_extra:
         where = f"{where} AND ({where_extra})"
@@ -215,7 +214,7 @@ def ingerir_uf(
     O fallback continua ligado por padrão para o uso manual (`atualizar`),
     onde ficar com o dado do mês passado é melhor que ficar sem nada.
     """
-    uf_norm = _validar_uf(uf)
+    uf_norm = validar_uf(uf)
     caminho_manifesto = manifesto_path or caminho_manifesto_cprm(uf_norm, output.parent)
     manifesto = _carregar_manifesto(caminho_manifesto)
     where_extra = _where_incremental(manifesto)

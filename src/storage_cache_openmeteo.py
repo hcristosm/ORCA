@@ -138,60 +138,28 @@ class CacheOpenMeteo:
         except sqlite3.Error as exc:
             logger.warning("Falha ao podar cache Open-Meteo: %s. Seguindo sem podar.", exc)
 
-    def horas_faltantes(
-        self, pontos: list[Ponto], variavel: str, horas: list[str],
-    ) -> dict[Ponto, list[str]]:
-        """Para cada ponto, quais `horas` (ISO 8601, ex. "2026-08-10T00:00")
-        ainda não estão cacheadas para `variavel`."""
-        if self._conn is None or not horas:
-            return {p: list(horas) for p in pontos} if horas else {}
-        horas_epoch = [_hora_para_epoch(h) for h in horas]
-        faltando: dict[Ponto, list[str]] = {}
-        with self._lock:
-            try:
-                variavel_id = self._variavel_id(self._conn, variavel, criar=False)
-            except sqlite3.Error as exc:
-                logger.warning("Falha ao ler cache Open-Meteo: %s. Tratando como não cacheado.", exc)
-                return {p: list(horas) for p in pontos}
-            if variavel_id is None:
-                return {p: list(horas) for p in pontos}
-            placeholders = ",".join("?" * len(horas_epoch))
-            for ponto in pontos:
-                lat, lon = _lat_lon_inteiros(ponto)
-                try:
-                    cursor = self._conn.execute(
-                        f"SELECT data_hora FROM cache_horario WHERE lat = ? AND lon = ? "
-                        f"AND variavel_id = ? AND data_hora IN ({placeholders})",  # nosec B608 - placeholders é só "?,?,...", valores vão parametrizados abaixo
-                        (lat, lon, variavel_id, *horas_epoch),
-                    )
-                    presentes = {row[0] for row in cursor.fetchall()}
-                except sqlite3.Error as exc:
-                    logger.warning("Falha ao ler cache Open-Meteo: %s. Tratando ponto como não cacheado.", exc)
-                    presentes = set()
-                faltantes_ponto = [
-                    h for h, h_epoch in zip(horas, horas_epoch) if h_epoch not in presentes
-                ]
-                if faltantes_ponto:
-                    faltando[ponto] = faltantes_ponto
-        return faltando
-
-    def ler(
+    def _linhas_cacheadas(
         self, pontos: list[Ponto], variavel: str, horas: list[str],
     ) -> dict[Ponto, dict[str, float | None]]:
-        """O que já está cacheado para `pontos`/`variavel`/`horas`."""
-        resultado: dict[Ponto, dict[str, float | None]] = {}
+        """`{ponto: {hora_iso: valor}}` com o que já está no banco.
+
+        Base comum de `ler` e `horas_faltantes`. Qualquer falha de leitura
+        (banco indisponível, variável desconhecida, erro de SQL) devolve o
+        ponto como não cacheado, nunca levanta.
+        """
         if self._conn is None or not horas:
-            return resultado
+            return {}
         horas_epoch = [_hora_para_epoch(h) for h in horas]
+        placeholders = ",".join("?" * len(horas_epoch))
+        cacheado: dict[Ponto, dict[str, float | None]] = {}
         with self._lock:
             try:
                 variavel_id = self._variavel_id(self._conn, variavel, criar=False)
             except sqlite3.Error as exc:
                 logger.warning("Falha ao ler cache Open-Meteo: %s. Tratando como não cacheado.", exc)
-                return resultado
+                return {}
             if variavel_id is None:
-                return resultado
-            placeholders = ",".join("?" * len(horas_epoch))
+                return {}
             for ponto in pontos:
                 lat, lon = _lat_lon_inteiros(ponto)
                 try:
@@ -205,8 +173,28 @@ class CacheOpenMeteo:
                     logger.warning("Falha ao ler cache Open-Meteo: %s. Tratando ponto como não cacheado.", exc)
                     linhas = {}
                 if linhas:
-                    resultado[ponto] = linhas
-        return resultado
+                    cacheado[ponto] = linhas
+        return cacheado
+
+    def horas_faltantes(
+        self, pontos: list[Ponto], variavel: str, horas: list[str],
+    ) -> dict[Ponto, list[str]]:
+        """Para cada ponto, quais `horas` (ISO 8601, ex. "2026-08-10T00:00")
+        ainda não estão cacheadas para `variavel`."""
+        cacheado = self._linhas_cacheadas(pontos, variavel, horas)
+        faltando = {}
+        for ponto in pontos:
+            presentes = cacheado.get(ponto, {})
+            faltantes_ponto = [h for h in horas if h not in presentes]
+            if faltantes_ponto:
+                faltando[ponto] = faltantes_ponto
+        return faltando
+
+    def ler(
+        self, pontos: list[Ponto], variavel: str, horas: list[str],
+    ) -> dict[Ponto, dict[str, float | None]]:
+        """O que já está cacheado para `pontos`/`variavel`/`horas`."""
+        return self._linhas_cacheadas(pontos, variavel, horas)
 
     def gravar(
         self, registros: list[tuple[Ponto, str, float | None]], variavel: str, buscado_em: str,

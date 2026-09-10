@@ -32,7 +32,7 @@ from src.processing.previsao import (
     HORIZONTE_PREVISAO_HORAS,
     trajetoria_chuva_72h,
 )
-from src.storage import chuva_existe, ler_chuva, ler_setores
+from src.storage import ler_chuva, ler_setores
 from src.storage_cache_openmeteo import CacheOpenMeteo
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,14 @@ def _exportar_setores(cruzado: pd.DataFrame, caminho: Path) -> None:
     reduzido.to_file(caminho, driver="GeoJSON")
 
 
+def _pontos_serie(data_hora: pd.Series, chuva_mm: pd.Series) -> list[list]:
+    """Série de chuva como `[[iso, mm], ...]`, com `NaN` virando `None` (JSON `null`)."""
+    return [
+        [ts.isoformat(), (None if pd.isna(mm) else round(float(mm), 2))]
+        for ts, mm in zip(data_hora, chuva_mm)
+    ]
+
+
 def _recortar_series(chuva_df: pd.DataFrame, referencia: pd.Timestamp) -> dict:
     """Monta `{codigo_estacao: {nome, fonte, serie: [[iso, mm], ...]}}`.
 
@@ -83,10 +91,7 @@ def _recortar_series(chuva_df: pd.DataFrame, referencia: pd.Timestamp) -> dict:
         series[str(codigo)] = {
             "nome": grupo_ordenado["nome_estacao"].iloc[0],
             "fonte": grupo_ordenado["fonte"].iloc[0],
-            "serie": [
-                [ts.isoformat(), (None if pd.isna(mm) else round(float(mm), 2))]
-                for ts, mm in zip(grupo_ordenado["data_hora"], grupo_ordenado["chuva_mm"])
-            ],
+            "serie": _pontos_serie(grupo_ordenado["data_hora"], grupo_ordenado["chuva_mm"]),
         }
     return series
 
@@ -250,10 +255,7 @@ def _series_openmeteo_por_municipio(
             series[municipio] = {
                 "nome": municipio,
                 "fonte": "openmeteo",
-                "serie": [
-                    [ts.isoformat(), (None if pd.isna(mm) else round(float(mm), 2))]
-                    for ts, mm in zip(recente["data_hora"], recente["chuva_mm"])
-                ],
+                "serie": _pontos_serie(recente["data_hora"], recente["chuva_mm"]),
             }
     return series
 
@@ -311,7 +313,7 @@ def _exportar_inmet(
         )
     chuva_inmet = ler_chuva(caminho_chuva_path)
     caminho_ana = caminho_chuva_ana(uf_norm, diretorio_dados)
-    chuva_ana = ler_chuva(caminho_ana) if chuva_existe(caminho_ana) else None
+    chuva_ana = ler_chuva(caminho_ana) if caminho_ana.exists() else None
 
     cruzado = calcular_cruzamento(setores, chuva_inmet, chuva_ana=chuva_ana, janelas=(24, 72))
     referencia = cruzado.attrs["referencia"]

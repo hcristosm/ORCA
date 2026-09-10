@@ -269,6 +269,29 @@ def _salvar_manifesto(caminho: Path, manifesto: dict) -> None:
 JANELA_RETIFICACAO = pd.Timedelta(days=7)
 
 
+def _anotar_estacao(serie: pd.DataFrame, estacao: Estacao) -> pd.DataFrame:
+    """Adiciona as colunas de identificação/localização da estação à série."""
+    serie["nome_estacao"] = estacao.nome
+    serie["uf"] = estacao.uf
+    serie["latitude"] = estacao.latitude
+    serie["longitude"] = estacao.longitude
+    return serie
+
+
+def _ler_csv_acumulado(caminho: Path) -> pd.DataFrame | None:
+    """CSV acumulado da UF/ano, ou `None` se ausente, vazio ou corrompido."""
+    if not caminho.exists():
+        return None
+    try:
+        existente = ler_chuva(caminho)
+    except pd.errors.EmptyDataError:
+        logger.warning(
+            "CSV acumulado em %s está vazio ou corrompido; tratando como inexistente.", caminho
+        )
+        return None
+    return None if existente.empty else existente
+
+
 def _mesclar_serie_estacao(
     serie_existente: pd.DataFrame, serie_nova: pd.DataFrame, cutoff: pd.Timestamp
 ) -> pd.DataFrame:
@@ -318,17 +341,7 @@ def ingerir_uf(
     estacoes = fetch_estacoes(uf_norm, max_retries=max_retries)
 
     saida = caminho_chuva(uf_norm, ano, diretorio_dados)
-    existente = None
-    if saida.exists():
-        try:
-            existente = ler_chuva(saida)
-            if existente.empty:
-                existente = None
-        except pd.errors.EmptyDataError:
-            logger.warning(
-                "CSV acumulado em %s está vazio ou corrompido; tratando como inexistente.", saida
-            )
-            existente = None
+    existente = _ler_csv_acumulado(saida)
     manifesto_estacoes = manifesto.get("estacoes", {})
 
     partes = []
@@ -356,18 +369,11 @@ def ingerir_uf(
             and entrada_anterior.get("crc32") == crc_atual
             and serie_existente_estacao is not None
         ):
-            serie_final = serie_existente_estacao.copy()
-            serie_final["nome_estacao"] = estacao.nome
-            serie_final["uf"] = estacao.uf
-            serie_final["latitude"] = estacao.latitude
-            serie_final["longitude"] = estacao.longitude
+            serie_final = _anotar_estacao(serie_existente_estacao.copy(), estacao)
         else:
             serie_nova = ler_serie_estacao(zip_path, uf_norm, estacao.codigo).reset_index()
             serie_nova["codigo_estacao"] = estacao.codigo
-            serie_nova["nome_estacao"] = estacao.nome
-            serie_nova["uf"] = estacao.uf
-            serie_nova["latitude"] = estacao.latitude
-            serie_nova["longitude"] = estacao.longitude
+            _anotar_estacao(serie_nova, estacao)
 
             if serie_existente_estacao is None:
                 serie_final = serie_nova

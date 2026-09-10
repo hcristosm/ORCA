@@ -23,10 +23,6 @@ def salvar_setores(gdf: gpd.GeoDataFrame, caminho: Path) -> None:
     gdf.to_file(caminho, layer=CAMADA_SETORES, driver="GPKG")
 
 
-def chuva_existe(caminho: Path) -> bool:
-    return caminho.exists()
-
-
 def ler_chuva(caminho: Path) -> pd.DataFrame:
     return pd.read_csv(caminho, parse_dates=["data_hora"])
 
