@@ -7,6 +7,9 @@ e o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### CHORE
+- chore(deps): atualiza `ruff` de >=0.14.0 para >=0.16.6
+
 ## [1.1.0] - 2026-09-12
 
 ### FEATURES
