@@ -7,6 +7,23 @@ e o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-12
+
+### FEATURES
+- feat(dashboard): exportação de relatórios em CSV e PDF, 100% client-side — em lote na tabela de setores da CPRM (respeitando filtro de UF e limiar ativo), por linha individual e nos cards de área customizada
+- feat(dashboard): ícones de download e impressão no sprite, no mesmo estilo Lucide dos demais
+
+### REFACTOR
+- refactor(ingest): remove duplicação em metadados de estação, série temporal e retry de requisições
+- refactor(processing): extrai helpers de cruzamento e centroides
+- refactor(export): simplifica cache de leitura e montagem dos dados do dashboard
+
+### FIXES
+- fix(readme): corrige o link da release, que apontava para o destino errado
+
+### CHORE
+- chore(deps): atualiza `typer`, `mypy`, `bandit`, `setuptools`, `responses` e `softprops/action-gh-release`
+
 ## [1.0.0] - 2026-08-29
 
 Primeira versão estável: pipeline de ingestão nacional (27 UFs), dashboard
