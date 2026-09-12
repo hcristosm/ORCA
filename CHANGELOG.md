@@ -2,8 +2,13 @@
 
 Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
-O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
-e o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+As entradas são agrupadas por tipo (`FEATURES`, `FIXES`, `REFACTOR`, `CHORE`)
+e cada item usa o prefixo do commit correspondente, no padrão
+[Conventional Commits](https://www.conventionalcommits.org/pt-br/v1.0.0/).
+O projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+Versões até a 1.0.0 usam o formato anterior, com seções
+`Added`/`Changed`/`Fixed` do [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ## [Unreleased]
 
