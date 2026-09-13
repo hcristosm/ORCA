@@ -109,7 +109,7 @@
   </div>
 </div>
 
-<p class="selo" id="selo">Carregando dados…</p>
+<div class="selo" id="selo" aria-live="polite">Carregando dados…</div>
 
 <main>
   <div class="painel">
@@ -408,9 +408,7 @@
     const detalheFonte = meta.fonte === "openmeteo"
       ? "Open-Meteo, consulta direta por setor"
       : `${meta.total_estacoes_inmet} estações INMET e ${meta.total_estacoes_ana} da ANA`;
-    document.getElementById("selo").innerHTML =
-      `<b>Chuva até</b> ${formatarData(meta.referencia)} · ` +
-      `<b>gerado em</b> ${formatarData(meta.gerado_em)} · ${detalheFonte}`;
+    renderizarSelo(meta, detalheFonte);
 
     popularBuscaMunicipios();
     inicializarMapa();
@@ -430,6 +428,61 @@
     } catch (e) {
       return iso;
     }
+  }
+
+  // Selo de atualização: uma linha por fonte, em horário de Brasília, com a idade
+  // do dado. Acima do limite a idade fica em destaque: o cron diário (Open-Meteo)
+  // ou o mensal (CPRM) pode ter parado sem ninguém notar.
+  const LIMITE_IDADE_CHUVA_HORAS = 36;
+  const LIMITE_IDADE_CPRM_DIAS = 45;
+
+  function dataValida(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function formatarBrasilia(d, comHora = true) {
+    const opcoes = { timeZone: "America/Sao_Paulo", dateStyle: "short" };
+    if (comHora) opcoes.timeStyle = "short";
+    return d.toLocaleString("pt-BR", opcoes);
+  }
+
+  function idadeRelativa(d) {
+    const horas = (Date.now() - d.getTime()) / 3600000;
+    if (horas < 1) return "há menos de 1 h";
+    if (horas < 48) return `há ${Math.floor(horas)} h`;
+    return `há ${Math.floor(horas / 24)} dias`;
+  }
+
+  function carimbo(iso, { comHora = true, limiteHoras = null } = {}) {
+    const d = dataValida(iso);
+    if (!d) return `<span class="selo-indisponivel">data indisponível</span>`;
+    const utc = d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+    let texto = `<time datetime="${escaparHtml(d.toISOString())}" title="${utc}">${formatarBrasilia(d, comHora)}</time>`;
+    if (limiteHoras !== null) {
+      const velho = (Date.now() - d.getTime()) / 3600000 > limiteHoras;
+      texto += ` <span class="selo-idade${velho ? " desatualizado" : ""}">(${idadeRelativa(d)}` +
+        `${velho ? " · desatualizado" : ""})</span>`;
+    }
+    return texto;
+  }
+
+  function renderizarSelo(meta, detalheFonte) {
+    // Meta antigo (sem os blocos por fonte) cai nos campos do topo.
+    const chuva = meta.chuva || { ate: meta.referencia, consultado_em: meta.gerado_em };
+    const cprm = meta.cprm || {};
+    const nomeChuva = meta.fonte === "openmeteo" ? "Chuva e previsão (Open-Meteo)" : "Chuva (INMET/ANA)";
+    // setor_mais_recente é só data (AAAA-MM-DD): meio-dia UTC evita cair no dia anterior em Brasília.
+    const setorRecente = cprm.setor_mais_recente ? `${cprm.setor_mais_recente}T12:00:00Z` : null;
+    document.getElementById("selo").innerHTML =
+      `<div class="selo-linha"><span class="selo-fonte">Setores de risco (CPRM/SGB)</span>` +
+      `<span>consultado em ${carimbo(cprm.ingerido_em, { limiteHoras: LIMITE_IDADE_CPRM_DIAS * 24 })}` +
+      ` · setor mais recente de ${carimbo(setorRecente, { comHora: false })}</span></div>` +
+      `<div class="selo-linha"><span class="selo-fonte">${nomeChuva}</span>` +
+      `<span>chuva até ${carimbo(chuva.ate)} · consultado em ` +
+      `${carimbo(chuva.consultado_em, { limiteHoras: LIMITE_IDADE_CHUVA_HORAS })} · ${detalheFonte}</span></div>` +
+      `<div class="selo-nota">Horário de Brasília · passe o mouse sobre uma data para ver em UTC</div>`;
   }
 
   function formatarMm(valor) {

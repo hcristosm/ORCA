@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from shapely.geometry import Polygon
 
-from src.config import caminho_chuva, caminho_chuva_ana, caminho_setores
+from src.config import caminho_chuva, caminho_chuva_ana, caminho_manifesto_cprm, caminho_setores
 from src.export.dashboard_data import (
     ExportacaoDashboardError,
     _calcular_chuva_openmeteo,
@@ -374,6 +374,51 @@ def test_exportar_dashboard_preserva_bloco_vento_existente_no_meta(tmp_path: Pat
     assert meta["vento"] == bloco_vento
     assert meta["total_setores"] == 2
     assert meta["total_estacoes_inmet"] == 2
+
+
+def _exportar_inmet_minimo(tmp_path: Path, setores) -> dict:
+    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    chuva = pd.concat(
+        [
+            _serie_horaria("A701", -23.501, -46.601, "PERTO DE S1", {i: 1.0 for i in range(40)}, "2026-08-01 00:00"),
+            _serie_horaria("A736", -24.001, -47.001, "PERTO DE S2", {i: 0.0 for i in range(40)}, "2026-08-01 00:00"),
+        ],
+        ignore_index=True,
+    )
+    salvar_chuva(chuva, caminho_chuva("SP", 2026, tmp_path))
+    saida = tmp_path / "export"
+    exportar_dashboard("SP", 2026, tmp_path, saida, fonte="inmet")
+    return json.loads((saida / "meta_sp.json").read_text())
+
+
+def test_exportar_dashboard_grava_datas_por_fonte_no_meta(tmp_path: Path, setores):
+    setores = setores.assign(data_setor=["2021-06-15", "2024-03-02"])
+    caminho_manifesto_cprm("SP", tmp_path).write_text(json.dumps({
+        "last_objectid": 2, "last_data_setor": "2024-03-02", "ingerido_em": "2026-09-01T03:10:00+00:00",
+    }))
+
+    meta = _exportar_inmet_minimo(tmp_path, setores)
+
+    assert meta["cprm"] == {"ingerido_em": "2026-09-01T03:10:00+00:00", "setor_mais_recente": "2024-03-02"}
+    assert meta["chuva"]["fonte"] == "inmet"
+    assert meta["chuva"]["ate"] == meta["referencia"]
+    assert meta["chuva"]["consultado_em"] == meta["gerado_em"]
+
+
+def test_exportar_dashboard_datas_cprm_indisponiveis_viram_none(tmp_path: Path, setores):
+    # Sem manifesto e sem coluna data_setor (dado antigo): o meta sai com None,
+    # e o front-end mostra "data indisponível" em vez de quebrar.
+    meta = _exportar_inmet_minimo(tmp_path, setores)
+
+    assert meta["cprm"] == {"ingerido_em": None, "setor_mais_recente": None}
+
+
+def test_exportar_dashboard_manifesto_cprm_corrompido_nao_quebra(tmp_path: Path, setores):
+    caminho_manifesto_cprm("SP", tmp_path).write_text("{não é json")
+
+    meta = _exportar_inmet_minimo(tmp_path, setores)
+
+    assert meta["cprm"]["ingerido_em"] is None
 
 
 def test_calcular_chuva_openmeteo_deduplica_pontos_repetidos(tmp_path: Path, setores):

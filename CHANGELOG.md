@@ -12,6 +12,10 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+### FEATURES
+- feat(dashboard): selo de atualização por fonte (CPRM/SGB e chuva), em horário de Brasília, com idade do dado e alerta de desatualizado
+- feat(export): `meta_<uf>.json` ganha os blocos `cprm` (`ingerido_em`, `setor_mais_recente`) e `chuva` (`fonte`, `ate`, `consultado_em`)
+
 ### FIXES
 - fix(cprm): ingestão incremental sem setores novos não quebra mais com `ValueError`
 

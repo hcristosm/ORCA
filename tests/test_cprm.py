@@ -160,6 +160,7 @@ def test_ingerir_uf_grava_manifesto_apos_primeira_ingestao(tmp_path: Path):
     manifesto = json.loads(manifesto_path.read_text())
     assert manifesto["last_objectid"] == 2
     assert manifesto["last_data_setor"] == "2021-06-15"
+    assert manifesto["ingerido_em"].endswith("+00:00")
 
 
 @responses.activate
@@ -175,6 +176,29 @@ def test_fetch_setores_risco_sem_features_retorna_vazio_sem_quebrar():
 
     assert gdf.empty
     assert gdf.crs == "EPSG:4326"
+
+
+@responses.activate
+def test_ingerir_uf_registra_ingerido_em_mesmo_sem_setores_novos(tmp_path: Path):
+    # Consulta bem-sucedida sem novidades ainda prova que a fonte foi checada:
+    # a data de ingestão avança, o marcador d'água não.
+    output = tmp_path / "risco_sp.gpkg"
+    manifesto_path = tmp_path / "cprm_manifest_sp.json"
+    manifesto_path.write_text(json.dumps({
+        "last_objectid": 2, "last_data_setor": "2021-06-15", "ingerido_em": "2020-01-01T00:00:00+00:00",
+    }))
+    responses.add(
+        responses.GET,
+        FEATURE_LAYER_URL,
+        json={"type": "FeatureCollection", "features": [], "properties": {"exceededTransferLimit": False}},
+        status=200,
+    )
+
+    ingerir_uf("SP", output)
+
+    manifesto = json.loads(manifesto_path.read_text())
+    assert manifesto["last_objectid"] == 2
+    assert manifesto["ingerido_em"] > "2020-01-01T00:00:00+00:00"
 
 
 @responses.activate

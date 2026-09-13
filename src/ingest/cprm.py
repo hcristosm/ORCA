@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import geopandas as gpd
@@ -178,7 +179,7 @@ def _mesclar_setores(existente: gpd.GeoDataFrame | None, novos: gpd.GeoDataFrame
 
 def _atualizar_marcador_dagua(manifesto: dict, setores: gpd.GeoDataFrame) -> dict:
     if setores.empty or "objectid" not in setores.columns:
-        return manifesto
+        return dict(manifesto)
     novo = dict(manifesto)
     novo["last_objectid"] = int(setores["objectid"].max())
     if "data_setor" in setores.columns:
@@ -231,7 +232,11 @@ def ingerir_uf(
         )
         gdf = _mesclar_setores(existente, novos)
         salvar_setores(gdf, output)
-        _salvar_manifesto(caminho_manifesto, _atualizar_marcador_dagua(manifesto, novos))
+        manifesto_novo = _atualizar_marcador_dagua(manifesto, novos)
+        # Só no caminho de sucesso: o fallback para o cache local abaixo não
+        # consultou a fonte e não pode fazer o dado parecer recente.
+        manifesto_novo["ingerido_em"] = datetime.now(UTC).isoformat()
+        _salvar_manifesto(caminho_manifesto, manifesto_novo)
         logger.info(
             "Salvos %d setores de risco de %s em %s (%d novos/atualizados)",
             len(gdf), uf, output, len(novos),

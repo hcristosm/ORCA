@@ -18,7 +18,13 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
 
-from src.config import LIMIAR_ATENCAO_MM_PADRAO, caminho_chuva, caminho_chuva_ana, caminho_setores
+from src.config import (
+    LIMIAR_ATENCAO_MM_PADRAO,
+    caminho_chuva,
+    caminho_chuva_ana,
+    caminho_manifesto_cprm,
+    caminho_setores,
+)
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_precipitacao_batch
 from src.processing.cruzamento import (
     CRS_METRICO,
@@ -334,6 +340,32 @@ def _exportar_inmet(
     return cruzado, series, None, meta
 
 
+def _datas_cprm(setores: gpd.GeoDataFrame, uf: str, diretorio_dados: Path) -> dict:
+    """Datas dos setores de risco: quando a ingestão consultou a CPRM/SGB e o setor mais recente.
+
+    Qualquer ausência (manifesto inexistente/corrompido, ingestão anterior a
+    `ingerido_em`, coluna `data_setor` faltando) vira `None`: a data some do
+    selo, a exportação não quebra.
+    """
+    ingerido_em = None
+    caminho = caminho_manifesto_cprm(uf, diretorio_dados)
+    if caminho.exists():
+        try:
+            manifesto = json.loads(caminho.read_text())
+            if isinstance(manifesto, dict):
+                ingerido_em = manifesto.get("ingerido_em")
+        except (json.JSONDecodeError, OSError):
+            logger.warning("Manifesto da CPRM ilegível em %s; data de ingestão indisponível.", caminho)
+
+    setor_mais_recente = None
+    if "data_setor" in setores.columns:
+        datas = pd.to_datetime(setores["data_setor"], errors="coerce")
+        if datas.notna().any():
+            setor_mais_recente = datas.max().strftime("%Y-%m-%d")
+
+    return {"ingerido_em": ingerido_em, "setor_mais_recente": setor_mais_recente}
+
+
 def exportar_dashboard(
     uf: str,
     ano: int,
@@ -383,6 +415,10 @@ def exportar_dashboard(
     else:
         cruzado, series, previsao, meta = _exportar_inmet(setores, uf_norm, ano, diretorio_dados)
     meta["gerado_em"] = datetime.now(UTC).isoformat()
+    # Blocos por fonte para o selo de atualização do dashboard. `referencia` e
+    # `gerado_em` continuam no topo para front-ends antigos ainda em cache.
+    meta["cprm"] = _datas_cprm(setores, uf_norm, diretorio_dados)
+    meta["chuva"] = {"fonte": fonte, "ate": meta.get("referencia"), "consultado_em": meta["gerado_em"]}
 
     _exportar_setores(cruzado, saida_dir / f"setores_{uf_norm.lower()}.geojson")
     (saida_dir / f"series_{uf_norm.lower()}.json").write_text(

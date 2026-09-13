@@ -480,6 +480,18 @@ select { padding-right: var(--s2); }
   color: var(--tinta-fraca);
 }
 .selo b { font-weight: 500; color: var(--tinta-media); }
+.selo-linha {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--s3);
+  row-gap: 2px;
+  line-height: 1.6;
+}
+.selo-fonte { font-weight: 500; color: var(--tinta-media); min-width: 30ch; }
+.selo time { color: var(--tinta-media); }
+.selo-idade.desatualizado,
+.selo-indisponivel { color: var(--sinal); font-weight: 500; }
+.selo-nota { margin-top: 2px; }
 
 /* ------------------------------------------------------------------ corpo */
 
