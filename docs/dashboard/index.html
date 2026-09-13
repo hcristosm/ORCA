@@ -815,7 +815,9 @@
     input.addEventListener("blur", () => {
       // Adiado: um clique numa sugestão dispara blur antes de click, então sem o
       // atraso a lista fecharia antes de escolher() rodar.
-      setTimeout(fecharEReconciliar, 150);
+      // Se o foco voltou ao campo nesse intervalo, o usuário já está digitando de novo:
+      // reconciliar agora sobrescreveria as primeiras teclas com o município aplicado.
+      setTimeout(() => { if (document.activeElement !== input) fecharEReconciliar(); }, 150);
     });
   }
 
