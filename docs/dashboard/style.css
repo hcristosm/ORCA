@@ -262,7 +262,11 @@ select { padding-right: var(--s2); }
   position: absolute;
   top: calc(100% + 2px);
   left: 0;
-  right: 0;
+  /* Mais larga que o campo quando precisa (no celular o campo tem ~110px e os
+     nomes com sigla de UF quebravam em várias linhas), sem passar da tela. */
+  min-width: 100%;
+  width: max-content;
+  max-width: min(22rem, calc(100vw - 2 * var(--s4)));
   z-index: 600;
   margin: 0;
   padding: var(--s1);
@@ -280,6 +284,8 @@ select { padding-right: var(--s2); }
   border-radius: var(--raio);
   cursor: pointer;
 }
+.sugestoes li { display: flex; justify-content: space-between; gap: var(--s3); }
+.sugestao-uf { font-family: var(--font-mono); font-size: var(--micro); color: var(--tinta-fraca); align-self: center; }
 .sugestoes li:hover,
 .sugestoes li.ativo { background: var(--superficie-2); }
 

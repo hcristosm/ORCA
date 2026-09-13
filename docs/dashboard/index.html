@@ -67,7 +67,7 @@
     <div class="campo campo-municipio">
       <label for="buscaMunicipio">Município</label>
       <div class="busca">
-        <input type="text" id="buscaMunicipio" autocomplete="off" placeholder="Todos do estado">
+        <input type="text" id="buscaMunicipio" autocomplete="off" placeholder="Buscar em todo o Brasil">
         <ul class="sugestoes" id="buscaMunicipioSugestoes" role="listbox" hidden></ul>
       </div>
     </div>
@@ -315,6 +315,31 @@
   // coincide, sincronizarNavegacao() não grava entrada nova (sem loop).
   let slugMunicipioPendente = "";
   let ufCarregada = null;
+
+  // Índice da busca nacional: [{uf, nome}] montado a partir do campo `municipios`
+  // de cada meta_<uf>.json publicado. Carregado sob demanda (1o foco na busca).
+  // Meta que falhe ou seja antigo (sem o campo) só tira aquela UF da busca; a UF
+  // atual continua pesquisável por opcoesMunicipios.
+  let indiceNacional = null;
+  let promessaIndiceNacional = null;
+
+  function garantirIndiceNacional() {
+    if (!promessaIndiceNacional) {
+      promessaIndiceNacional = Promise.allSettled(ufsDisponiveis.map(uf =>
+        fetch(`data/meta_${uf}.json`)
+          .then(r => (r.ok ? r.json() : null))
+          .then(meta => {
+            const nomes = meta && Array.isArray(meta.municipios) ? meta.municipios : [];
+            return nomes.filter(n => typeof n === "string" && n).map(nome => ({ uf, nome }));
+          })
+      )).then(resultados => {
+        indiceNacional = resultados.flatMap(r => (r.status === "fulfilled" ? r.value : []));
+        const falhas = resultados.filter(r => r.status === "rejected").length;
+        if (falhas) console.warn(`Busca nacional: ${falhas} UF(s) sem índice de municípios.`);
+      });
+    }
+    return promessaIndiceNacional;
+  }
 
   function slugMunicipio(nome) {
     return normalizarNome(nome).replace(/ /g, "-");
@@ -729,30 +754,69 @@
     function renderSugestoes(filtro) {
       ultimoFiltro = filtro;
       const termo = normalizarNome(filtro);
-      const opcoes = termo ? opcoesMunicipios.filter(m => normalizarNome(m).includes(termo)).slice(0, 8) : [];
+      const opcoes = termo ? candidatosBusca(termo).slice(0, 8) : [];
       indiceAtivo = -1;
       lista.innerHTML = "";
       if (!opcoes.length) { lista.hidden = true; return; }
-      for (const m of opcoes) {
+      for (const { nome, uf } of opcoes) {
         const li = document.createElement("li");
         li.setAttribute("role", "option");
-        li.dataset.nome = m;
-        li.textContent = m;
+        li.dataset.nome = nome;
+        li.dataset.uf = uf;
+        li.textContent = nome;
+        const sigla = document.createElement("span");
+        sigla.className = "sugestao-uf";
+        sigla.textContent = uf.toUpperCase();
+        li.appendChild(sigla);
         lista.appendChild(li);
       }
       lista.hidden = false;
     }
 
+    // Ordem: UF atual primeiro (é a lista que sempre existe, mesmo sem o índice
+    // nacional), depois as demais UFs; dentro de cada grupo, quem começa com o termo
+    // vem antes de quem só o contém.
+    function candidatosBusca(termo) {
+      const vistos = new Set();
+      const todos = [];
+      const adicionar = (nome, uf) => {
+        const chave = uf + "|" + nome;
+        if (vistos.has(chave)) return;
+        vistos.add(chave);
+        const n = normalizarNome(nome);
+        if (!n.includes(termo)) return;
+        todos.push({ nome, uf, grupo: (uf === UF ? 0 : 2) + (n.startsWith(termo) ? 0 : 1) });
+      };
+      for (const m of opcoesMunicipios) adicionar(m, UF);
+      for (const item of indiceNacional || []) adicionar(item.nome, item.uf);
+      return todos.sort((a, b) => a.grupo - b.grupo || a.nome.localeCompare(b.nome, "pt-BR"));
+    }
+
+    input.addEventListener("focus", () => {
+      garantirIndiceNacional().then(() => {
+        // O índice chegou com o usuário ainda digitando: atualiza a lista aberta.
+        if (document.activeElement === input && input.value.trim()) renderSugestoes(input.value);
+      });
+    });
+
     function marcarAtivo() {
       Array.from(lista.children).forEach((li, i) => li.classList.toggle("ativo", i === indiceAtivo));
     }
 
-    function escolher(nome) {
+    function escolher(nome, uf = UF) {
       clearTimeout(debounceId);
       input.value = nome;
       lista.hidden = true;
       lista.innerHTML = "";
-      selecionarMunicipio(nome);
+      if (uf === UF) {
+        selecionarMunicipio(nome);
+        return;
+      }
+      // Município de outra UF: troca o estado e deixa o município pendente até os
+      // setores chegarem (mesmo caminho da navegação por link/histórico).
+      trocarUf(uf, slugMunicipio(nome));
+      input.value = nome;
+      sincronizarNavegacao("push");
     }
 
     let debounceId = null;
@@ -772,7 +836,8 @@
         // quando a lista já está em dia.
         if (ultimoFiltro !== input.value) renderSugestoes(input.value);
         if (lista.children.length) {
-          escolher((lista.children[indiceAtivo] || lista.children[0]).dataset.nome);
+          const li = lista.children[indiceAtivo] || lista.children[0];
+          escolher(li.dataset.nome, li.dataset.uf);
         } else if (!input.value.trim()) {
           limparMunicipio();
         } else {
@@ -797,7 +862,7 @@
 
     lista.addEventListener("click", ev => {
       const li = ev.target.closest("li[data-nome]");
-      if (li) escolher(li.dataset.nome);
+      if (li) escolher(li.dataset.nome, li.dataset.uf);
     });
 
     function fecharEReconciliar() {
@@ -805,6 +870,8 @@
       lista.hidden = true;
       // Se o usuário editou o texto sem confirmar uma sugestão, volta o campo
       // para refletir o que está de fato aplicado (evita busca e mapa dessincronizados).
+      // Município de outra UF ainda carregando conta como aplicado.
+      if (slugMunicipioPendente && slugMunicipio(input.value) === slugMunicipioPendente) return;
       if (input.value !== estado.municipio) input.value = estado.municipio;
     }
 

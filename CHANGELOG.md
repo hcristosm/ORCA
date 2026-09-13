@@ -15,11 +15,14 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 ### FEATURES
 - feat(dashboard): selo de atualização por fonte (CPRM/SGB e chuva), em horário de Brasília, com idade do dado e alerta de desatualizado
 - feat(dashboard): navegação pela URL (`#/<uf>/<município>`) com Voltar/Avançar do navegador, links compartilháveis, botão "Voltar ao estado" e trilha clicável
+- feat(dashboard): busca de município em todo o Brasil, com sigla da UF; escolher uma cidade de outro estado troca a UF e seleciona a cidade
 - feat(export): `meta_<uf>.json` ganha os blocos `cprm` (`ingerido_em`, `setor_mais_recente`) e `chuva` (`fonte`, `ate`, `consultado_em`)
+- feat(export): `meta_<uf>.json` ganha a lista `municipios`, índice da busca nacional
 
 ### FIXES
 - fix(cprm): ingestão incremental sem setores novos não quebra mais com `ValueError`
 - fix(dashboard): recriar o mapa durante a animação de zoom não lança mais `_leaflet_pos`
+- fix(dashboard): busca não sobrescreve mais as primeiras teclas digitadas logo após escolher uma sugestão
 
 ### CHORE
 - chore(deps): atualiza `ruff` de >=0.14.0 para >=0.16.6

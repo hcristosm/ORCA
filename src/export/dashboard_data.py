@@ -419,6 +419,10 @@ def exportar_dashboard(
     # `gerado_em` continuam no topo para front-ends antigos ainda em cache.
     meta["cprm"] = _datas_cprm(setores, uf_norm, diretorio_dados)
     meta["chuva"] = {"fonte": fonte, "ate": meta.get("referencia"), "consultado_em": meta["gerado_em"]}
+    # Índice da busca nacional do dashboard. Fica no meta, e não num arquivo
+    # nacional, porque scripts/mesclar_publicado.py preserva metas por UF: uma UF
+    # que falhou hoje continua pesquisável com a lista da véspera.
+    meta["municipios"] = sorted({str(m) for m in setores["munic"].dropna()}) if "munic" in setores.columns else []
 
     _exportar_setores(cruzado, saida_dir / f"setores_{uf_norm.lower()}.geojson")
     (saida_dir / f"series_{uf_norm.lower()}.json").write_text(

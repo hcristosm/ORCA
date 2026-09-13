@@ -405,6 +405,18 @@ def test_exportar_dashboard_grava_datas_por_fonte_no_meta(tmp_path: Path, setore
     assert meta["chuva"]["consultado_em"] == meta["gerado_em"]
 
 
+def test_exportar_dashboard_lista_municipios_no_meta(tmp_path: Path, setores):
+    # A busca nacional do dashboard lê esta lista de cada meta_<uf>.json; mora no
+    # meta (e não num índice nacional) porque a mescla do publicado preserva metas
+    # por UF, então uma UF que falhou hoje continua pesquisável.
+    setores = pd.concat([setores, setores.iloc[[0]]], ignore_index=True)
+    setores.loc[2, "munic"] = None
+
+    meta = _exportar_inmet_minimo(tmp_path, gpd.GeoDataFrame(setores, crs="EPSG:4326"))
+
+    assert meta["municipios"] == ["CIDADE A", "CIDADE B"]
+
+
 def test_exportar_dashboard_datas_cprm_indisponiveis_viram_none(tmp_path: Path, setores):
     # Sem manifesto e sem coluna data_setor (dado antigo): o meta sai com None,
     # e o front-end mostra "data indisponível" em vez de quebrar.
