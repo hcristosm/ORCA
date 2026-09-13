@@ -471,6 +471,31 @@ select { padding-right: var(--s2); }
   cursor: ew-resize;
 }
 
+.navegacao {
+  max-width: var(--largura-max);
+  margin: 0 auto;
+  padding: 0 var(--s5) var(--s2);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  font-size: var(--step-0);
+}
+.botao-voltar {
+  font: inherit;
+  color: var(--agua);
+  background: none;
+  border: var(--fio) solid var(--fio-cor);
+  border-radius: var(--raio);
+  padding: 2px var(--s2);
+  cursor: pointer;
+}
+.botao-voltar:hover { border-color: var(--agua); }
+.trilha { display: flex; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; color: var(--tinta-media); }
+.trilha li + li::before { content: "›"; margin: 0 var(--s2); color: var(--tinta-fraca); }
+.trilha a { color: var(--agua); }
+.trilha [aria-current] { color: var(--tinta); font-weight: 500; }
+
 .selo {
   max-width: var(--largura-max);
   margin: 0 auto;
@@ -913,7 +938,7 @@ footer {
   .faceplate-interno { padding: var(--s3) var(--s4); gap: var(--s4); }
   .marca { width: 100%; }
   .campo-municipio { min-width: 0; flex: 1; }
-  .regua, main, footer, .selo { padding-left: var(--s4); padding-right: var(--s4); }
+  .regua, main, footer, .selo, .navegacao { padding-left: var(--s4); padding-right: var(--s4); }
   .escala { height: 78px; }
   .contadores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .contador .valor { font-size: var(--step-3); }

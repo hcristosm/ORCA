@@ -109,6 +109,11 @@
   </div>
 </div>
 
+<nav class="navegacao" aria-label="Navegação">
+  <button type="button" class="botao-voltar" id="botaoVoltar" hidden>&larr; Voltar ao estado</button>
+  <ol class="trilha" id="trilha"></ol>
+</nav>
+
 <div class="selo" id="selo" aria-live="polite">Carregando dados…</div>
 
 <main>
@@ -253,6 +258,13 @@
     } catch (e) {
       // manifesto ainda não existe (deploy antigo/dev local só com SP) -- mantém o padrão.
     }
+    // Link compartilhado/recarga: a URL manda na UF e no município iniciais. Um
+    // município que não exista na UF é descartado em carregarDados(), já com os setores.
+    const daUrl = lerNavegacaoDaUrl();
+    if (daUrl && ufsDisponiveis.includes(daUrl.uf)) {
+      UF = daUrl.uf;
+      slugMunicipioPendente = daUrl.slugMunicipio;
+    }
     if (!ufsDisponiveis.includes(UF)) UF = ufsDisponiveis[0];
 
     const select = document.getElementById("ufSelect");
@@ -261,29 +273,130 @@
       .join("");
     select.value = UF;
     select.addEventListener("change", () => {
-      UF = select.value;
-      // Limpa a malha/nomes do IBGE em cache: pertencem à UF anterior e não podem
-      // ser usados (nem transitoriamente, antes do novo fetch terminar) para a nova UF.
-      malhaMunicipios = null;
-      malhaMunicipiosUf = null;
-      codareaPorNome = null;
-      codareaPorNomeUf = null;
-      // Zera também as promessas em andamento: se um fetch da UF anterior ainda não
-      // terminou, isso libera garantirMalhaMunicipios()/garantirNomesMunicipios() para
-      // disparar um novo fetch já para a UF atual em vez de aguardar o antigo (que,
-      // mesmo assim, não conseguirá gravar em cache sob a UF errada -- ver guarda de
-      // "ufAlvo === UF" dentro dessas funções).
-      promessaMalha = null;
-      promessaNomes = null;
-      // O município filtrado pertence à UF anterior: mantê-lo faria
-      // setoresFiltrados() filtrar por um município inexistente na nova UF
-      // (mapa/cards/tabela vazios) e ainda bloquearia a promoção para o
-      // choropleth, que é guardada por !estado.municipio.
-      estado.municipio = "";
-      const inputBusca = document.getElementById("buscaMunicipio");
-      if (inputBusca) inputBusca.value = "";
-      limparGrafico();
-      carregarDados();
+      trocarUf(select.value);
+      sincronizarNavegacao("push");
+    });
+  }
+
+  // Troca a UF carregada. `slugMunicipio`, se informado, é selecionado assim que os
+  // setores da nova UF chegarem (navegação pelo histórico ou por link).
+  function trocarUf(novaUf, slugMunicipio = "") {
+    UF = novaUf;
+    document.getElementById("ufSelect").value = novaUf;
+    slugMunicipioPendente = slugMunicipio;
+    // Limpa a malha/nomes do IBGE em cache: pertencem à UF anterior e não podem
+    // ser usados (nem transitoriamente, antes do novo fetch terminar) para a nova UF.
+    malhaMunicipios = null;
+    malhaMunicipiosUf = null;
+    codareaPorNome = null;
+    codareaPorNomeUf = null;
+    // Zera também as promessas em andamento: se um fetch da UF anterior ainda não
+    // terminou, isso libera garantirMalhaMunicipios()/garantirNomesMunicipios() para
+    // disparar um novo fetch já para a UF atual em vez de aguardar o antigo (que,
+    // mesmo assim, não conseguirá gravar em cache sob a UF errada -- ver guarda de
+    // "ufAlvo === UF" dentro dessas funções).
+    promessaMalha = null;
+    promessaNomes = null;
+    // O município filtrado pertence à UF anterior: mantê-lo faria
+    // setoresFiltrados() filtrar por um município inexistente na nova UF
+    // (mapa/cards/tabela vazios) e ainda bloquearia a promoção para o
+    // choropleth, que é guardada por !estado.municipio.
+    estado.municipio = "";
+    const inputBusca = document.getElementById("buscaMunicipio");
+    if (inputBusca) inputBusca.value = "";
+    limparGrafico();
+    carregarDados();
+  }
+
+  // ------------------------------------------------------------ navegação
+  // Estado navegável na URL: `#/<uf>` (estado inteiro) ou `#/<uf>/<slug-do-município>`.
+  // Toda ação do usuário grava uma entrada (pushState), então Voltar/Avançar do
+  // navegador percorrem as seleções; o popstate reaplica o estado e, como a URL já
+  // coincide, sincronizarNavegacao() não grava entrada nova (sem loop).
+  let slugMunicipioPendente = "";
+  let ufCarregada = null;
+
+  function slugMunicipio(nome) {
+    return normalizarNome(nome).replace(/ /g, "-");
+  }
+
+  function lerNavegacaoDaUrl() {
+    const partes = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+    if (!partes.length) return null;
+    try {
+      return { uf: partes[0].toLowerCase(), slugMunicipio: decodeURIComponent(partes[1] || "").toLowerCase() };
+    } catch (e) {
+      return { uf: partes[0].toLowerCase(), slugMunicipio: "" };
+    }
+  }
+
+  function hashAtual() {
+    // Enquanto um município vindo da URL aguarda os setores, ele ainda faz parte do estado.
+    const slug = estado.municipio ? slugMunicipio(estado.municipio) : slugMunicipioPendente;
+    return `#/${UF}` + (slug ? `/${slug}` : "");
+  }
+
+  function sincronizarNavegacao(modo) {
+    const hash = hashAtual();
+    if (location.hash !== hash) {
+      try {
+        if (modo === "push") history.pushState(null, "", hash);
+        else history.replaceState(null, "", hash);
+      } catch (e) {
+        // history indisponível (sandbox/iframe): a navegação na tela continua funcionando.
+      }
+    }
+    renderizarTrilha();
+  }
+
+  function municipioPorSlug(slug) {
+    return opcoesMunicipios.find(m => slugMunicipio(m) === slug) || "";
+  }
+
+  function renderizarTrilha() {
+    const trilha = document.getElementById("trilha");
+    const siglaUf = escaparHtml(UF.toUpperCase());
+    const voltar = document.getElementById("botaoVoltar");
+    voltar.hidden = !estado.municipio;
+    trilha.innerHTML = estado.municipio
+      ? `<li><a href="#/${escaparHtml(UF)}" data-nivel="uf">${siglaUf}</a></li>` +
+        `<li aria-current="page">${escaparHtml(estado.municipio)}</li>`
+      : `<li aria-current="page">${siglaUf} · estado inteiro</li>`;
+  }
+
+  function subirParaEstado(ev) {
+    if (ev) ev.preventDefault();
+    if (!estado.municipio) return;
+    document.getElementById("buscaMunicipio").value = "";
+    limparMunicipio();
+  }
+
+  function configurarNavegacao() {
+    document.getElementById("botaoVoltar").addEventListener("click", subirParaEstado);
+    document.getElementById("trilha").addEventListener("click", ev => {
+      if (ev.target.closest("a[data-nivel='uf']")) subirParaEstado(ev);
+    });
+    window.addEventListener("popstate", () => {
+      const alvo = lerNavegacaoDaUrl();
+      const uf = alvo && ufsDisponiveis.includes(alvo.uf) ? alvo.uf : ufsDisponiveis[0];
+      const slug = alvo ? alvo.slugMunicipio : "";
+      if (uf !== UF) {
+        trocarUf(uf, slug);
+        renderizarTrilha();
+        return;
+      }
+      if (ufCarregada !== UF) {
+        // Mesma UF, mas os setores ainda não chegaram: sem a lista de municípios não
+        // dá para resolver o slug agora; carregarDados() aplica quando terminar.
+        slugMunicipioPendente = slug;
+        return;
+      }
+      const nome = slug ? municipioPorSlug(slug) : "";
+      if (nome && nome !== estado.municipio) selecionarMunicipio(nome);
+      else if (!nome && estado.municipio) {
+        document.getElementById("buscaMunicipio").value = "";
+        limparMunicipio();
+      } else sincronizarNavegacao("replace");
     });
   }
 
@@ -404,6 +517,7 @@
     setoresGeoJSON = setoresCarregados;
     series = seriesCarregadas;
     previsao = previsaoCarregada;
+    ufCarregada = ufAlvo;
 
     const detalheFonte = meta.fonte === "openmeteo"
       ? "Open-Meteo, consulta direta por setor"
@@ -411,8 +525,18 @@
     renderizarSelo(meta, detalheFonte);
 
     popularBuscaMunicipios();
+    // Município vindo da URL/histórico: resolve o slug agora que há lista. Slug
+    // desconhecido (link antigo, município sem setor) cai no estado inteiro, e a URL
+    // é corrigida com replaceState para não deixar um endereço que não bate com a tela.
+    if (slugMunicipioPendente) {
+      estado.municipio = municipioPorSlug(slugMunicipioPendente);
+      slugMunicipioPendente = "";
+      document.getElementById("buscaMunicipio").value = estado.municipio;
+    }
     inicializarMapa();
     renderizarTudo();
+    if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
+    sincronizarNavegacao("replace");
 
     // Malha/nomes do IBGE não bloqueiam o primeiro render (cards/tabela/mapa já saem
     // com os dados locais); quando chegam, promovem o mapa para o choropleth municipal.
@@ -705,12 +829,17 @@
     if (!setoresGeoJSON) return;
     renderizarTudo();
     atualizarGraficoParaMunicipio(nome);
+    sincronizarNavegacao("push");
   }
 
   function limparMunicipio() {
+    const tinhaMunicipio = Boolean(estado.municipio);
     estado.municipio = "";
+    slugMunicipioPendente = "";
     if (setoresGeoJSON) renderizarTudo();
     limparGrafico();
+    // A busca chama isto a cada tecla com o campo vazio; só grava histórico quando algo mudou.
+    sincronizarNavegacao(tinhaMunicipio ? "push" : "replace");
   }
 
   function encontrarCodigoEstacao(nomeMunicipio) {
@@ -1290,6 +1419,7 @@
   montarTicks();
   document.getElementById("botaoTema").addEventListener("click", alternarTema);
   configurarBuscaMunicipios();
+  configurarNavegacao();
 
   carregarUfsDisponiveis().then(carregarDados);
 })();
