@@ -12,6 +12,9 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+### FIXES
+- fix(cprm): ingestão incremental sem setores novos não quebra mais com `ValueError`
+
 ### CHORE
 - chore(deps): atualiza `ruff` de >=0.14.0 para >=0.16.6
 

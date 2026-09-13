@@ -121,6 +121,9 @@ def fetch_setores_risco(
 
     if not features:
         logger.warning("Nenhum setor de risco encontrado para UF=%s (where_extra=%r)", uf_norm, where_extra)
+        # from_features([]) lança ValueError (sem coluna de geometria); na ingestão
+        # incremental "nada novo desde o último mês" é o caso comum, não um erro.
+        return gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
 
     gdf = gpd.GeoDataFrame.from_features(features, crs="EPSG:4326")
     return gdf

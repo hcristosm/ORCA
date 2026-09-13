@@ -163,6 +163,21 @@ def test_ingerir_uf_grava_manifesto_apos_primeira_ingestao(tmp_path: Path):
 
 
 @responses.activate
+def test_fetch_setores_risco_sem_features_retorna_vazio_sem_quebrar():
+    responses.add(
+        responses.GET,
+        FEATURE_LAYER_URL,
+        json={"type": "FeatureCollection", "features": [], "properties": {"exceededTransferLimit": False}},
+        status=200,
+    )
+
+    gdf = fetch_setores_risco("SP", where_extra="objectid > 2")
+
+    assert gdf.empty
+    assert gdf.crs == "EPSG:4326"
+
+
+@responses.activate
 def test_ingerir_uf_segunda_chamada_usa_where_incremental_e_mescla(tmp_path: Path):
     output = tmp_path / "risco_sp.gpkg"
     responses.add(
