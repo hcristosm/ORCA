@@ -761,7 +761,15 @@
 
   function inicializarMapa() {
     clearTimeout(idAgendaSetoresCompleto);
-    if (mapa) { mapa.remove(); mapa = null; camadaSetores = null; camadaChoropleth = null; camadaSetoresTodos = null; }
+    if (mapa) {
+      // Leaflet 1.9.4 agenda o fim da animação de zoom num setTimeout de 250ms que
+      // remove() não cancela; se o mapa for recriado nesse intervalo (Voltar/Avançar
+      // rápido, troca de UF logo após um fitBounds), o handler roda sobre o mapa
+      // removido e lança "_leaflet_pos". O handler sai cedo sem _animatingZoom.
+      mapa._animatingZoom = false;
+      mapa.remove();
+      mapa = null; camadaSetores = null; camadaChoropleth = null; camadaSetoresTodos = null;
+    }
     mapa = L.map("mapa");
     // Base neutralizada por filtro CSS (ver .leaflet-tile-pane no style.css): o
     // basemap é fundo, o dado é figura, nos dois temas e sem depender de chave.
