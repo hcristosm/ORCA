@@ -1,0 +1,47 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-09-15T20:00:00+00:00",
+  "total_setores": 356,
+  "total_municipios": 28,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-09-15T20:34:57.220473+00:00",
+  "cprm": {
+    "ingerido_em": "2026-09-15T19:37:48.375774+00:00",
+    "setor_mais_recente": "1970-01-01"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-09-15T20:00:00+00:00",
+    "consultado_em": "2026-09-15T20:34:57.220473+00:00"
+  },
+  "municipios": [
+    "ALTA FLORESTA D'OESTE",
+    "ALTO ALEGRE DOS PARECIS",
+    "ALVORADA D'OESTE",
+    "ARIQUEMES",
+    "BURITIS",
+    "CACOAL",
+    "CANDEIAS DO JAMARI",
+    "CHUPINGUAIA",
+    "COLORADO DO OESTE",
+    "COSTA MARQUES",
+    "ESPIGÃO D'OESTE",
+    "GUAJARÁ-MIRIM",
+    "ITAPUÃ DO OESTE",
+    "JARU",
+    "JI-PARANÁ",
+    "MACHADINHO D'OESTE",
+    "MINISTRO ANDREAZZA",
+    "NOVA BRASILÂNDIA D'OESTE",
+    "NOVA MAMORÉ",
+    "OURO PRETO DO OESTE",
+    "PARECIS",
+    "PIMENTA BUENO",
+    "PIMENTEIRAS DO OESTE",
+    "PORTO VELHO",
+    "ROLIM DE MOURA",
+    "SANTA LUZIA D'OESTE",
+    "TEIXEIRÓPOLIS",
+    "VILHENA"
+  ]
+}
