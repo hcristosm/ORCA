@@ -956,6 +956,27 @@
   }
 
   const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const RAINVIEWER_API_URL = "https://api.rainviewer.com/public/weather-maps.json";
+  let promessaRadarRainViewer = null;
+
+  // Radar RainViewer é overlay opcional (mostra chuva em andamento, sem
+  // relação com os dados de setor/série): busca uma vez por sessão e, se a
+  // API estiver fora do ar, some do controle de camadas em vez de quebrar o
+  // mapa -- coerente com "funcionar sem paus" (ver CLAUDE.md).
+  function carregarRadarRainViewer() {
+    if (!promessaRadarRainViewer) {
+      promessaRadarRainViewer = fetch(RAINVIEWER_API_URL)
+        .then(r => r.json())
+        .then(dados => {
+          const frames = dados.radar && dados.radar.past;
+          if (!frames || !frames.length) return null;
+          const ultimo = frames[frames.length - 1];
+          return `${dados.host}${ultimo.path}/256/{z}/{x}/{y}/2/1_1.png`;
+        })
+        .catch(() => null);
+    }
+    return promessaRadarRainViewer;
+  }
 
   function inicializarMapa() {
     clearTimeout(idAgendaSetoresCompleto);
@@ -985,7 +1006,16 @@
 
     camadaSetoresTodos = L.layerGroup();
     const overlays = { "Setores do estado inteiro": camadaSetoresTodos };
-    L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
+    const controleCamadas = L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
+
+    const mapaDesteInit = mapa;
+    carregarRadarRainViewer().then(urlTemplate => {
+      // `mapa` pode já ter sido recriado (troca de UF, Voltar/Avançar) antes
+      // da RainViewer responder; nesse caso o controle antigo não existe mais.
+      if (!urlTemplate || mapa !== mapaDesteInit) return;
+      const camadaRadar = L.tileLayer(urlTemplate, { opacity: 0.6, attribution: "© RainViewer" });
+      controleCamadas.addOverlay(camadaRadar, "Chuva agora (radar)");
+    });
 
     mapa.on("overlayadd", ev => {
       if (ev.name === "Setores do estado inteiro") { renderizarSetoresCompletoEstado(); atualizarLegenda(); }
