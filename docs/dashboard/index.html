@@ -13,9 +13,9 @@
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
   style-src 'self' 'unsafe-inline' https://unpkg.com;
-  img-src 'self' data: https://*.tile.openstreetmap.org;
+  img-src 'self' data: https://*.tile.openstreetmap.org https://tilecache.rainviewer.com;
   font-src 'self';
-  connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com;
+  connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com https://api.rainviewer.com;
   object-src 'none';
   base-uri 'self';
   frame-ancestors 'none';
@@ -971,9 +971,12 @@
           const frames = dados.radar && dados.radar.past;
           if (!frames || !frames.length) return null;
           const ultimo = frames[frames.length - 1];
-          return `${dados.host}${ultimo.path}/256/{z}/{x}/{y}/2/1_1.png`;
+          // Esquema de cor 6 = paleta clássica de radar (verde/amarelo/vermelho);
+          // o esquema 2 (padrão da RainViewer) é um azul apagado, quase invisível
+          // sobre o basemap neutralizado em cinza (ver style.css).
+          return `${dados.host}${ultimo.path}/256/{z}/{x}/{y}/6/1_1.png`;
         })
-        .catch(() => null);
+        .catch(e => { console.warn("RainViewer indisponível, camada de radar omitida:", e); return null; });
     }
     return promessaRadarRainViewer;
   }
@@ -1013,7 +1016,13 @@
       // `mapa` pode já ter sido recriado (troca de UF, Voltar/Avançar) antes
       // da RainViewer responder; nesse caso o controle antigo não existe mais.
       if (!urlTemplate || mapa !== mapaDesteInit) return;
-      const camadaRadar = L.tileLayer(urlTemplate, { opacity: 0.6, attribution: "© RainViewer" });
+      // maxNativeZoom: a RainViewer devolve uma tile "zoom not supported" (200 OK,
+      // mas é uma imagem de aviso) acima do zoom 12; sem o teto o Leaflet pediria
+      // essas tiles como se fossem dado real. Acima de 12 ele amplia a última tile
+      // nativa em vez de buscar uma nova.
+      const camadaRadar = L.tileLayer(urlTemplate, {
+        opacity: 0.6, attribution: "© RainViewer", maxNativeZoom: 12,
+      });
       controleCamadas.addOverlay(camadaRadar, "Chuva agora (radar)");
     });
 
