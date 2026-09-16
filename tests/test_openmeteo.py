@@ -78,6 +78,32 @@ def test_fetch_precipitacao_batch_falha_persistente_levanta_erro():
 
 
 @responses.activate
+def test_fetch_precipitacao_batch_cai_para_pirate_weather_quando_open_meteo_esgota(monkeypatch):
+    monkeypatch.setenv("PIRATE_WEATHER_API_KEY", "chave-teste")
+    responses.add(responses.POST, FORECAST_URL, status=500)
+    responses.add(
+        responses.GET,
+        "https://api.pirateweather.net/forecast/chave-teste/-23.5,-46.6",
+        json={"hourly": {"data": [{"time": 1786406400, "precipIntensity": 2.5}]}},
+        status=200,
+    )
+
+    series = fetch_precipitacao_batch([(-23.5, -46.6)], max_retries=2, backoff_factor=0.01)
+
+    assert len(series) == 1
+    assert series[0]["chuva_mm"].iloc[0] == 2.5
+
+
+@responses.activate
+def test_fetch_precipitacao_batch_sem_chave_pirate_weather_nao_usa_fallback(monkeypatch):
+    monkeypatch.delenv("PIRATE_WEATHER_API_KEY", raising=False)
+    responses.add(responses.POST, FORECAST_URL, status=500)
+
+    with pytest.raises(OpenMeteoFetchError):
+        fetch_precipitacao_batch([(-23.5, -46.6)], max_retries=2, backoff_factor=0.01)
+
+
+@responses.activate
 def test_fetch_precipitacao_batch_divide_em_lotes_e_preserva_ordem():
     # Os 2 lotes são disparados concorrentemente, então a resposta de cada um
     # precisa depender do CONTEÚDO do request (quantos pontos pediu), não da

@@ -31,11 +31,18 @@ O parâmetro opcional `cache` (`src/storage_cache_openmeteo.py`) encolhe o
 exportação consulta a janela inteira ao vivo, o que também é viável porque o
 custo por chamada é baixo — não há aqui o problema de "baixar o ano inteiro
 de novo" que motivou a ingestão incremental do INMET.
+
+Se um lote esgota `max_retries` e a env var `PIRATE_WEATHER_API_KEY` está
+definida, cai para a Pirate Weather como último recurso (1 chamada por ponto,
+sem lote — por isso só entra em jogo quando a Open-Meteo já falhou de vez,
+nunca como rotina). Sem a env var, o comportamento é o de sempre: o lote
+falha e propaga `OpenMeteoFetchError`.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -51,6 +58,14 @@ logger = logging.getLogger(__name__)
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 TAMANHO_LOTE_PADRAO = 50
 LOTE_WORKERS_PADRAO = 5
+
+# Fallback de última instância: só entra em jogo quando a Open-Meteo já
+# esgotou `max_retries` para um lote inteiro. A Pirate Weather não tem
+# endpoint de lote (1 ponto por chamada), então isso é caro e só faz sentido
+# como paraquedas raro, não como substituto de rotina. Sem a env var, o
+# comportamento é idêntico a hoje: o lote falha e propaga OpenMeteoFetchError.
+PIRATE_WEATHER_API_KEY_ENV = "PIRATE_WEATHER_API_KEY"
+PIRATE_WEATHER_URL = "https://api.pirateweather.net/forecast/{chave}/{lat},{lon}"
 
 # Tetos documentados da Open-Meteo são 600/min e 5.000/hora; ficamos abaixo
 # disso de propósito porque o cliente já observou 429 mesmo em cadência
@@ -170,6 +185,14 @@ def _post_lote(
             limiter.release()
 
     if resposta_ok is None:
+        chave = os.environ.get(PIRATE_WEATHER_API_KEY_ENV)
+        if chave and variaveis_hourly == ["precipitation"]:
+            logger.warning(
+                "Open-Meteo esgotou %d tentativas para lote de %d pontos; "
+                "usando Pirate Weather como fallback.",
+                max_retries, len(pontos),
+            )
+            return _post_lote_pirate_weather(pontos, chave, timeout, session)
         raise OpenMeteoFetchError(
             f"Não foi possível consultar a Open-Meteo após {max_retries} tentativas "
             f"(lote de {len(pontos)} pontos)"
@@ -181,6 +204,41 @@ def _post_lote(
     # normalizar aqui, `_fetch_variavel_batch` (que sempre espera uma lista
     # de objetos) quebra iterando as chaves do dict como se fossem itens.
     return payload if isinstance(payload, list) else [payload]
+
+
+def _post_lote_pirate_weather(
+    pontos: list[tuple[float, float]],
+    chave: str,
+    timeout: float,
+    session: requests.Session,
+) -> list[dict]:
+    """Busca `pontos` na Pirate Weather, 1 chamada por ponto (sem endpoint de lote).
+
+    Só cobre `precipitation`: `precipIntensity` (mm/h, `units=si`) é o campo
+    mais próximo do "precipitation" horário da Open-Meteo, mas não é uma
+    métrica idêntica — é uma aproximação de emergência, não um substituto
+    equivalente.
+    """
+    def _buscar(ponto: tuple[float, float]) -> dict:
+        lat, lon = ponto
+        resp = session.get(
+            PIRATE_WEATHER_URL.format(chave=chave, lat=lat, lon=lon),
+            params={"exclude": "currently,minutely,daily,alerts,flags", "units": "si"},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        dados = resp.json().get("hourly", {}).get("data", [])
+        return {
+            "hourly": {
+                "time": [
+                    pd.Timestamp(item["time"], unit="s", tz="UTC").strftime("%Y-%m-%dT%H:%M")
+                    for item in dados
+                ],
+                "precipitation": [item.get("precipIntensity", 0.0) for item in dados],
+            }
+        }
+
+    return [_buscar(ponto) for ponto in pontos]
 
 
 def _serie_do_gap(
