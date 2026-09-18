@@ -59,8 +59,18 @@ publicado no GitHub Pages e atualizado todo dia por cron.
 - Deixa o visitante subir uma área própria (GeoJSON, KML ou shapefile em `.zip`)
   e ver a chuva calculada pra ela, tudo dentro do navegador, sem enviar o arquivo
   pra lugar nenhum.
+- Busca de município em todo o Brasil (não só na UF selecionada): escolher uma
+  cidade de outro estado troca a UF sozinho. Navegação por UF/município fica na
+  URL (`#/<uf>/<município>`), com Voltar/Avançar do navegador, link
+  compartilhável e trilha clicável.
+- Selo de atualização por fonte (setores da CPRM/SGB e chuva), em horário de
+  Brasília, com idade do dado e alerta quando algo passa do ciclo esperado.
+- Camada opcional de radar de chuva (RainViewer) no mapa.
+- Se a Open-Meteo esgotar as tentativas, cai pra Pirate Weather como fallback
+  (exige `PIRATE_WEATHER_API_KEY`; sem a chave, o ponto fica sem chuva em vez de
+  travar o lote).
 - Roda dois workflows separados: setores uma vez por mês, chuva uma vez por dia.
-- 174 testes com HTTP mockado, rodando no CI a cada push.
+- 182 testes com HTTP mockado, rodando no CI a cada push.
 
 ## Fontes de dados
 
@@ -237,11 +247,12 @@ de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
 pytest
 ```
 
-174 testes cobrindo ingestão (ArcGIS REST, paginação, incremental por marcador
-d'água, retry e fallback), parsing do CSV do INMET e do XML da ANA, lotes e
-retry da Open-Meteo, cache SQLite, grade espacial nacional, cruzamento espacial e
-temporal, previsão, exportação nas duas fontes e a mescla não-destrutiva com o
-`gh-pages`. Toda chamada de rede é mockada, então a suíte roda sem internet.
+182 testes cobrindo ingestão (ArcGIS REST, paginação, incremental por marcador
+d'água, retry e fallback pra Pirate Weather), parsing do CSV do INMET e do XML
+da ANA, lotes e retry da Open-Meteo, cache SQLite, grade espacial nacional,
+cruzamento espacial e temporal, previsão, exportação nas duas fontes e a mescla
+não-destrutiva com o `gh-pages`. Toda chamada de rede é mockada, então a suíte
+roda sem internet.
 
 O dashboard em si (HTML e JS) não tem teste automatizado, a validação é manual.
 
