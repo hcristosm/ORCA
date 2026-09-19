@@ -95,6 +95,11 @@ workflows também compartilham duas composite actions em `.github/actions/`:
 distingue "não existe" de "falha de rede" — o output `motivo` existe para isso, e
 colapsar os dois casos é o que faria a guarda aprovar sobrescrever no escuro).
 
+Depois do deploy, o passo "Conferir dashboard no ar" espera a URL pública servir o
+`versao.txt` com o id do run e compara a contagem de UFs no ar com a publicada.
+Contar UFs sozinho não prova nada — o deploy de ontem também tem 27; é o marcador
+que prova que o site é deste run.
+
 ## Branches
 
 - `main` — código.
