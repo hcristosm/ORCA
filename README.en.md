@@ -193,6 +193,11 @@ guards protect this merge, and every rejection fails the run:
 - rejects an empty set, an unreadable published count, or a regression in
   total states versus what's already live.
 
+After deploy, a smoke test waits for the public URL to serve that run's deploy
+(a `versao.txt` marker holding the run id, read past the CDN cache) and checks
+it serves the same number of states that was just published. If the Pages build
+fails or the site serves something else, the run goes red.
+
 These guards exist because on 2026-08-22 and 2026-08-23 two runs published 1
 and 2 states out of 27 while closing as `success`, with CPRM ingestion
 failing on timeout.
@@ -215,10 +220,6 @@ failing on timeout.
   the Open-Meteo cache blob (~45MB) that changes daily. Getting the cache
   out of there is a prerequisite for dropping `force_orphan`. Until then the
   protection is preventive, not reversible.
-- **No staleness badge and no post-deploy smoke test.** The dashboard shows
-  when it was generated, but doesn't highlight when the data crosses a
-  cycle, and nothing checks after deploy whether the public URL actually
-  serves all 27 states.
 - **Open-Meteo rate-limits by volume, not just frequency.** Tested with a
   real request: a single POST with SP's ~900 coordinates works fine, but
   repeating that volume consistently triggers `429`.
@@ -263,8 +264,6 @@ The bigger decisions were tested with real requests, not assumed:
 
 - Get the Open-Meteo cache out of `gh-pages` to drop `force_orphan` and
   recover the published branch's history.
-- Staleness badge on the dashboard and a smoke test against the public URL
-  after deploy.
 - Municipal fallback: city-level layers on ArcGIS REST. Investigated for
   Itaquaquecetuba/SP on 2026-08-14, no confirmed public endpoint. Pending a
   pilot municipality with open data.

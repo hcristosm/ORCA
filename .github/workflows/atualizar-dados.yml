@@ -213,8 +213,13 @@ jobs:
         # pioraria as coisas, deixando o gh-pages sem cache nenhum). Só não
         # publica acima de 80MB (o GitHub rejeita push acima de 100MB; melhor
         # publicar sem cache do que quebrar o deploy do dashboard inteiro).
+        #
+        # Grava também o marcador `versao.txt` com o id deste run: é o que o
+        # teste de fumaça pós-deploy procura na URL pública para saber que o
+        # que está no ar é ESTE deploy, e não o de ontem (que também tem 27 UFs).
         if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
         run: |
+          echo "$GITHUB_RUN_ID" > docs/dashboard/versao.txt
           mkdir -p docs/dashboard/cache
           if [ -f data/cache/openmeteo.sqlite ]; then
             cp data/cache/openmeteo.sqlite docs/dashboard/cache/openmeteo.sqlite
@@ -242,3 +247,39 @@ jobs:
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
           commit_message: "chore(dashboard): publicar dados atualizados"
+
+      - name: Conferir dashboard no ar (teste de fumaça)
+        # A guarda protege ANTES de publicar; nada conferia DEPOIS se a URL
+        # pública serve mesmo o que foi publicado. O push no gh-pages só vira
+        # site depois do build do Pages (legacy, fora deste job), então espera
+        # o `versao.txt` deste run aparecer -- até ~10 min -- e só então compara
+        # a contagem de UFs no ar com a que acabou de ser publicada.
+        #
+        # `?t=` fura o cache do CDN (max-age=600): sem ele, o teste leria a
+        # versão de ontem e passaria sem provar nada.
+        #
+        # Falhar aqui não desfaz nada (force_orphan não tem histórico), mas deixa
+        # o run vermelho: "publicou e o site não mostra" não pode fechar verde.
+        if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
+        shell: bash -eo pipefail {0}
+        run: |
+          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
+          contar='import json,sys; print(len(json.load(sys.stdin)))'
+          esperado=$(python3 -c "$contar" < docs/dashboard/data/ufs_disponiveis.json)
+
+          for tentativa in $(seq 1 40); do
+            versao=$(curl -fsS "${url}versao.txt?t=${GITHUB_RUN_ID}-${tentativa}" 2>/dev/null || true)
+            if [ "$versao" = "$GITHUB_RUN_ID" ]; then
+              no_ar=$(curl -fsS "${url}data/ufs_disponiveis.json?t=${GITHUB_RUN_ID}-${tentativa}" | python3 -c "$contar") || no_ar=""
+              curl -fsS -o /dev/null "${url}?t=${GITHUB_RUN_ID}" || { echo "::error::Deploy no ar, mas ${url} não responde 200."; exit 1; }
+              if [ "$no_ar" != "$esperado" ]; then
+                echo "::error::Deploy no ar, mas a URL pública serve ${no_ar:-índice ilegível} UF(s); o publicado foram ${esperado}."
+                exit 1
+              fi
+              echo "Dashboard no ar com o deploy deste run: ${no_ar} UF(s) em ${url}"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Após ~10 min a URL pública ainda não serve o deploy deste run (versao.txt='${versao:-ausente}', esperado ${GITHUB_RUN_ID}). O build do Pages pode ter falhado -- confira a aba Actions > pages build and deployment."
+          exit 1
