@@ -62,7 +62,7 @@ published on GitHub Pages and refreshed daily by cron.
   and see rainfall calculated for it, entirely in the browser, without
   uploading the file anywhere.
 - Runs two separate workflows: sectors once a month, rainfall once a day.
-- 174 tests with mocked HTTP, running in CI on every push.
+- 144 tests with mocked HTTP, running in CI on every push.
 
 ## Data sources
 
