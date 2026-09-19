@@ -1,0 +1,20 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-09-19T12:00:00+00:00",
+  "total_setores": 44,
+  "total_municipios": 1,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-09-19T12:48:18.675552+00:00",
+  "cprm": {
+    "ingerido_em": "2026-09-15T19:36:52.606838+00:00",
+    "setor_mais_recente": "1970-01-01"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-09-19T12:00:00+00:00",
+    "consultado_em": "2026-09-19T12:48:18.675552+00:00"
+  },
+  "municipios": [
+    "BRASÍLIA"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-09-19T13:00:00+00:00",
+  "total_setores": 66,
+  "total_municipios": 3,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-09-19T13:06:30.631437+00:00",
+  "cprm": {
+    "ingerido_em": "2026-09-15T19:37:49.347273+00:00",
+    "setor_mais_recente": "1970-01-01"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-09-19T13:00:00+00:00",
+    "consultado_em": "2026-09-19T13:06:30.631437+00:00"
+  },
+  "municipios": [
+    "BOA VISTA",
+    "CARACARAÍ",
+    "PACARAIMA"
+  ]
+}

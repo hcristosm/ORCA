@@ -1,0 +1,37 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-09-19T12:00:00+00:00",
+  "total_setores": 84,
+  "total_municipios": 18,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-09-19T12:55:10.390610+00:00",
+  "cprm": {
+    "ingerido_em": "2026-09-15T19:37:16.394571+00:00",
+    "setor_mais_recente": "1970-01-01"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-09-19T12:00:00+00:00",
+    "consultado_em": "2026-09-19T12:55:10.390610+00:00"
+  },
+  "municipios": [
+    "ANASTÁCIO",
+    "AQUIDAUANA",
+    "BATAGUASSU",
+    "BATAYPORÃ",
+    "BELA VISTA",
+    "BONITO",
+    "CAMAPUÃ",
+    "CAMPO GRANDE",
+    "CORUMBÁ",
+    "COXIM",
+    "DOURADOS",
+    "GUIA LOPES DA LAGUNA",
+    "IVINHEMA",
+    "LADÁRIO",
+    "MIRANDA",
+    "NIOAQUE",
+    "PONTA PORÃ",
+    "PORTO MURTINHO"
+  ]
+}

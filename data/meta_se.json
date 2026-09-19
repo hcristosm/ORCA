@@ -1,0 +1,46 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-09-19T13:00:00+00:00",
+  "total_setores": 262,
+  "total_municipios": 27,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-09-19T13:08:40.913696+00:00",
+  "cprm": {
+    "ingerido_em": "2026-09-15T19:38:15.788768+00:00",
+    "setor_mais_recente": "1970-01-01"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-09-19T13:00:00+00:00",
+    "consultado_em": "2026-09-19T13:08:40.913696+00:00"
+  },
+  "municipios": [
+    "ARACAJU",
+    "BARRA DOS COQUEIROS",
+    "BREJO GRANDE",
+    "CANINDÉ DE SÃO FRANCISCO",
+    "CARMÓPOLIS",
+    "DIVINA PASTORA",
+    "ESTÂNCIA",
+    "ILHA DAS FLORES",
+    "ITABAIANA",
+    "ITABAIANINHA",
+    "ITAPORANGA D'AJUDA",
+    "LAGARTO",
+    "LARANJEIRAS",
+    "MARUIM",
+    "MONTE ALEGRE DE SERGIPE",
+    "NEÓPOLIS",
+    "NOSSA SENHORA DO SOCORRO",
+    "PACATUBA",
+    "PORTO DA FOLHA",
+    "POÇO REDONDO",
+    "RIACHUELO",
+    "SANTANA DO SÃO FRANCISCO",
+    "SANTO AMARO DAS BROTAS",
+    "SIMÃO DIAS",
+    "SÃO CRISTÓVÃO",
+    "TOBIAS BARRETO",
+    "UMBAÚBA"
+  ]
+}

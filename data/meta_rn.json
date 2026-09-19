@@ -1,0 +1,42 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-09-19T12:00:00+00:00",
+  "total_setores": 188,
+  "total_municipios": 23,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-09-19T13:02:15.207493+00:00",
+  "cprm": {
+    "ingerido_em": "2026-09-15T19:37:42.516652+00:00",
+    "setor_mais_recente": "1970-01-01"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-09-19T12:00:00+00:00",
+    "consultado_em": "2026-09-19T13:02:15.207493+00:00"
+  },
+  "municipios": [
+    "ALTO DO RODRIGUES",
+    "APODI",
+    "AÇU",
+    "CAICÓ",
+    "CANGUARETAMA",
+    "CARNAUBAIS",
+    "CEARÁ-MIRIM",
+    "FLORÂNIA",
+    "GOIANINHA",
+    "GUAMARÉ",
+    "IPANGUAÇU",
+    "ITAJÁ",
+    "JARDIM DE PIRANHAS",
+    "JUCURUTU",
+    "MACAÍBA",
+    "MOSSORÓ",
+    "PARNAMIRIM",
+    "PATU",
+    "PENDÊNCIAS",
+    "PORTO DO MANGUE",
+    "SERRA NEGRA DO NORTE",
+    "SÃO GONÇALO DO AMARANTE",
+    "VÁRZEA"
+  ]
+}

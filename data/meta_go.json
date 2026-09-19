@@ -1,0 +1,38 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-09-19T12:00:00+00:00",
+  "total_setores": 272,
+  "total_municipios": 19,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-09-19T12:53:04.125734+00:00",
+  "cprm": {
+    "ingerido_em": "2026-09-15T19:37:01.108007+00:00",
+    "setor_mais_recente": "1970-01-01"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-09-19T12:00:00+00:00",
+    "consultado_em": "2026-09-19T12:53:04.125734+00:00"
+  },
+  "municipios": [
+    "ALEXÂNIA",
+    "ANÁPOLIS",
+    "APARECIDA DE GOIÂNIA",
+    "CALDAS NOVAS",
+    "CERES",
+    "FORMOSA",
+    "GOIÁS",
+    "GOIÂNIA",
+    "ITAJÁ",
+    "JATAÍ",
+    "LAGOA SANTA",
+    "MINEIROS",
+    "NOVO GAMA",
+    "PIRENÓPOLIS",
+    "QUIRINÓPOLIS",
+    "SANTA HELENA DE GOIÁS",
+    "SANTA RITA DO ARAGUAIA",
+    "SENADOR CANEDO",
+    "SILVÂNIA"
+  ]
+}
