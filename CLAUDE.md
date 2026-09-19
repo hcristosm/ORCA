@@ -1,7 +1,7 @@
 # ORCA
 
 Dashboard estático que cruza setorização de risco geológico (CPRM/SGB) com chuva
-recente (INMET/ANA/Open-Meteo), para as 27 UFs. Sem backend: o pipeline Python
+recente (Open-Meteo), para as 27 UFs. Sem backend: o pipeline Python
 gera JSON/GeoJSON e o front-end estático em `docs/dashboard/` os consome.
 
 ## A prioridade é confiabilidade, não recursos novos
@@ -13,24 +13,25 @@ nova.** Ao mexer em ingestão, assuma que a fonte vai falhar e trate o caso.
 ## Fluxo de dados
 
 ```
-ingest/ ──→ data/*.gpkg, *.csv ──→ processing/ ──→ export/ ──→ docs/dashboard/data/
-(CPRM, INMET,     (local, fora     (cruzamento     (GeoJSON +      (publicado em
- ANA, Open-Meteo)  do git)          espacial)       JSON)           gh-pages)
+ingest/ ──→ data/*.gpkg ──→ processing/ ──→ export/ ──→ docs/dashboard/data/
+(CPRM,        (local, fora   (geometria     (GeoJSON +    (publicado em
+ Open-Meteo)   do git)        + chuva)       JSON)         gh-pages)
 ```
 
-- `src/ingest/` — um módulo por fonte: `cprm.py` (setores de risco, mensal),
-  `inmet.py` (chuva horária histórica), `ana.py` (estações telemétricas),
-  `openmeteo.py` (chuva por ponto, fonte padrão). `rate_limiter.py` é
-  compartilhado.
-- `src/processing/` — `cruzamento.py` liga setor↔chuva (centroides, estação mais
-  próxima), `grade_espacial.py` monta a grade adaptativa nacional,
-  `previsao.py` calcula a trajetória de 72h.
+- `src/ingest/` — um módulo por fonte: `cprm.py` (setores de risco, mensal) e
+  `openmeteo.py` (chuva por ponto, única fonte de chuva). `rate_limiter.py` é
+  compartilhado. **INMET e ANA foram removidos:** eram ~1.900 linhas que nenhum
+  workflow executava. Se precisar de chuva medida por estação de novo, é
+  reimplementar, não ressuscitar.
+- `src/processing/` — `cruzamento.py` dá os centroides (por setor e por
+  município) e acumula chuva numa janela, `grade_espacial.py` monta a grade
+  adaptativa nacional, `previsao.py` calcula a trajetória de 72h.
 - `src/export/` — `dashboard_data.py` exporta uma UF, `nacional.py` orquestra as 27
   com uma grade compartilhada.
 - `src/storage_cache_openmeteo.py` — cache SQLite incremental, sincronizado entre
   runs de CI via `gh-pages`. É o que evita reconsultar a Open-Meteo inteira todo dia.
 - `src/config.py` — **toda convenção de caminho mora aqui.** Nunca monte um caminho
-  de `data/` à mão; use `caminho_setores()`, `caminho_chuva()`, etc.
+  de `data/` à mão; use `caminho_setores()`, `caminho_manifesto_cprm()`, etc.
 
 ## Comandos
 
@@ -53,7 +54,6 @@ python -m src.cli atualizar-nacional --ufs SP,RJ        # diário, Open-Meteo
 
 # Por UF, uso manual
 python -m src.cli exportar-dashboard --uf SP
-python -m src.cli atualizar --uf SP --ano 2026
 ```
 
 ## Saídas e contratos do dashboard
@@ -63,7 +63,8 @@ Por UF, em `docs/dashboard/data/` (tudo em minúsculas):
 
 `ufs_disponiveis.json` lista as UFs publicadas e **guia o seletor do front-end** —
 é também a métrica da guarda anti-regressão (abaixo). O front-end é JS puro, sem
-build: `index.html`, `areas-customizadas.js`, `relatorio.js`.
+build: `index.html`, `comum.js` (carregado primeiro, expõe `window.ORCA`),
+`areas-customizadas.js`, `relatorio.js`.
 
 ## Publicação: a regra que não se quebra
 
@@ -86,6 +87,14 @@ visível. Uma guarda que recusasse em silêncio num cron diário poderia bloquea
 publicação por semanas sem ninguém notar. Se for mexer nesse passo, preserve as duas
 propriedades.
 
+A lógica mora em `scripts/conferir_publicacao.py`, compartilhada pelos dois
+workflows e coberta por `tests/test_conferir_publicacao.py` — **as duas
+propriedades têm teste; não as mude sem olhar esses testes primeiro.** Os
+workflows também compartilham duas composite actions em `.github/actions/`:
+`preparar-python` (setup + deps) e `baixar-branch` (busca uma branch remota e
+distingue "não existe" de "falha de rede" — o output `motivo` existe para isso, e
+colapsar os dois casos é o que faria a guarda aprovar sobrescrever no escuro).
+
 ## Branches
 
 - `main` — código.
@@ -100,4 +109,3 @@ propriedades.
 - Release: bump em `pyproject.toml` + entrada no CHANGELOG + tag `vX.Y.Z`. A tag
   dispara `release.yml`; confira que os artefatos existem, não só que o run passou.
 - `data/` e `docs/dashboard/data/` são ignorados pelo git — são gerados.
-- XML da ANA é parseado com `defusedxml`, nunca com `xml.etree` puro.

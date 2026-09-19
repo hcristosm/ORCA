@@ -5,14 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "orca"
 version = "1.1.0"
-description = "Dashboard estático que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (INMET/ANA)"
+description = "Dashboard estático que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (Open-Meteo)"
 requires-python = ">=3.11"
 dependencies = [
     "geopandas>=1.1.4",
     "shapely>=2.1.2",
     "requests>=2.34.2",
     "typer>=0.27.2",
-    "defusedxml>=0.7.1",
 ]
 
 [project.scripts]

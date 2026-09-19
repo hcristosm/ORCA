@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  const { escaparHtml, token } = window.ORCA;
+
   const LIMITE_AREAS = 5;
   const LIMITE_TAMANHO_BYTES = 10 * 1024 * 1024;
 
@@ -156,10 +158,6 @@
     if (typeof renderizarAreas === "function") renderizarAreas();
   }
 
-  function token(nome) {
-    return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
-  }
-
   const CORES_CLASSIFICACAO = { "alto": "--risco-alto", "muito alto": "--risco-muito-alto" };
 
   function corClassificacao(classificacao) {
@@ -174,12 +172,6 @@
 
   function formatarMm(valor) {
     return typeof valor === "number" ? `${valor.toFixed(1)}mm` : "—";
-  }
-
-  function escaparHtml(texto) {
-    const div = document.createElement("div");
-    div.textContent = texto;
-    return div.innerHTML;
   }
 
   function removerArea(id) {

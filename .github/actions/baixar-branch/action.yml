@@ -1,0 +1,125 @@
+name: Baixar branch
+description: >
+  Busca uma branch remota e, opcionalmente, extrai a árvore dela num
+  diretório. Distingue "branch não existe" de "falha de rede/git" e deixa
+  quem chama decidir se cada caso é fatal.
+
+inputs:
+  branch:
+    description: "Nome da branch remota (ex.: dados-base, gh-pages)."
+    required: true
+  destino:
+    description: >
+      Diretório onde extrair a árvore da branch. Vazio = só busca a ref,
+      sem extrair (quem chama lê arquivos específicos com `git show`).
+    required: false
+    default: ""
+  ausente-e-fatal:
+    description: >
+      "true" = branch inexistente aborta o passo; "false" = segue com
+      disponivel=false (1a execução, nada a preservar).
+    required: false
+    default: "false"
+  falha-e-fatal:
+    description: >
+      "true" = falha de rede/git aborta o passo. Deixe "true" quando a
+      ausência do conteúdo faria uma guarda aprovar sobrescrever dado bom;
+      "false" quando o conteúdo é só um empurrão inicial.
+    required: false
+    default: "true"
+  mensagem-ausente:
+    description: "Instrução extra na anotação de erro quando a branch não existe."
+    required: false
+    default: ""
+
+outputs:
+  disponivel:
+    description: '"true" se a branch foi buscada (e extraída, se `destino`).'
+    value: ${{ steps.baixar.outputs.disponivel }}
+  motivo:
+    description: >
+      "ok", "ausente" (branch não existe) ou "falha" (rede/git). Quem chama
+      PRECISA distinguir os dois últimos quando alimenta uma guarda
+      anti-regressão: "ausente" é legitimamente zero (1a execução, nada a
+      destruir); "falha" é estado indeterminado, e tratá-lo como zero
+      autorizaria sobrescrever o que está no ar no escuro.
+    value: ${{ steps.baixar.outputs.motivo }}
+
+runs:
+  using: composite
+  steps:
+    - id: baixar
+      # `git ls-remote --exit-code` devolve 2 para "nenhuma ref
+      # correspondente" (branch realmente não existe) e outros códigos (128,
+      # etc.) para falha de rede/autenticação. Tratar os dois como "não
+      # existe" faria uma intermitência de rede virar "nada a preservar" --
+      # e aí uma guarda anti-regressão aprovaria apagar o que está no ar.
+      # O `|| codigo=$?` é necessário porque o GitHub roda o script com
+      # `bash -e`: sem ele o próprio ls-remote falhando abortaria o passo
+      # antes de lermos `$?`.
+      #
+      # `bash -eo pipefail` porque o padrão do GitHub é `bash -e` SEM
+      # pipefail, e aí uma falha do `git archive` no meio de
+      # `git archive | tar -x` passaria batido (o tar sai 0 com entrada
+      # vazia).
+      shell: bash -eo pipefail {0}
+      env:
+        BRANCH: ${{ inputs.branch }}
+        DESTINO: ${{ inputs.destino }}
+        AUSENTE_E_FATAL: ${{ inputs.ausente-e-fatal }}
+        FALHA_E_FATAL: ${{ inputs.falha-e-fatal }}
+        MENSAGEM_AUSENTE: ${{ inputs.mensagem-ausente }}
+      run: |
+        indisponivel() {
+          echo "disponivel=false" >> "$GITHUB_OUTPUT"
+          echo "motivo=$2" >> "$GITHUB_OUTPUT"
+          exit "$1"
+        }
+
+        codigo=0
+        git ls-remote --exit-code origin "$BRANCH" > /dev/null 2>&1 || codigo=$?
+
+        if [ "$codigo" -eq 2 ]; then
+          if [ "$AUSENTE_E_FATAL" = "true" ]; then
+            echo "::error::Branch ${BRANCH} não existe. ${MENSAGEM_AUSENTE}"
+            indisponivel 1 ausente
+          fi
+          echo "Branch ${BRANCH} ainda não existe (1a execução); seguindo sem ela."
+          indisponivel 0 ausente
+        elif [ "$codigo" -ne 0 ]; then
+          msg="Falha ao verificar o branch ${BRANCH} (rede/git, código ${codigo}) -- não dá para distinguir de 'branch não existe'."
+          if [ "$FALHA_E_FATAL" = "true" ]; then
+            echo "::error::${msg} Abortando; NÃO rode a ingestão por causa disto, apenas tente de novo."
+            indisponivel 1 falha
+          fi
+          echo "${msg} Seguindo mesmo assim."
+          indisponivel 0 falha
+        fi
+
+        if ! git fetch origin "${BRANCH}:refs/remotes/origin/${BRANCH}"; then
+          msg="Falha ao buscar o branch ${BRANCH} (rede/git)."
+          if [ "$FALHA_E_FATAL" = "true" ]; then
+            echo "::error::${msg} Abortando para não seguir sem o conteúdo dele."
+            indisponivel 1 falha
+          fi
+          echo "${msg} Seguindo mesmo assim."
+          indisponivel 0 falha
+        fi
+
+        if [ -n "$DESTINO" ]; then
+          mkdir -p "$DESTINO"
+          if ! git archive "origin/${BRANCH}" | tar -x -C "$DESTINO"; then
+            msg="Falha ao extrair a árvore de ${BRANCH}."
+            if [ "$FALHA_E_FATAL" = "true" ]; then
+              echo "::error::${msg} Abortando."
+              indisponivel 1 falha
+            fi
+            echo "${msg} Seguindo mesmo assim."
+            indisponivel 0 falha
+          fi
+          echo "Branch ${BRANCH} extraída em ${DESTINO}."
+        else
+          echo "Branch ${BRANCH} buscada."
+        fi
+        echo "disponivel=true" >> "$GITHUB_OUTPUT"
+        echo "motivo=ok" >> "$GITHUB_OUTPUT"

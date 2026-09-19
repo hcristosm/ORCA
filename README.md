@@ -47,8 +47,8 @@ publicado no GitHub Pages e atualizado todo dia por cron.
 - Cobre as **27 UFs**, com seletor de estado no dashboard.
 - Baixa os setores de risco da CPRM/SGB de forma incremental e guarda em
   GeoPackage.
-- Busca chuva horária na **Open-Meteo** (fonte padrão, consulta o centro de cada
-  setor) ou cruza com a estação mais próxima do **INMET** e da **ANA**.
+- Busca chuva horária na **Open-Meteo**, consultando o centro de cada setor —
+  sem depender de estação meteorológica.
 - Calcula acumulado de 24h e 72h e uma trajetória de alerta previsto para as
   próximas 72h.
 - Exporta tudo como GeoJSON/JSON estático e serve um dashboard em HTML, CSS e JS
@@ -66,20 +66,15 @@ publicado no GitHub Pages e atualizado todo dia por cron.
 - Selo de atualização por fonte (setores da CPRM/SGB e chuva), em horário de
   Brasília, com idade do dado e alerta quando algo passa do ciclo esperado.
 - Camada opcional de radar de chuva (RainViewer) no mapa.
-- Se a Open-Meteo esgotar as tentativas, cai pra Pirate Weather como fallback
-  (exige `PIRATE_WEATHER_API_KEY`; sem a chave, o ponto fica sem chuva em vez de
-  travar o lote).
 - Roda dois workflows separados: setores uma vez por mês, chuva uma vez por dia.
-- 182 testes com HTTP mockado, rodando no CI a cada push.
+- 144 testes com HTTP mockado, rodando no CI a cada push.
 
 ## Fontes de dados
 
 | Fonte | O que fornece | Endpoint |
 |---|---|---|
 | [CPRM/SGB](https://www.sgb.gov.br/) | Polígonos de setorização de risco (grau, tipologia, moradias e pessoas afetadas) | `geoportal.sgb.gov.br/.../risco/FeatureServer/0` (ArcGIS REST) |
-| [Open-Meteo](https://open-meteo.com/) | Chuva horária por coordenada, sem estação. Fonte padrão do dashboard | `api.open-meteo.com/v1/forecast` |
-| [INMET](https://portal.inmet.gov.br/) | Chuva horária por estação automática | `portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` |
-| [ANA](https://www.gov.br/ana/pt-br) | Chuva a cada 15min por estação telemétrica, complementar ao INMET | `telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP) |
+| [Open-Meteo](https://open-meteo.com/) | Chuva horária por coordenada, sem estação. Única fonte de chuva | `api.open-meteo.com/v1/forecast` |
 
 A CPRM virou SGB. Os domínios antigos (`geoportal.cprm.gov.br` e companhia)
 ainda respondem em parte, mas a camada de risco hoje mora em
@@ -94,13 +89,9 @@ Se o IBGE cair, o mapa degrada pra quem está olhando e o pipeline nem percebe.
 ```mermaid
 flowchart LR
     CPRM[("CPRM/SGB")] --> ING1["src/ingest/cprm.py"]
-    INMET[("INMET")] --> ING2["src/ingest/inmet.py"]
-    ANA[("ANA")] --> ING3["src/ingest/ana.py"]
     OM[("Open-Meteo")] --> ING4["src/ingest/openmeteo.py"]
-    ING1 --> STORE["src/storage/<br/>GeoPackage + CSV"]
-    ING2 --> STORE
-    ING3 --> STORE
-    STORE --> PROC["src/processing/cruzamento.py<br/>estação mais próxima + chuva 24h/72h"]
+    ING1 --> STORE["src/storage/<br/>GeoPackage"]
+    STORE --> PROC["src/processing/cruzamento.py<br/>centroides + chuva 24h/72h"]
     STORE --> GRADE["src/processing/grade_espacial.py<br/>grade nacional por orçamento"]
     GRADE --> NAC["src/export/nacional.py"]
     PROC --> PREV["src/processing/previsao.py<br/>alerta previsto 72h"]
@@ -112,7 +103,7 @@ flowchart LR
 ```
 
 `src/cli.py` reúne os comandos. `src/storage/` é uma camada fina sobre
-GeoPackage (setores) e CSV (chuva), sem banco de dados.
+GeoPackage (setores), sem banco de dados.
 `src/storage_cache_openmeteo.py` guarda o histórico já baixado da Open-Meteo num
 SQLite, pra não repedir hora que já foi buscada.
 
@@ -148,9 +139,7 @@ python -m src.cli exportar-dashboard --uf SP
 # -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json, previsao_sp.json
 ```
 
-Por padrão usa a Open-Meteo, que só precisa dos setores. Pra usar o cruzamento
-por estação mais próxima, passe `--fonte inmet` (aí precisa rodar
-`ingest-inmet --uf SP --ano 2026` e, se quiser, `ingest-ana --uf SP` antes).
+Só precisa dos setores já ingeridos; a chuva vem da Open-Meteo na hora.
 
 Pra todas as UFs de uma vez:
 
@@ -208,21 +197,15 @@ de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
 
 ## Limitações conhecidas
 
-- **A chuva do INMET tem dias de defasagem.** O pacote anual não é atualizado
-  minuto a minuto. O dashboard sempre mostra a data de referência do dado.
-- **A ingestão do INMET é incremental, não por data no servidor.** O INMET só
-  oferece o ZIP anual inteiro. A partir da segunda execução o download pula se o
-  ZIP não mudou, e o reprocessamento pula estação sem mudança via CRC32,
-  mesclando os últimos 7 dias das que mudaram. Retificação fora dessa janela não
-  é recapturada.
-- **Densidade de estação é baixa.** SP tem 40 estações automáticas do INMET para
-  904 setores, com distância média de uns 26km. Chuva convectiva bem localizada
-  pode passar batido.
+- **Chuva modelada, não medida.** A Open-Meteo entrega reanálise/previsão por
+  coordenada, não leitura de pluviômetro. É o que permite cobrir 27 UFs sem
+  depender de densidade de estação, mas não é observação direta.
+- **Não há fonte de chuva alternativa.** A Open-Meteo é a única; se ela cair, a
+  UF fica de fora do run e o dashboard envelhece (a mescla com o `gh-pages`
+  preserva o dado da véspera) em vez de sumir.
 - **O limiar de atenção (padrão 100mm/72h) é ilustrativo.** É referência comum
   na literatura de deslizamento, não um valor oficial calibrado pros setores da
   CPRM/SGB. O dashboard avisa isso e deixa o valor ajustável.
-- **A cobertura nacional só usa Open-Meteo.** Rodar INMET/ANA nas 27 UFs exigiria
-  ingerir fonte por fonte, UF por UF. Não é automatizado.
 - **A publicação no `gh-pages` ainda não é reversível.** O deploy usa
   `force_orphan: true`, então a branch tem um commit só. Isso existe por causa do
   blob de cache da Open-Meteo (~45MB) que muda todo dia. Tirar o cache de lá é
@@ -247,12 +230,11 @@ de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
 pytest
 ```
 
-182 testes cobrindo ingestão (ArcGIS REST, paginação, incremental por marcador
-d'água, retry e fallback pra Pirate Weather), parsing do CSV do INMET e do XML
-da ANA, lotes e retry da Open-Meteo, cache SQLite, grade espacial nacional,
-cruzamento espacial e temporal, previsão, exportação nas duas fontes e a mescla
-não-destrutiva com o `gh-pages`. Toda chamada de rede é mockada, então a suíte
-roda sem internet.
+144 testes cobrindo ingestão da CPRM (ArcGIS REST, paginação, incremental por
+marcador d'água, retry), lotes e retry da Open-Meteo, cache SQLite, grade
+espacial nacional, acumulação de chuva, previsão, exportação, a guarda
+anti-regressão de publicação e a mescla não-destrutiva com o `gh-pages`. Toda
+chamada de rede é mockada, então a suíte roda sem internet.
 
 O dashboard em si (HTML e JS) não tem teste automatizado, a validação é manual.
 
@@ -260,16 +242,12 @@ O dashboard em si (HTML e JS) não tem teste automatizado, a validação é manu
 
 As decisões maiores foram testadas com requisição real, não por suposição:
 
-- **CEMADEN para INMET:** o CEMADEN exige captcha e as camadas sem captcha são
-  espelhos de 2017/2019. A API dinâmica do INMET está atrás de um WAF. Sobrou o
-  pacote anual.
-- **ANA como fonte complementar:** das 437 estações listadas pra SP, 271 (62%)
-  têm dado vivo, com distância mediana de 18,6km até o setor mais próximo. A
-  ressalva é que a maioria é hidrelétrica ou fluviométrica, não pluviômetro
-  dedicado.
 - **Streamlit para site estático:** resolveu estética, layout e distribuição.
-- **Open-Meteo como padrão:** responde chuva por coordenada, sem depender de
-  estação nem de defasagem do INMET.
+- **Open-Meteo como única fonte de chuva:** responde chuva por coordenada, sem
+  depender de estação. INMET e ANA foram implementados e descartados: o INMET só
+  publica o ZIP anual (dias de defasagem) e a rede da ANA é majoritariamente
+  fluviométrica. Manter as duas trilhas custava ~1.900 linhas que nenhum workflow
+  executava.
 - **Cobertura nacional:** ingestão incremental da CPRM mais uma grade espacial
   calibrada por busca binária, em vez de limiar de densidade escolhido a dedo.
 
@@ -308,6 +286,5 @@ inclusive comerciais, desde que o aviso de copyright e a licença sejam mantidos
 e o crédito ao autor original (Mateus Hcristos Leptokarydis) preservado.
 
 Os dados públicos pertencem aos seus órgãos:
-[CPRM/SGB](https://www.sgb.gov.br/), [INMET](https://portal.inmet.gov.br/),
-[ANA](https://www.gov.br/ana/pt-br) e [Open-Meteo](https://open-meteo.com/).
+[CPRM/SGB](https://www.sgb.gov.br/) e [Open-Meteo](https://open-meteo.com/).
 Consulte os termos de uso de cada um antes de redistribuir.

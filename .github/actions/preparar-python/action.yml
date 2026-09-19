@@ -1,0 +1,35 @@
+name: Preparar Python
+description: Instala o Python do projeto com cache do pip e as dependências.
+
+inputs:
+  extras:
+    description: >
+      Extras do pacote a instalar (ex.: "dev"). Vazio = só as dependências
+      de runtime.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: "3.11"
+        # Cacheia o diretório do pip entre execuções. geopandas/shapely
+        # trazem binários grandes e reinstalá-los do zero todo dia é o passo
+        # mais lento do job. `cache-dependency-path` explícito porque a
+        # chave sai do pyproject.toml (o projeto não tem requirements.txt,
+        # que é o que o default procura primeiro).
+        cache: pip
+        cache-dependency-path: pyproject.toml
+
+    - name: Instalar dependências
+      shell: bash
+      env:
+        EXTRAS: ${{ inputs.extras }}
+      run: |
+        if [ -n "$EXTRAS" ]; then
+          pip install -e ".[${EXTRAS}]"
+        else
+          pip install -e .
+        fi
