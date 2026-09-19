@@ -71,7 +71,7 @@ def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # SP município
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # RJ setores
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)  # RJ município
-        resultados = exportar_nacional(["SP", "RJ"], 2026, tmp_path, saida, orcamento_alvo=1000)
+        resultados = exportar_nacional(["SP", "RJ"], tmp_path, saida, orcamento_alvo=1000)
 
     assert set(resultados.keys()) == {"SP", "RJ"}
     assert (saida / "setores_sp.geojson").exists()
@@ -113,13 +113,13 @@ def test_exportar_nacional_segunda_execucao_pede_menos_historico(tmp_path: Path)
     with responses.RequestsMock() as rsps:
         rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)  # setores
         rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)  # município
-        exportar_nacional(["SP"], 2026, tmp_path, saida, orcamento_alvo=1000, cache_openmeteo=cache)
+        exportar_nacional(["SP"], tmp_path, saida, orcamento_alvo=1000, cache_openmeteo=cache)
         past_days_1a_execucao = json.loads(rsps.calls[0].request.body)["past_days"]
 
     with responses.RequestsMock() as rsps:
         rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
         rsps.add(responses.POST, FORECAST_URL, json=resposta, status=200)
-        exportar_nacional(["SP"], 2026, tmp_path, saida, orcamento_alvo=1000, cache_openmeteo=cache)
+        exportar_nacional(["SP"], tmp_path, saida, orcamento_alvo=1000, cache_openmeteo=cache)
         past_days_2a_execucao = json.loads(rsps.calls[0].request.body)["past_days"]
 
     assert past_days_2a_execucao < past_days_1a_execucao
@@ -132,7 +132,7 @@ def test_exportar_nacional_pula_uf_sem_setores_ingeridos(tmp_path: Path):
     with responses.RequestsMock() as rsps:
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)
         rsps.add(responses.POST, FORECAST_URL, json=_resposta_openmeteo(1), status=200)
-        resultados = exportar_nacional(["SP", "RJ"], 2026, tmp_path, saida, orcamento_alvo=1000)
+        resultados = exportar_nacional(["SP", "RJ"], tmp_path, saida, orcamento_alvo=1000)
 
     assert set(resultados.keys()) == {"SP"}
     disponiveis = json.loads((saida / "ufs_disponiveis.json").read_text())
@@ -141,7 +141,7 @@ def test_exportar_nacional_pula_uf_sem_setores_ingeridos(tmp_path: Path):
 
 def test_exportar_nacional_nenhuma_uf_ingerida_levanta_erro(tmp_path: Path):
     with pytest.raises(ValueError):
-        exportar_nacional(["SP", "RJ"], 2026, tmp_path, tmp_path / "export")
+        exportar_nacional(["SP", "RJ"], tmp_path, tmp_path / "export")
 
 
 def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path: Path, monkeypatch):
@@ -155,7 +155,7 @@ def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path:
 
     chamadas: dict[str, int] = {"SP": 0, "RJ": 0}
 
-    def fake_exportar_dashboard(uf, ano, diretorio_dados, saida_dir, fonte, pontos_grade, cache_openmeteo=None):
+    def fake_exportar_dashboard(uf, diretorio_dados, saida_dir, pontos_grade, cache_openmeteo=None):
         chamadas[uf] += 1
         if uf == "SP" and chamadas[uf] == 1:
             raise ExportacaoDashboardError("falha simulada na 1a passada")
@@ -164,7 +164,7 @@ def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path:
     monkeypatch.setattr(nacional, "exportar_dashboard", fake_exportar_dashboard)
 
     saida = tmp_path / "export"
-    resultados = exportar_nacional(["SP", "RJ"], 2026, tmp_path, saida, orcamento_alvo=1000)
+    resultados = exportar_nacional(["SP", "RJ"], tmp_path, saida, orcamento_alvo=1000)
 
     assert set(resultados.keys()) == {"SP", "RJ"}
     assert chamadas["SP"] == 2
@@ -174,13 +174,13 @@ def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path:
 def test_exportar_nacional_reexportacao_tambem_falha_mantem_uf_de_fora(tmp_path: Path, monkeypatch):
     salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
 
-    def sempre_falha(uf, ano, diretorio_dados, saida_dir, fonte, pontos_grade, cache_openmeteo=None):
+    def sempre_falha(uf, diretorio_dados, saida_dir, pontos_grade, cache_openmeteo=None):
         raise ExportacaoDashboardError("falha simulada persistente")
 
     monkeypatch.setattr(nacional, "exportar_dashboard", sempre_falha)
 
     saida = tmp_path / "export"
-    resultados = exportar_nacional(["SP"], 2026, tmp_path, saida, orcamento_alvo=1000)
+    resultados = exportar_nacional(["SP"], tmp_path, saida, orcamento_alvo=1000)
 
     assert resultados == {}
     disponiveis = json.loads((saida / "ufs_disponiveis.json").read_text())
@@ -227,7 +227,7 @@ def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypa
             rsps.add_callback(responses.POST, FORECAST_URL, callback=callback, content_type="application/json")
 
         resultados = exportar_nacional(
-            ["SP", "RJ", "MG"], 2026, tmp_path, saida, orcamento_alvo=1000, max_workers_uf=3
+            ["SP", "RJ", "MG"], tmp_path, saida, orcamento_alvo=1000, max_workers_uf=3
         )
 
     assert not quebrou, "as UFs não estavam dentro da exportação ao mesmo tempo"

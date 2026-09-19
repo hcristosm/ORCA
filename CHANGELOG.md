@@ -17,7 +17,6 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 - feat(dashboard): navegação pela URL (`#/<uf>/<município>`) com Voltar/Avançar do navegador, links compartilháveis, botão "Voltar ao estado" e trilha clicável
 - feat(dashboard): busca de município em todo o Brasil, com sigla da UF; escolher uma cidade de outro estado troca a UF e seleciona a cidade
 - feat(dashboard): camada opcional de radar de chuva (RainViewer) no mapa
-- feat(ingest): fallback para Pirate Weather quando a Open-Meteo esgota as tentativas de retry num lote
 - feat(export): `meta_<uf>.json` ganha os blocos `cprm` (`ingerido_em`, `setor_mais_recente`) e `chuva` (`fonte`, `ate`, `consultado_em`)
 - feat(export): `meta_<uf>.json` ganha a lista `municipios`, índice da busca nacional
 
@@ -27,8 +26,17 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 - fix(dashboard): busca não sobrescreve mais as primeiras teclas digitadas logo após escolher uma sugestão
 - fix(dashboard): CSP bloqueava o radar do RainViewer; ajustes de cor e zoom da camada
 
+### REFACTOR
+- refactor(ingest)!: remove as trilhas INMET e ANA (módulos, comandos `ingest-inmet`/`ingest-ana`, opção `--fonte`, cruzamento por estação mais próxima). Nenhum workflow as executava desde que a exportação diária virou nacional; a Open-Meteo passa a ser a única fonte de chuva
+- refactor(cli)!: remove o comando `atualizar` e o parâmetro `--ano` de `exportar-dashboard`/`atualizar-nacional`, que só existiam para a fonte INMET
+- refactor(ci): extrai `.github/actions/baixar-branch` e `.github/actions/preparar-python`, eliminando três cópias do bloco de fetch de branch e três do setup de Python
+- refactor(ci): a guarda anti-regressão dos dois workflows vira `scripts/conferir_publicacao.py`, com teste cobrindo as duas propriedades da recusa
+- refactor(ci): `atualizar-dados.yml` chama `python -m src.cli atualizar-nacional` direto; `scripts/atualizar_dados.py` (só um shim) foi removido
+- refactor(dashboard): `escaparHtml` e `token` saem das três cópias para `comum.js` (`window.ORCA`)
+
 ### CHORE
 - chore(deps): atualiza `ruff` de >=0.14.0 para >=0.16.6
+- chore(deps): remove `defusedxml`, que só era usado pelo parser XML da ANA
 
 ## [1.1.0] - 2026-09-12
 

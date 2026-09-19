@@ -23,126 +23,58 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-          # Cacheia o diretório do pip entre execuções. geopandas/shapely
-          # trazem binários grandes e reinstalá-los do zero todo dia é o
-          # passo mais lento do job. `cache-dependency-path` explícito
-          # porque a chave sai do pyproject.toml (o projeto não tem
-          # requirements.txt, que é o que o default procura primeiro).
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Instalar dependências
-        run: pip install -e .
+      - uses: ./.github/actions/preparar-python
 
       - name: Baixar setores já publicados
         id: baixar
         # Ingestão é incremental (marcador d'água em _where_incremental):
         # partir do estado anterior evita rebaixar tudo e, se a SGB falhar
         # numa UF, o dado do mês passado continua ali. Ausência da branch
-        # não é erro -- a 1a execução parte do zero.
-        #
-        # `git ls-remote --exit-code` devolve 2 para "nenhuma ref
-        # correspondente" (branch ainda não existe) e outros códigos (128,
-        # etc.) para falha de rede/autenticação -- tratar os dois como
-        # "branch não existe" faria uma intermitência de rede zerar
-        # `anterior` e a guarda do passo "Conferir antes de publicar"
-        # aprovaria apagar as UFs que já estavam em dados-base. O
-        # `|| codigo=$?` é necessário porque o GitHub roda o script com
-        # `bash -e`: sem ele, o próprio ls-remote falhando abortaria o
-        # passo antes de lermos `$?` (mesmo padrão usado em
-        # atualizar-dados.yml).
-        #
-        # `shell: bash -eo pipefail` porque o padrão do GitHub é `bash -e`
-        # SEM pipefail: em `git archive | tar -x`, o `git archive` falhando
-        # (ref corrompida, objeto faltando) deixaria o `tar` sair 0 com
-        # entrada vazia, o passo seguiria, `anterior` viraria 0 e a guarda
-        # aprovaria republicar por cima de dados-base com o que a ingestão
-        # conseguisse. Mesma correção já feita em atualizar-dados.yml --
-        # deixar a máscara viva só num dos dois arquivos é exatamente como
-        # a divergência entre eles reintroduziu defeitos neste plano.
+        # não é erro -- a 1a execução parte do zero. Falha de rede, sim:
+        # sem o estado anterior a guarda não tem contra o que comparar e
+        # aprovaria apagar as UFs que já estavam em dados-base.
+        uses: ./.github/actions/baixar-branch
+        with:
+          branch: dados-base
+          destino: data
+          ausente-e-fatal: "false"
+          falha-e-fatal: "true"
+
+      - name: Contar setores anteriores
+        id: anterior
+        # `find | wc -l` e não `ls data/*.gpkg | wc -l`: sob `pipefail` o
+        # `ls` saindo 2 no glob vazio faria o `errexit` matar o passo antes
+        # da contagem -- justamente no caso (data/ vazio) em que ela mais
+        # importa. `find` não tem esse gatilho.
         shell: bash -eo pipefail {0}
         run: |
           mkdir -p data
-          codigo=0
-          git ls-remote --exit-code origin dados-base > /dev/null 2>&1 || codigo=$?
-          if [ "$codigo" -eq 0 ]; then
-            if ! git fetch origin dados-base:refs/remotes/origin/dados-base; then
-              echo "::error::Falha ao buscar o branch dados-base (rede/git). Abortando: sem o estado anterior a guarda não tem contra o que comparar."
-              exit 1
-            fi
-            git archive origin/dados-base | tar -x -C data
-            anterior=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
-            echo "Branch dados-base encontrada. Setores anteriores: ${anterior} UF(s)."
-          elif [ "$codigo" -eq 2 ]; then
-            echo "Branch dados-base ainda não existe (1a execução); ingestão parte do zero."
-            anterior=0
-          else
-            echo "::error::Falha ao verificar o branch dados-base (rede/git, código $codigo) -- não é possível distinguir de 'branch não existe'. Abortando para não publicar sobre dado que não conseguimos confirmar."
-            exit 1
-          fi
-          echo "anterior=${anterior}" >> "$GITHUB_OUTPUT"
+          total=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
+          echo "Setores anteriores: ${total} UF(s)."
+          echo "total=${total}" >> "$GITHUB_OUTPUT"
 
       - name: Ingerir setores
         run: python -m src.cli ingerir-setores --diretorio data
 
-      - name: Conferir antes de publicar
-        id: conferir
-        # Roda mesmo se "Ingerir setores" falhar (mas não se o job foi
-        # cancelado -- ver `!cancelled()` abaixo): uma queda no meio da
-        # ingestão não pode nos impedir de checar o que sobrou em data/.
-        # Invariante (nunca publicar um conjunto menor ou pior que o
-        # anterior): publicação parcial é aceitável -- é melhor que 20 UFs
-        # frescas do que nenhuma -- mas publicar MENOS, ou publicar
-        # arquivos vazios/truncados, significa destruir dado bom por uma
-        # falha no download ou na ingestão, a mesma classe de incidente que
-        # este workflow existe para evitar. Na dúvida (contagem anterior
-        # não disponível), não publica.
+      - name: Conferir tamanho dos GeoPackages
+        # Contagem de arquivos não basta: 27 .gpkg de 0 byte ou truncados
+        # também passariam em atual >= anterior. Limiar de 10 KiB: o menor
+        # .gpkg real hoje em dados-base é risco_to.gpkg com ~108 KiB (a UF
+        # com menos setores), então 10 KiB fica bem abaixo de qualquer
+        # arquivo real e ainda pega vazio/truncado com folga.
         #
-        # Toda recusa GRAVA `publicar=false` e só então SAI COM 1 (ruling
-        # R-9), nessa ordem: o output é o que faz o passo de publicação ser
-        # pulado, e a falha é o que torna a recusa visível -- recusar
-        # fechando `success` reintroduz a degradação silenciosa dos runs #23
-        # e #29 dentro da própria cura.
+        # Recusa aqui zera a contagem atual passada à guarda, em vez de
+        # gravar `publicar=false` por conta própria: uma única porta de
+        # recusa (scripts/conferir_publicacao.py) é o que garante que as
+        # duas propriedades da recusa valham em todos os caminhos.
+        id: tamanho
         if: "!cancelled()"
+        shell: bash -eo pipefail {0}
         run: |
-          anterior="${{ steps.baixar.outputs.anterior }}"
-          # `find | wc -l` e não `ls data/*.gpkg | wc -l`: sob `pipefail` o
-          # `ls` saindo 2 no glob vazio faria o `errexit` matar o passo antes
-          # das mensagens de recusa -- justamente no caso (data/ vazio) em que
-          # a anotação mais importa. `find` não tem esse gatilho, então a
-          # contagem fica correta com ou sem `pipefail`.
-          atual=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
-          echo "Setores nesta execução: ${atual} UF(s) (anterior: ${anterior:-<vazio>})."
-
-          if ! [ "$anterior" -eq "$anterior" ] 2>/dev/null; then
-            echo "::error::Contagem anterior indisponível ou inválida ('${anterior}'). Sem ela não dá para confirmar que não estamos regredindo -- publicação recusada."
-            echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-
-          if [ "${atual}" -eq 0 ]; then
-            echo "::error::Conjunto atual está vazio (0 UFs). Publicação recusada para não apagar dados-base."
-            echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-
-          if [ "${atual}" -lt "${anterior}" ]; then
-            echo "::error::Regressão detectada: ${atual} UF(s) atuais é menor que ${anterior} anteriores. Publicação recusada."
-            echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-
-          # Contagem de arquivos não basta: 27 .gpkg de 0 byte ou truncados
-          # também passariam em atual >= anterior. Limiar de 10 KiB: o menor
-          # .gpkg real hoje em dados-base é risco_to.gpkg com ~108 KiB (a
-          # UF com menos setores), então 10 KiB fica bem abaixo de qualquer
-          # arquivo real e ainda pega vazio/truncado com folga.
           limiar_bytes=10240
           pequeno=""
           for f in data/*.gpkg; do
+            [ -e "$f" ] || continue
             tamanho=$(stat -c%s "$f")
             if [ "$tamanho" -lt "$limiar_bytes" ]; then
               echo "::error::${f} tem ${tamanho} byte(s), abaixo do limiar de ${limiar_bytes} -- parece vazio ou truncado."
@@ -150,12 +82,32 @@ jobs:
             fi
           done
           if [ -n "$pequeno" ]; then
-            echo "::error::Ao menos um .gpkg está vazio ou truncado. Publicação recusada."
-            echo "publicar=false" >> "$GITHUB_OUTPUT"
-            exit 1
+            echo "::error::Ao menos um .gpkg está vazio ou truncado; conjunto atual tratado como vazio."
+            echo "atual=0" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "atual=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)" >> "$GITHUB_OUTPUT"
 
-          echo "publicar=true" >> "$GITHUB_OUTPUT"
+      - name: Conferir antes de publicar
+        id: conferir
+        # Roda mesmo se "Ingerir setores" falhar (mas não se o job foi
+        # cancelado): uma queda no meio da ingestão não pode nos impedir de
+        # checar o que sobrou em data/. Publicação parcial é aceitável --
+        # 20 UFs frescas valem mais que nenhuma -- mas publicar MENOS
+        # significa destruir dado bom por uma falha no download ou na
+        # ingestão, a mesma classe de incidente que este workflow existe
+        # para evitar. Na dúvida, não publica.
+        #
+        # A lógica e as duas propriedades da recusa (grava `publicar=false`
+        # ANTES de sair com 1; toda recusa sai com 1) vivem em
+        # scripts/conferir_publicacao.py, compartilhado com
+        # atualizar-dados.yml e coberto por tests/test_conferir_publicacao.py.
+        if: "!cancelled()"
+        run: >
+          python3 scripts/conferir_publicacao.py
+          --atual "${{ steps.tamanho.outputs.atual }}"
+          --anterior "${{ steps.anterior.outputs.total }}"
+          --rotulo "UF(s)"
 
       - name: Publicar em dados-base
         # !cancelled() (em vez de always()) porque uma execução parcial

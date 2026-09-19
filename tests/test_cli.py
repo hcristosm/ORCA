@@ -72,7 +72,7 @@ def test_atualizar_nacional_exporta_varias_ufs_sem_tocar_na_cprm(tmp_path: Path,
     chamadas_cprm_antes = sum(1 for c in responses.calls if FEATURE_LAYER_URL in c.request.url)
 
     resultado = runner.invoke(
-        app, ["atualizar-nacional", "--ufs", "SP,RJ", "--ano", "2026",
+        app, ["atualizar-nacional", "--ufs", "SP,RJ",
               "--diretorio", str(tmp_path / "data"), "--saida", str(saida)],
     )
 

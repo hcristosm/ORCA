@@ -1,7 +1,7 @@
-"""Camada de persistência local: leitura e gravação dos dados de setores de risco e chuva.
+"""Camada de persistência local dos setores de risco.
 
-Centraliza o formato de arquivo (GeoPackage para setores, CSV para chuva) para que
-ingest e dashboard não dupliquem a lógica de I/O.
+Centraliza o formato de arquivo (GeoPackage, camada `setores_risco`) para
+que ingest e export não dupliquem a lógica de I/O.
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import geopandas as gpd
-import pandas as pd
 
 from src.config import CAMADA_SETORES
 
@@ -21,12 +20,3 @@ def ler_setores(caminho: Path) -> gpd.GeoDataFrame:
 def salvar_setores(gdf: gpd.GeoDataFrame, caminho: Path) -> None:
     caminho.parent.mkdir(parents=True, exist_ok=True)
     gdf.to_file(caminho, layer=CAMADA_SETORES, driver="GPKG")
-
-
-def ler_chuva(caminho: Path) -> pd.DataFrame:
-    return pd.read_csv(caminho, parse_dates=["data_hora"])
-
-
-def salvar_chuva(df: pd.DataFrame, caminho: Path) -> None:
-    caminho.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(caminho, index=False)

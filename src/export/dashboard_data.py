@@ -2,9 +2,8 @@
 
 O dashboard (`docs/dashboard/`) é um site estático em HTML/CSS/JS puro, sem
 backend, este módulo pré-computa o que ele precisa como arquivos estáticos:
-setores com a estação mais próxima (INMET+ANA combinados, via
-`calcular_cruzamento`) e chuva acumulada em GeoJSON, série temporal recente
-por estação em JSON, e metadados de geração.
+setores com a chuva acumulada da Open-Meteo em GeoJSON, série temporal
+recente por município em JSON, previsão de 72h e metadados de geração.
 """
 
 from __future__ import annotations
@@ -20,15 +19,12 @@ from shapely.geometry import Point
 
 from src.config import (
     LIMIAR_ATENCAO_MM_PADRAO,
-    caminho_chuva,
-    caminho_chuva_ana,
     caminho_manifesto_cprm,
     caminho_setores,
 )
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_precipitacao_batch
 from src.processing.cruzamento import (
     CRS_METRICO,
-    calcular_cruzamento,
     centroides_4326,
     centroides_municipio,
     chuva_acumulada,
@@ -38,7 +34,7 @@ from src.processing.previsao import (
     HORIZONTE_PREVISAO_HORAS,
     trajetoria_chuva_72h,
 )
-from src.storage import ler_chuva, ler_setores
+from src.storage import ler_setores
 from src.storage_cache_openmeteo import CacheOpenMeteo
 
 logger = logging.getLogger(__name__)
@@ -79,27 +75,6 @@ def _pontos_serie(data_hora: pd.Series, chuva_mm: pd.Series) -> list[list]:
         [ts.isoformat(), (None if pd.isna(mm) else round(float(mm), 2))]
         for ts, mm in zip(data_hora, chuva_mm)
     ]
-
-
-def _recortar_series(chuva_df: pd.DataFrame, referencia: pd.Timestamp) -> dict:
-    """Monta `{codigo_estacao: {nome, fonte, serie: [[iso, mm], ...]}}`.
-
-    Recortado aos últimos `JANELA_SERIE_DIAS` dias a partir de `referencia`,
-    sem isso o payload cresceria sem limite agora que o INMET acumula o ano
-    inteiro (ingestão incremental, ver src/ingest/inmet.py).
-    """
-    limite = referencia - timedelta(days=JANELA_SERIE_DIAS)
-    recente = chuva_df[chuva_df["data_hora"] >= limite]
-
-    series = {}
-    for codigo, grupo in recente.groupby("codigo_estacao"):
-        grupo_ordenado = grupo.sort_values("data_hora")
-        series[str(codigo)] = {
-            "nome": grupo_ordenado["nome_estacao"].iloc[0],
-            "fonte": grupo_ordenado["fonte"].iloc[0],
-            "serie": _pontos_serie(grupo_ordenado["data_hora"], grupo_ordenado["chuva_mm"]),
-        }
-    return series
 
 
 def _distancias_km(
@@ -271,12 +246,12 @@ def _exportar_openmeteo(
     pontos: list[tuple[float, float]] | None = None,
     cache: CacheOpenMeteo | None = None,
 ) -> tuple[pd.DataFrame, dict, dict, dict]:
-    """Estratégia `fonte="openmeteo"`: consulta direto no centroide de cada setor
-    (ou nos pontos de grade compartilhados, se `pontos` for informado).
+    """Consulta a Open-Meteo direto no centroide de cada setor (ou nos
+    pontos de grade compartilhados, se `pontos` for informado).
 
     Retorna `(cruzado, series, previsao, meta)` prontos para gravação;
-    `meta` já traz todos os campos específicos desta fonte, exceto
-    `gerado_em` (adicionado por `exportar_dashboard`, comum às duas fontes).
+    `meta` já traz todos os campos da exportação, exceto `gerado_em`
+    (adicionado por `exportar_dashboard`).
     """
     try:
         cruzado, previsao = _calcular_chuva_openmeteo(setores, janelas=(24, 72), pontos=pontos, cache=cache)
@@ -300,44 +275,6 @@ def _exportar_openmeteo(
         "horizonte_previsao_horas": HORIZONTE_PREVISAO_HORAS,
     }
     return cruzado, series, previsao, meta
-
-
-def _exportar_inmet(
-    setores: gpd.GeoDataFrame, uf_norm: str, ano: int, diretorio_dados: Path
-) -> tuple[pd.DataFrame, dict, None, dict]:
-    """Estratégia `fonte="inmet"`: cruzamento por estação mais próxima (INMET + ANA).
-
-    Retorna `(cruzado, series, previsao, meta)`. `previsao` é sempre `None`
-    (INMET não tem previsão), mantido na tupla só para simetria com
-    `_exportar_openmeteo`.
-    """
-    caminho_chuva_path = caminho_chuva(uf_norm, ano, diretorio_dados)
-    if not caminho_chuva_path.exists():
-        raise ExportacaoDashboardError(
-            f"Chuva do INMET não encontrada em {caminho_chuva_path}; "
-            f"rode `ingest-inmet --uf {uf_norm} --ano {ano}` primeiro."
-        )
-    chuva_inmet = ler_chuva(caminho_chuva_path)
-    caminho_ana = caminho_chuva_ana(uf_norm, diretorio_dados)
-    chuva_ana = ler_chuva(caminho_ana) if caminho_ana.exists() else None
-
-    cruzado = calcular_cruzamento(setores, chuva_inmet, chuva_ana=chuva_ana, janelas=(24, 72))
-    referencia = cruzado.attrs["referencia"]
-
-    chuva_combinada_partes = [chuva_inmet.assign(fonte="inmet")]
-    if chuva_ana is not None and not chuva_ana.empty:
-        chuva_combinada_partes.append(chuva_ana.assign(fonte="ana"))
-    chuva_combinada = pd.concat(chuva_combinada_partes, ignore_index=True)
-    series = _recortar_series(chuva_combinada, referencia)
-
-    meta = {
-        "fonte": "inmet",
-        "referencia": referencia.isoformat(),
-        "total_setores": len(cruzado),
-        "total_estacoes_inmet": int(chuva_inmet["codigo_estacao"].nunique()),
-        "total_estacoes_ana": int(chuva_ana["codigo_estacao"].nunique()) if chuva_ana is not None else 0,
-    }
-    return cruzado, series, None, meta
 
 
 def _datas_cprm(setores: gpd.GeoDataFrame, uf: str, diretorio_dados: Path) -> dict:
@@ -368,37 +305,27 @@ def _datas_cprm(setores: gpd.GeoDataFrame, uf: str, diretorio_dados: Path) -> di
 
 def exportar_dashboard(
     uf: str,
-    ano: int,
     diretorio_dados: Path,
     saida_dir: Path,
-    fonte: str = "openmeteo",
     pontos_grade: list[tuple[float, float]] | None = None,
     cache_openmeteo: CacheOpenMeteo | None = None,
 ) -> dict:
     """Pré-computa a chuva por setor e grava os arquivos estáticos do dashboard.
 
-    `fonte="openmeteo"` (padrão): consulta a Open-Meteo direto no centroide
-    de cada setor (sem estação, sem depender de INMET/ANA terem sido
-    ingeridos), só precisa dos setores (CPRM). `fonte="inmet"`: comportamento
-    idêntico ao anterior a este parâmetro, cruzamento por estação mais
-    próxima combinando INMET e, se existir localmente, ANA.
+    Consulta a Open-Meteo no centroide de cada setor; só precisa dos
+    setores já ingeridos da CPRM/SGB.
 
     `pontos_grade`, se informado, substitui o centroide de cada setor pelo
     ponto de grade compartilhado (ver `src/processing/grade_espacial.py` e
-    `src/export/nacional.py`); só é válido com `fonte="openmeteo"`.
+    `src/export/nacional.py`).
 
-    `cache_openmeteo`, se informado, é repassado para as buscas na Open-Meteo
-    (só relevante com fonte="openmeteo"; ver src/storage_cache_openmeteo.py).
+    `cache_openmeteo`, se informado, é repassado para as buscas na
+    Open-Meteo (ver src/storage_cache_openmeteo.py).
 
-    Grava em `saida_dir`: `setores_<uf>.geojson`, `series_<uf>.json`
-    (por estação com `fonte="inmet"`, por município com `fonte="openmeteo"`)
-    e `meta_<uf>.json`. Retorna o conteúdo de `meta_<uf>.json`.
+    Grava em `saida_dir`: `setores_<uf>.geojson`, `series_<uf>.json` (por
+    município), `previsao_<uf>.json` e `meta_<uf>.json`. Retorna o conteúdo
+    de `meta_<uf>.json`.
     """
-    if fonte not in ("openmeteo", "inmet"):
-        raise ValueError(f"fonte inválida: {fonte!r}. Use 'openmeteo' ou 'inmet'.")
-    if pontos_grade is not None and fonte != "openmeteo":
-        raise ValueError("pontos_grade só é válido com fonte='openmeteo'.")
-
     uf_norm = uf.strip().upper()
     caminho_setores_path = caminho_setores(uf_norm, diretorio_dados)
     if not caminho_setores_path.exists():
@@ -409,16 +336,16 @@ def exportar_dashboard(
     setores = ler_setores(caminho_setores_path)
     saida_dir.mkdir(parents=True, exist_ok=True)
 
-    previsao: dict | None
-    if fonte == "openmeteo":
-        cruzado, series, previsao, meta = _exportar_openmeteo(setores, pontos=pontos_grade, cache=cache_openmeteo)
-    else:
-        cruzado, series, previsao, meta = _exportar_inmet(setores, uf_norm, ano, diretorio_dados)
+    cruzado, series, previsao, meta = _exportar_openmeteo(
+        setores, pontos=pontos_grade, cache=cache_openmeteo,
+    )
     meta["gerado_em"] = datetime.now(UTC).isoformat()
     # Blocos por fonte para o selo de atualização do dashboard. `referencia` e
     # `gerado_em` continuam no topo para front-ends antigos ainda em cache.
     meta["cprm"] = _datas_cprm(setores, uf_norm, diretorio_dados)
-    meta["chuva"] = {"fonte": fonte, "ate": meta.get("referencia"), "consultado_em": meta["gerado_em"]}
+    meta["chuva"] = {
+        "fonte": "openmeteo", "ate": meta.get("referencia"), "consultado_em": meta["gerado_em"],
+    }
     # Índice da busca nacional do dashboard. Fica no meta, e não num arquivo
     # nacional, porque scripts/mesclar_publicado.py preserva metas por UF: uma UF
     # que falhou hoje continua pesquisável com a lista da véspera.
@@ -428,14 +355,13 @@ def exportar_dashboard(
     (saida_dir / f"series_{uf_norm.lower()}.json").write_text(
         json.dumps(series, ensure_ascii=False, indent=2)
     )
-    if previsao is not None:
-        (saida_dir / f"previsao_{uf_norm.lower()}.json").write_text(
-            json.dumps(previsao, ensure_ascii=False, separators=(",", ":"))
-        )
+    (saida_dir / f"previsao_{uf_norm.lower()}.json").write_text(
+        json.dumps(previsao, ensure_ascii=False, separators=(",", ":"))
+    )
     caminho_meta = saida_dir / f"meta_{uf_norm.lower()}.json"
     meta_existente = json.loads(caminho_meta.read_text()) if caminho_meta.exists() else {}
     meta_existente.update(meta)
     caminho_meta.write_text(json.dumps(meta_existente, ensure_ascii=False, indent=2))
 
-    logger.info("Exportados dados do dashboard (fonte=%s) para %s: %s", fonte, uf_norm, meta)
+    logger.info("Exportados dados do dashboard para %s: %s", uf_norm, meta)
     return meta

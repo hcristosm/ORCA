@@ -48,9 +48,8 @@ published on GitHub Pages and refreshed daily by cron.
 - Covers all **27 Brazilian states**, with a state selector on the dashboard.
 - Downloads CPRM/SGB risk sectors incrementally and stores them in
   GeoPackage.
-- Fetches hourly rainfall from **Open-Meteo** (default source, queried at
-  each sector's centroid) or cross-references against the nearest **INMET**
-  or **ANA** station.
+- Fetches hourly rainfall from **Open-Meteo**, queried at each sector's
+  centroid — no weather station needed.
 - Computes 24h and 72h accumulated rainfall and a predicted 72h alert
   trajectory.
 - Exports everything as static GeoJSON/JSON and serves a dashboard in plain
@@ -63,16 +62,14 @@ published on GitHub Pages and refreshed daily by cron.
   and see rainfall calculated for it, entirely in the browser, without
   uploading the file anywhere.
 - Runs two separate workflows: sectors once a month, rainfall once a day.
-- 174 tests with mocked HTTP, running in CI on every push.
+- 144 tests with mocked HTTP, running in CI on every push.
 
 ## Data sources
 
 | Source | What it provides | Endpoint |
 |---|---|---|
 | [CPRM/SGB](https://www.sgb.gov.br/) | Risk sectorization polygons (degree, typology, affected households and people) | `geoportal.sgb.gov.br/.../risco/FeatureServer/0` (ArcGIS REST) |
-| [Open-Meteo](https://open-meteo.com/) | Hourly rainfall by coordinate, no station needed. Dashboard's default source | `api.open-meteo.com/v1/forecast` |
-| [INMET](https://portal.inmet.gov.br/) | Hourly rainfall by automatic weather station | `portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip` |
-| [ANA](https://www.gov.br/ana/pt-br) | Rainfall every 15min by telemetry station, complementary to INMET | `telemetriaws1.ana.gov.br/ServiceANA.asmx` (SOAP) |
+| [Open-Meteo](https://open-meteo.com/) | Hourly rainfall by coordinate, no station needed. The only rainfall source | `api.open-meteo.com/v1/forecast` |
 
 CPRM was renamed to SGB. The old domains (`geoportal.cprm.gov.br` and
 similar) still respond partially, but the risk layer now lives at
@@ -88,13 +85,9 @@ pipeline doesn't notice.
 ```mermaid
 flowchart LR
     CPRM[("CPRM/SGB")] --> ING1["src/ingest/cprm.py"]
-    INMET[("INMET")] --> ING2["src/ingest/inmet.py"]
-    ANA[("ANA")] --> ING3["src/ingest/ana.py"]
     OM[("Open-Meteo")] --> ING4["src/ingest/openmeteo.py"]
-    ING1 --> STORE["src/storage/<br/>GeoPackage + CSV"]
-    ING2 --> STORE
-    ING3 --> STORE
-    STORE --> PROC["src/processing/cruzamento.py<br/>nearest station + 24h/72h rainfall"]
+    ING1 --> STORE["src/storage/<br/>GeoPackage"]
+    STORE --> PROC["src/processing/cruzamento.py<br/>centroids + 24h/72h rainfall"]
     STORE --> GRADE["src/processing/grade_espacial.py<br/>national grid by budget"]
     GRADE --> NAC["src/export/nacional.py"]
     PROC --> PREV["src/processing/previsao.py<br/>72h predicted alert"]
@@ -106,7 +99,7 @@ flowchart LR
 ```
 
 `src/cli.py` gathers the commands. `src/storage/` is a thin layer over
-GeoPackage (sectors) and CSV (rainfall), no database.
+GeoPackage (sectors), no database.
 `src/storage_cache_openmeteo.py` keeps a SQLite history of what's already
 been downloaded from Open-Meteo, so it doesn't re-fetch hours it already
 has.
@@ -143,10 +136,8 @@ python -m src.cli exportar-dashboard --uf SP
 # -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json, previsao_sp.json
 ```
 
-By default it uses Open-Meteo, which only needs the sectors. To use
-nearest-station cross-referencing, pass `--fonte inmet` (which requires
-running `ingest-inmet --uf SP --ano 2026` and, optionally,
-`ingest-ana --uf SP` first).
+It only needs the already-ingested sectors; rainfall comes from Open-Meteo
+at export time.
 
 For all states at once:
 
@@ -208,23 +199,17 @@ failing on timeout.
 
 ## Known limitations
 
-- **INMET's rainfall data lags by days.** The annual package isn't updated
-  minute by minute. The dashboard always shows the data's reference date.
-- **INMET ingestion is incremental, not date-filtered on the server.** INMET
-  only offers the whole annual ZIP. From the second run on, the download is
-  skipped if the ZIP hasn't changed, and reprocessing skips any station with
-  no change via CRC32, merging the last 7 days of the ones that did change.
-  Corrections outside that window aren't recaptured.
-- **Station density is low.** SP has 40 automatic INMET stations for 904
-  sectors, with an average distance of about 26km. Highly localized
-  convective rainfall can slip through.
+- **Rainfall is modelled, not measured.** Open-Meteo returns reanalysis and
+  forecast by coordinate, not rain-gauge readings. That's what makes covering
+  27 states possible without depending on station density, but it isn't
+  direct observation.
+- **There is no alternative rainfall source.** Open-Meteo is the only one; if
+  it goes down, the state is left out of the run and the dashboard ages (the
+  `gh-pages` merge keeps the previous day's data) instead of disappearing.
 - **The attention threshold (default 100mm/72h) is illustrative.** It's a
   common reference in landslide literature, not an official value calibrated
   for CPRM/SGB sectors. The dashboard flags this and lets you adjust the
   value.
-- **National coverage only uses Open-Meteo.** Running INMET/ANA across all
-  27 states would require ingesting source by source, state by state. Not
-  automated.
 - **Publishing to `gh-pages` isn't reversible yet.** The deploy uses
   `force_orphan: true`, so the branch has a single commit. That's because of
   the Open-Meteo cache blob (~45MB) that changes daily. Getting the cache
@@ -251,12 +236,11 @@ failing on timeout.
 pytest
 ```
 
-174 tests covering ingestion (ArcGIS REST, pagination, incremental
-watermark, retry and fallback), INMET CSV and ANA XML parsing, Open-Meteo
-batching and retry, SQLite cache, national spatial grid, spatial and
-temporal cross-referencing, forecasting, export for both sources, and the
-non-destructive merge with `gh-pages`. Every network call is mocked, so the
-suite runs without internet.
+144 tests covering CPRM ingestion (ArcGIS REST, pagination, incremental
+watermark, retry), Open-Meteo batching and retry, SQLite cache, national
+spatial grid, rainfall accumulation, forecasting, export, the publication
+anti-regression guard, and the non-destructive merge with `gh-pages`. Every
+network call is mocked, so the suite runs without internet.
 
 The dashboard itself (HTML and JS) has no automated tests, validation is
 manual.
@@ -265,17 +249,13 @@ manual.
 
 The bigger decisions were tested with real requests, not assumed:
 
-- **CEMADEN vs. INMET:** CEMADEN requires a captcha and the layers without a
-  captcha are mirrors from 2017/2019. INMET's dynamic API sits behind a WAF.
-  That left the annual package.
-- **ANA as a complementary source:** of the 437 stations listed for SP, 271
-  (62%) have live data, with a median distance of 18.6km to the nearest
-  sector. The caveat is that most are hydroelectric or fluviometric
-  stations, not dedicated rain gauges.
 - **Streamlit for a static site:** solved aesthetics, layout and
   distribution.
-- **Open-Meteo as the default:** answers rainfall by coordinate, without
-  depending on a station or INMET's lag.
+- **Open-Meteo as the only rainfall source:** answers rainfall by coordinate,
+  without depending on a station. INMET and ANA were implemented and dropped:
+  INMET only publishes the annual ZIP (days of lag) and ANA's network is
+  mostly fluviometric. Keeping both paths cost ~1,900 lines that no workflow
+  ever ran.
 - **National coverage:** incremental CPRM ingestion plus a spatial grid
   calibrated by binary search, instead of a hand-picked density threshold.
 
@@ -316,6 +296,5 @@ license are kept and credit to the original author (Mateus Hcristos
 Leptokarydis) is preserved.
 
 The public data belongs to their respective agencies:
-[CPRM/SGB](https://www.sgb.gov.br/), [INMET](https://portal.inmet.gov.br/),
-[ANA](https://www.gov.br/ana/pt-br) and [Open-Meteo](https://open-meteo.com/).
+[CPRM/SGB](https://www.sgb.gov.br/) and [Open-Meteo](https://open-meteo.com/).
 Check each one's terms of use before redistributing.

@@ -48,7 +48,6 @@ UF_WORKERS_PADRAO = 4
 
 def exportar_nacional(
     ufs: list[str],
-    ano: int,
     diretorio_dados: Path,
     saida_dir: Path,
     orcamento_alvo: int = ORCAMENTO_ALVO_PADRAO,
@@ -113,8 +112,8 @@ def exportar_nacional(
         inicio, fim = fatias[uf]
         try:
             meta = exportar_dashboard(
-                uf, ano, diretorio_dados, saida_dir,
-                fonte="openmeteo", pontos_grade=pontos_grade[inicio:fim],
+                uf, diretorio_dados, saida_dir,
+                pontos_grade=pontos_grade[inicio:fim],
                 cache_openmeteo=cache_openmeteo,
             )
         except (ExportacaoDashboardError, OSError, ValueError) as exc:

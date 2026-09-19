@@ -16,7 +16,6 @@ UFS_VALIDAS = {
 
 CAMADA_SETORES = "setores_risco"
 
-JANELAS_CHUVA = (24, 72)
 LIMIAR_ATENCAO_MM_PADRAO = 100.0
 
 
@@ -29,22 +28,6 @@ def validar_uf(uf: str) -> str:
 
 def caminho_setores(uf: str, data_dir: Path = DATA_DIR) -> Path:
     return data_dir / f"risco_{uf.lower()}.gpkg"
-
-
-def caminho_chuva(uf: str, ano: int, data_dir: Path = DATA_DIR) -> Path:
-    return data_dir / f"chuva_{uf.lower()}_{ano}.csv"
-
-
-def caminho_chuva_ana(uf: str, data_dir: Path = DATA_DIR) -> Path:
-    return data_dir / f"chuva_ana_{uf.lower()}.csv"
-
-
-def caminho_zip_inmet(ano: int, data_dir: Path = DATA_DIR) -> Path:
-    return data_dir / f"inmet_{ano}.zip"
-
-
-def caminho_manifesto_inmet(uf: str, ano: int, data_dir: Path = DATA_DIR) -> Path:
-    return data_dir / f"inmet_manifest_{uf.lower()}_{ano}.json"
 
 
 def caminho_manifesto_cprm(uf: str, data_dir: Path = DATA_DIR) -> Path:

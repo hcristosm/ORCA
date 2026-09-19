@@ -1,15 +1,11 @@
 (function () {
   "use strict";
 
+  const { escaparHtml } = window.ORCA;
+
   // Formato normalizado consumido por este módulo:
   // { nome, tipo, classificacao, chuva24, chuva72, distanciaKm, fonteEstacao, trajetoria }
   // trajetoria é opcional: [[isoDate, mmOuNull], ...]
-
-  function escaparHtml(texto) {
-    const div = document.createElement("div");
-    div.textContent = texto == null ? "" : String(texto);
-    return div.innerHTML;
-  }
 
   function formatarMm(valor) {
     return typeof valor === "number" ? `${valor.toFixed(1)}mm` : "—";
