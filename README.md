@@ -192,6 +192,11 @@ recusa falha o run:
 - recusa conjunto vazio, contagem publicada ilegível, ou regressão no total de
   UFs em relação ao que já está no ar.
 
+Depois do deploy, um teste de fumaça espera a URL pública servir o deploy
+daquele run (marcador `versao.txt` com o id do run, lido furando o cache do CDN)
+e confere que ela serve o mesmo número de UFs que acabou de ser publicado. Se o
+build do Pages falhar ou o site servir outra coisa, o run fica vermelho.
+
 Essas guardas existem porque em 22 e 23/08/2026 dois runs publicaram 1 e 2 UFs
 de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
 
@@ -211,9 +216,6 @@ de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
   blob de cache da Open-Meteo (~45MB) que muda todo dia. Tirar o cache de lá é
   pré-requisito pra abandonar o `force_orphan`. Até então a proteção é
   preventiva, não reversível.
-- **Falta selo de defasagem e teste de fumaça pós-deploy.** O dashboard mostra
-  quando foi gerado, mas sem realce quando o dado passa de um ciclo, e nada
-  confere depois do deploy se a URL pública serve mesmo as 27 UFs.
 - **A Open-Meteo limita por volume, não só por frequência.** Testado com
   requisição real: um POST com as ~900 coordenadas de SP funciona sozinho, mas
   repetir esse volume gera `429` de forma consistente.
@@ -255,8 +257,6 @@ As decisões maiores foram testadas com requisição real, não por suposição:
 
 - Tirar o cache da Open-Meteo do `gh-pages` pra abandonar o `force_orphan` e
   recuperar o histórico da branch publicada.
-- Selo de defasagem no dashboard e teste de fumaça contra a URL pública depois
-  do deploy.
 - Fallback municipal: camadas de prefeituras em ArcGIS REST. Investigado pra
   Itaquaquecetuba/SP em 14/08/2026, sem endpoint público confirmado. Pendente de
   um município piloto com dado aberto.
