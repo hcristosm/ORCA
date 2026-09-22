@@ -15,7 +15,7 @@
   style-src 'self' 'unsafe-inline' https://unpkg.com;
   img-src 'self' data: https://*.tile.openstreetmap.org https://tilecache.rainviewer.com;
   font-src 'self';
-  connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com https://api.rainviewer.com;
+  connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com https://api.rainviewer.com https://apiprevmet3.inmet.gov.br;
   object-src 'none';
   base-uri 'self';
   frame-ancestors 'none';
@@ -976,6 +976,39 @@
     return promessaRadarRainViewer;
   }
 
+  const INMET_AVISOS_URL = "https://apiprevmet3.inmet.gov.br/avisos/ativos";
+  let promessaAvisosInmet = null;
+
+  // Avisos meteorológicos oficiais do INMET (a mesma API que alimenta o
+  // alerta-as.inmet.gov.br). A resposta já traz o polígono como GeoJSON (em
+  // string) e a cor oficial da severidade, então não há aqui tabela de cores
+  // nem parser de CAP. Buscado uma vez por sessão; se a API cair, a camada
+  // some do controle em vez de quebrar o mapa (ver CLAUDE.md).
+  function carregarAvisosInmet() {
+    if (!promessaAvisosInmet) {
+      promessaAvisosInmet = fetch(INMET_AVISOS_URL)
+        .then(r => r.json())
+        .then(dados => [...(dados.hoje || []), ...(dados.futuro || [])].flatMap(aviso => {
+          try { return [{ type: "Feature", geometry: JSON.parse(aviso.poligono), properties: aviso }]; }
+          catch (e) { return []; }
+        }))
+        .catch(e => { console.warn("Avisos INMET indisponíveis, camada omitida:", e); return []; });
+    }
+    return promessaAvisosInmet;
+  }
+
+  function popupAvisoInmet(a) {
+    const itens = lista => (lista || [])
+      .map(t => `<li>${escaparHtml(String(t).trim())}</li>`).join("");
+    return `<strong>${escaparHtml(a.descricao)}</strong><br>` +
+      `<span style="color:${escaparHtml(a.aviso_cor)};font-weight:600">${escaparHtml(a.severidade)}</span>` +
+      `<div>${escaparHtml(a.inicio)} &rarr; ${escaparHtml(a.fim)}</div>` +
+      (a.riscos && a.riscos.length ? `<ul>${itens(a.riscos)}</ul>` : "") +
+      (a.instrucoes && a.instrucoes.length
+        ? `<strong>O que fazer</strong><ul>${itens(a.instrucoes)}</ul>` : "") +
+      `<small>Aviso oficial do INMET</small>`;
+  }
+
   function inicializarMapa() {
     clearTimeout(idAgendaSetoresCompleto);
     if (mapa) {
@@ -993,6 +1026,11 @@
     L.tileLayer(TILE_URL, {
       attribution: "© OpenStreetMap", maxZoom: 19,
     }).addTo(mapa);
+
+    // Os polígonos do INMET são enormes (chegam a cobrir meia região) e têm
+    // preenchimento, então vão numa pane abaixo da overlayPane (400): assim os
+    // setores continuam visíveis e clicáveis por cima dos avisos.
+    mapa.createPane("avisosInmet").style.zIndex = 350;
 
     const legenda = L.control({ position: "bottomleft" });
     legenda.onAdd = function () {
@@ -1019,6 +1057,21 @@
         opacity: 0.6, attribution: "© RainViewer", maxNativeZoom: 12,
       });
       controleCamadas.addOverlay(camadaRadar, "Chuva agora (radar)");
+    });
+
+    carregarAvisosInmet().then(features => {
+      if (mapa !== mapaDesteInit) return;
+      // `municipios` vem como "Nome - UF (geocode),...": dispensa uma tabela sigla -> nome do estado.
+      const daUf = features.filter(f =>
+        (f.properties.municipios || "").includes(` - ${UF.toUpperCase()} (`));
+      if (!daUf.length) return;
+      const camadaAvisos = L.geoJSON({ type: "FeatureCollection", features: daUf }, {
+        pane: "avisosInmet",
+        style: f => ({ color: f.properties.aviso_cor, weight: 2, fillOpacity: 0.15 }),
+        onEachFeature: (f, camada) => camada.bindPopup(popupAvisoInmet(f.properties), { maxWidth: 340 }),
+      });
+      controleCamadas.addOverlay(camadaAvisos, `Avisos INMET (${daUf.length})`);
+      camadaAvisos.addTo(mapa);
     });
 
     mapa.on("overlayadd", ev => {
