@@ -13,6 +13,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 ## [Unreleased]
 
 ### FEATURES
+- feat(dashboard): camada de avisos meteorológicos oficiais do INMET no mapa (polígono, cor da severidade, riscos e instruções no popup), filtrada pela UF selecionada
 - feat(ci): teste de fumaça pós-deploy em `atualizar-dados.yml` — espera a URL pública servir o deploy do run (marcador `versao.txt`) e confere a contagem de UFs no ar
 - feat(dashboard): selo de atualização por fonte (CPRM/SGB e chuva), em horário de Brasília, com idade do dado e alerta de desatualizado
 - feat(dashboard): navegação pela URL (`#/<uf>/<município>`) com Voltar/Avançar do navegador, links compartilháveis, botão "Voltar ao estado" e trilha clicável
