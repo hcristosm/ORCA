@@ -13,9 +13,9 @@
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
   style-src 'self' 'unsafe-inline' https://unpkg.com;
-  img-src 'self' data: https://*.tile.openstreetmap.org https://tilecache.rainviewer.com;
+  img-src 'self' data: https://*.tile.openstreetmap.org https://tilecache.rainviewer.com https://realearth.ssec.wisc.edu;
   font-src 'self';
-  connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com https://api.rainviewer.com https://apiprevmet3.inmet.gov.br;
+  connect-src 'self' https://servicodados.ibge.gov.br https://api.open-meteo.com https://api.rainviewer.com https://apiprevmet3.inmet.gov.br https://realearth.ssec.wisc.edu;
   object-src 'none';
   base-uri 'self';
   frame-ancestors 'none';
@@ -976,6 +976,41 @@
     return promessaRadarRainViewer;
   }
 
+  const REALEARTH_GLM_URL = "https://realearth.ssec.wisc.edu/api/products?products=glmgroupdensity";
+  const GLM_IDADE_MAXIMA_MS = 30 * 60 * 1000;
+  let promessaRaiosGlm = null;
+
+  // Densidade de raios do GOES-19 GLM, já em tiles, pelo RealEarth (SSEC/Univ.
+  // de Wisconsin). É raio total (nuvem-solo + intranuvem) a ~8 km, não ponto de
+  // impacto: indica tempestade convectiva ativa. Mesmo molde do radar; além de
+  // falha de rede, omite a camada se o último quadro for velho -- fonte que para
+  // de ingerir continua respondendo 200 (ver CLAUDE.md).
+  function carregarRaiosGlm() {
+    if (!promessaRaiosGlm) {
+      promessaRaiosGlm = fetch(REALEARTH_GLM_URL)
+        .then(r => r.json())
+        .then(dados => {
+          const times = dados[0] && dados[0].times;
+          if (!times || !times.length) return null;
+          const ultimo = times[times.length - 1];
+          if (!/^\d{8}\.\d{6}$/.test(ultimo)) return null;  // vai na URL do tile: sem string quase válida
+          const [data, hhmmss] = ultimo.split(".");  // "AAAAMMDD.HHMMSS", UTC
+          const quadro = new Date(Date.UTC(+data.slice(0, 4), +data.slice(4, 6) - 1, +data.slice(6, 8),
+            +hhmmss.slice(0, 2), +hhmmss.slice(2, 4)));
+          // `!(<=)` e não `>`: quadro inválido dá NaN, e NaN > x é false.
+          if (!(Date.now() - quadro <= GLM_IDADE_MAXIMA_MS)) return null;
+          return {
+            // Data/hora fixas na URL: o produto muda a cada minuto e, sem elas,
+            // tiles do mesmo mapa podem vir de quadros diferentes.
+            url: `https://realearth.ssec.wisc.edu/tiles/glmgroupdensity/${data}/${hhmmss}/{z}/{x}/{y}.png`,
+            hora: quadro.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          };
+        })
+        .catch(e => { console.warn("RealEarth indisponível, camada de raios omitida:", e); return null; });
+    }
+    return promessaRaiosGlm;
+  }
+
   const INMET_AVISOS_URL = "https://apiprevmet3.inmet.gov.br/avisos/ativos";
   let promessaAvisosInmet = null;
 
@@ -1031,6 +1066,10 @@
     // preenchimento, então vão numa pane abaixo da overlayPane (400): assim os
     // setores continuam visíveis e clicáveis por cima dos avisos.
     mapa.createPane("avisosInmet").style.zIndex = 350;
+    // Camadas raster de overlay (raios, radar): acima do tilePane (200), cujo
+    // filtro cinza do basemap (style.css) apagaria as cores, e abaixo dos
+    // avisos (350) e dos setores (400).
+    mapa.createPane("sobreposicoes").style.zIndex = 250;
 
     const legenda = L.control({ position: "bottomleft" });
     legenda.onAdd = function () {
@@ -1054,9 +1093,19 @@
       // essas tiles como se fossem dado real. Acima de 12 ele amplia a última tile
       // nativa em vez de buscar uma nova.
       const camadaRadar = L.tileLayer(urlTemplate, {
-        opacity: 0.6, attribution: "© RainViewer", maxNativeZoom: 12,
+        opacity: 0.6, attribution: "© RainViewer", maxNativeZoom: 12, pane: "sobreposicoes",
       });
       controleCamadas.addOverlay(camadaRadar, "Chuva agora (radar)");
+    });
+
+    carregarRaiosGlm().then(raios => {
+      if (!raios || mapa !== mapaDesteInit) return;
+      // maxNativeZoom 7: zoom máximo do produto no RealEarth; acima, o Leaflet amplia.
+      const camadaRaios = L.tileLayer(raios.url, {
+        opacity: 0.8, maxNativeZoom: 7, pane: "sobreposicoes",
+        attribution: "Raios totais (nuvem-solo + intranuvem) · GOES-19 GLM/NOAA via SSEC RealEarth",
+      });
+      controleCamadas.addOverlay(camadaRaios, `Raios (GLM, ${raios.hora})`);
     });
 
     carregarAvisosInmet().then(features => {

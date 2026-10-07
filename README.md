@@ -66,6 +66,7 @@ publicado no GitHub Pages e atualizado todo dia por cron.
 - Selo de atualização por fonte (setores da CPRM/SGB e chuva), em horário de
   Brasília, com idade do dado e alerta quando algo passa do ciclo esperado.
 - Camada opcional de radar de chuva (RainViewer) no mapa.
+- Camada opcional de raios (GOES-19 GLM, via SSEC RealEarth) no mapa: atividade elétrica dos últimos minutos, como indicador de tempestade.
 - Roda dois workflows separados: setores uma vez por mês, chuva uma vez por dia.
 - 144 testes com HTTP mockado, rodando no CI a cada push.
 

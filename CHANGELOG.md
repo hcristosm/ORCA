@@ -13,6 +13,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 ## [Unreleased]
 
 ### FEATURES
+- feat(dashboard): camada opcional de raios (GOES-19 GLM via SSEC RealEarth) no mapa — raio total, não ponto de impacto; omitida se a fonte cair ou o quadro tiver mais de 30 min
 - feat(dashboard): camada de avisos meteorológicos oficiais do INMET no mapa (polígono, cor da severidade, riscos e instruções no popup), filtrada pela UF selecionada
 - feat(ci): teste de fumaça pós-deploy em `atualizar-dados.yml` — espera a URL pública servir o deploy do run (marcador `versao.txt`) e confere a contagem de UFs no ar
 - feat(dashboard): selo de atualização por fonte (CPRM/SGB e chuva), em horário de Brasília, com idade do dado e alerta de desatualizado
@@ -27,6 +28,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 - fix(dashboard): recriar o mapa durante a animação de zoom não lança mais `_leaflet_pos`
 - fix(dashboard): busca não sobrescreve mais as primeiras teclas digitadas logo após escolher uma sugestão
 - fix(dashboard): CSP bloqueava o radar do RainViewer; ajustes de cor e zoom da camada
+- fix(dashboard): radar RainViewer saía em tons de cinza (herdava o filtro do basemap); agora usa pane própria
 
 ### REFACTOR
 - refactor(ingest)!: remove as trilhas INMET e ANA (módulos, comandos `ingest-inmet`/`ingest-ana`, opção `--fonte`, cruzamento por estação mais próxima). Nenhum workflow as executava desde que a exportação diária virou nacional; a Open-Meteo passa a ser a única fonte de chuva
