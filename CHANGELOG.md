@@ -28,6 +28,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 - fix(dashboard): recriar o mapa durante a animação de zoom não lança mais `_leaflet_pos`
 - fix(dashboard): busca não sobrescreve mais as primeiras teclas digitadas logo após escolher uma sugestão
 - fix(dashboard): CSP bloqueava o radar do RainViewer; ajustes de cor e zoom da camada
+- fix(dashboard): radar RainViewer saía em tons de cinza (herdava o filtro do basemap); agora usa pane própria
 
 ### REFACTOR
 - refactor(ingest)!: remove as trilhas INMET e ANA (módulos, comandos `ingest-inmet`/`ingest-ana`, opção `--fonte`, cruzamento por estação mais próxima). Nenhum workflow as executava desde que a exportação diária virou nacional; a Open-Meteo passa a ser a única fonte de chuva

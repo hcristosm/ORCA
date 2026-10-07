@@ -1093,7 +1093,7 @@
       // essas tiles como se fossem dado real. Acima de 12 ele amplia a última tile
       // nativa em vez de buscar uma nova.
       const camadaRadar = L.tileLayer(urlTemplate, {
-        opacity: 0.6, attribution: "© RainViewer", maxNativeZoom: 12,
+        opacity: 0.6, attribution: "© RainViewer", maxNativeZoom: 12, pane: "sobreposicoes",
       });
       controleCamadas.addOverlay(camadaRadar, "Chuva agora (radar)");
     });
