@@ -13,6 +13,9 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 ## [Unreleased]
 
 ### FEATURES
+- feat(dashboard): layout de dashboard em altura de tela — três colunas com rolagem própria (contexto, mapa, painel), "Minhas áreas" como aba e o mapa sempre à vista; abaixo de 1081px tudo empilha como antes
+- feat(dashboard): toolbar de ícones no mapa (voltar ao estado, enquadrar, tela cheia) e pin nos setores acima do limiar e em alerta previsto, com clique para descer ao município
+- feat(dashboard): legenda e contadores filtram o mapa por classe (grau, acima do limiar, alerta previsto); as contagens e a tabela seguem as do recorte inteiro
 - feat(dashboard): camada opcional de raios (GOES-19 GLM via SSEC RealEarth) no mapa — raio total, não ponto de impacto; omitida se a fonte cair ou o quadro tiver mais de 30 min
 - feat(dashboard): camada de avisos meteorológicos oficiais do INMET no mapa (polígono, cor da severidade, riscos e instruções no popup), filtrada pela UF selecionada
 - feat(ci): teste de fumaça pós-deploy em `atualizar-dados.yml` — espera a URL pública servir o deploy do run (marcador `versao.txt`) e confere a contagem de UFs no ar
@@ -24,6 +27,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 - feat(export): `meta_<uf>.json` ganha a lista `municipios`, índice da busca nacional
 
 ### FIXES
+- fix(dashboard): `[hidden]` perdia para o `display` das regras de layout e a vista escondida continuava na tela
 - fix(cprm): ingestão incremental sem setores novos não quebra mais com `ValueError`
 - fix(dashboard): recriar o mapa durante a animação de zoom não lança mais `_leaflet_pos`
 - fix(dashboard): busca não sobrescreve mais as primeiras teclas digitadas logo após escolher uma sugestão

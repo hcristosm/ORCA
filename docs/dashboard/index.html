@@ -54,145 +54,170 @@
       <img id="logoImg" src="logo/orca-logo-claro.png" alt="Logo do ORCA" height="34">
       <span class="marca-texto">
         <b>ORCA</b>
-        <span>risco geológico &times; chuva</span>
+        <span>risco geol&oacute;gico &times; chuva</span>
       </span>
     </div>
 
-<div class="controles">
-    <div class="campo campo-uf">
-      <label for="ufSelect">Estado</label>
-      <select id="ufSelect"></select>
-    </div>
-
-    <div class="campo campo-municipio">
-      <label for="buscaMunicipio">Município</label>
-      <div class="busca">
-        <input type="text" id="buscaMunicipio" autocomplete="off" placeholder="Buscar em todo o Brasil">
-        <ul class="sugestoes" id="buscaMunicipioSugestoes" role="listbox" hidden></ul>
+    <div class="controles">
+      <div class="campo campo-uf">
+        <label for="ufSelect">Estado</label>
+        <select id="ufSelect"></select>
       </div>
-    </div>
 
-    <div class="campo">
-      <label><svg class="icone"><use href="icons/sprite.svg#icon-clock"></use></svg>Janela</label>
-      <div class="toggle-janela" id="janelaToggle">
-        <button data-janela="24" type="button">24h</button>
-        <button data-janela="72" type="button" class="ativo">72h</button>
+      <div class="campo campo-municipio">
+        <label for="buscaMunicipio">Munic&iacute;pio</label>
+        <div class="busca">
+          <input type="text" id="buscaMunicipio" autocomplete="off" placeholder="Buscar em todo o Brasil">
+          <ul class="sugestoes" id="buscaMunicipioSugestoes" role="listbox" hidden></ul>
+        </div>
       </div>
+
+      <div class="campo">
+        <label><svg class="icone"><use href="icons/sprite.svg#icon-clock"></use></svg>Janela</label>
+        <div class="toggle-janela" id="janelaToggle">
+          <button data-janela="24" type="button">24h</button>
+          <button data-janela="72" type="button" class="ativo">72h</button>
+        </div>
+      </div>
+
+      <button class="botao-tema" id="botaoTema" type="button" aria-label="Alternar tema claro e escuro">
+        <svg class="icone icone-sol"><use href="icons/sprite.svg#icon-sun"></use></svg>
+        <svg class="icone icone-lua"><use href="icons/sprite.svg#icon-moon"></use></svg>
+      </button>
     </div>
 
-    <button class="botao-tema" id="botaoTema" type="button" aria-label="Alternar tema claro e escuro">
-      <svg class="icone icone-sol"><use href="icons/sprite.svg#icon-sun"></use></svg>
-      <svg class="icone icone-lua"><use href="icons/sprite.svg#icon-moon"></use></svg>
-    </button>
-    </div>
+    <nav class="abas" id="abas" aria-label="Vis&otilde;es">
+      <button type="button" data-vista="vistaMapa" class="ativo" aria-current="page">
+        <svg class="icone"><use href="icons/sprite.svg#icon-map-pin"></use></svg>Mapa</button>
+      <button type="button" data-vista="vistaAreas">
+        <svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>Minhas &aacute;reas</button>
+    </nav>
   </div>
 </header>
 
-<!-- A régua: onde o estado está, em relação à linha que você desenhou. -->
-<div class="regua-faixa">
-  <div class="regua">
-    <div class="regua-cabecalho">
-      <h1 class="regua-titulo" id="reguaTitulo">Chuva acumulada por setor de risco</h1>
-      <p class="regua-leitura" id="reguaLeitura"></p>
-    </div>
+<main id="vistas">
 
-    <div class="escala" id="escala">
-      <div class="escala-faixa" id="escalaFaixa" hidden></div>
-      <div class="escala-marcas" id="escalaMarcas"></div>
-      <div class="escala-trilho"></div>
-      <div id="escalaTicks"></div>
-      <div class="escala-limiar" id="escalaLimiar"></div>
-      <span class="escala-limiar-valor" id="escalaLimiarValor"></span>
-      <input type="range" id="limiarSlider" min="0" max="300" step="5" value="100"
-             aria-label="Limiar de atenção, em milímetros">
-    </div>
+<div class="shell" id="vistaMapa">
+
+  <!-- coluna de contexto: onde eu estou, quantos s&atilde;o, e a linha que eu desenhei -->
+  <aside class="coluna coluna-contexto">
+    <nav class="navegacao" aria-label="Navega&ccedil;&atilde;o">
+      <button type="button" class="botao-voltar" id="botaoVoltar" hidden>
+        <svg class="icone"><use href="icons/sprite.svg#icon-corner-up-left"></use></svg>Voltar ao estado</button>
+      <ol class="trilha" id="trilha"></ol>
+    </nav>
+
+    <section class="bloco">
+      <div class="bloco-cabecalho">
+        <h2 id="tituloRecorte">Estado inteiro</h2>
+        <span class="contagem" id="contagemRecorte"></span>
+      </div>
+      <div class="contadores" id="cards"></div>
+      <p class="nota-filtro">Clique num n&uacute;mero para esconder essa classe do mapa.</p>
+    </section>
+
+    <!-- A r&eacute;gua: onde o estado est&aacute;, em rela&ccedil;&atilde;o &agrave; linha que voc&ecirc; desenhou. -->
+    <section class="bloco">
+      <div class="regua">
+        <div class="regua-cabecalho">
+          <h1 class="regua-titulo" id="reguaTitulo">Chuva acumulada por setor de risco</h1>
+          <p class="regua-leitura" id="reguaLeitura"></p>
+        </div>
+
+        <div class="escala" id="escala">
+          <div class="escala-faixa" id="escalaFaixa" hidden></div>
+          <div class="escala-marcas" id="escalaMarcas"></div>
+          <div class="escala-trilho"></div>
+          <div id="escalaTicks"></div>
+          <div class="escala-limiar" id="escalaLimiar"></div>
+          <span class="escala-limiar-valor" id="escalaLimiarValor"></span>
+          <input type="range" id="limiarSlider" min="0" max="300" step="5" value="100"
+                 aria-label="Limiar de aten&ccedil;&atilde;o, em mil&iacute;metros">
+        </div>
+      </div>
+    </section>
+
+    <div class="selo" id="selo" aria-live="polite">Carregando dados&hellip;</div>
+
+    <footer>
+      <span>Dados p&uacute;blicos da CPRM/SGB, INMET, ANA e Open-Meteo. Site est&aacute;tico, atualizado diariamente.</span>
+      <span>
+        <a href="https://github.com/hcristosm/ORCA#readme">Sobre o projeto</a> &middot;
+        <a href="https://github.com/hcristosm/ORCA">GitHub <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg></a>
+      </span>
+    </footer>
+  </aside>
+
+  <div class="coluna coluna-mapa">
+    <div id="mapa"></div>
+  </div>
+
+  <div class="coluna coluna-painel">
+    <section class="bloco">
+      <div class="bloco-cabecalho">
+        <h2 id="tituloTabela">Setores em aten&ccedil;&atilde;o</h2>
+        <div class="bloco-cabecalho-acoes">
+          <span class="contagem" id="contagemAtencao"></span>
+          <button class="botao-exportar" type="button" id="botaoExportarTabelaCSV" title="Exportar tabela como CSV">
+            <svg class="icone"><use href="icons/sprite.svg#icon-download"></use></svg>CSV</button>
+          <button class="botao-exportar" type="button" id="botaoExportarTabelaPDF" title="Exportar tabela como PDF">
+            <svg class="icone"><use href="icons/sprite.svg#icon-printer"></use></svg>PDF</button>
+        </div>
+      </div>
+      <div class="tabela-scroll">
+        <table>
+          <thead>
+            <tr><th>Munic&iacute;pio</th><th>Grau</th><th>Chuva</th><th></th></tr>
+          </thead>
+          <tbody id="tabelaCorpo"></tbody>
+        </table>
+      </div>
+      <div class="vazio" id="tabelaVazia">
+        <strong>Nenhum setor passou de <span id="vazioLimiar">100</span>mm.</strong>
+        Arraste a r&eacute;gua ao lado para baixar o limiar e ver o que est&aacute; mais perto dele.
+      </div>
+    </section>
+
+    <section class="bloco" id="blocoAlertaPrevisto" hidden>
+      <div class="bloco-cabecalho">
+        <h2><svg class="icone"><use href="icons/sprite.svg#icon-triangle-alert"></use></svg>Alerta previsto</h2>
+        <span class="contagem viva" id="contagemPrevisto"></span>
+      </div>
+      <div class="tabela-scroll">
+        <table>
+          <thead>
+            <tr><th>Munic&iacute;pio</th><th>Grau</th><th>Cruza o limiar</th></tr>
+          </thead>
+          <tbody id="tabelaPrevistoCorpo"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="bloco">
+      <div class="bloco-cabecalho">
+        <h2 id="tituloSerie">Munic&iacute;pios com mais chuva</h2>
+        <span class="contagem" id="estacaoRotulo"></span>
+      </div>
+      <div class="grafico-caixa" id="graficoCaixa" hidden>
+        <canvas id="grafico"></canvas>
+      </div>
+      <ul class="lista-municipios" id="listaMunicipios"></ul>
+      <div class="vazio" id="graficoVazio" hidden></div>
+    </section>
   </div>
 </div>
 
-<nav class="navegacao" aria-label="Navegação">
-  <button type="button" class="botao-voltar" id="botaoVoltar" hidden>&larr; Voltar ao estado</button>
-  <ol class="trilha" id="trilha"></ol>
-</nav>
-
-<div class="selo" id="selo" aria-live="polite">Carregando dados…</div>
-
-<main>
-  <div class="painel">
-    <div id="mapa"></div>
-
-    <div class="trilho">
-      <section class="bloco">
-        <div class="bloco-cabecalho">
-          <h2 id="tituloRecorte">Estado inteiro</h2>
-          <span class="contagem" id="contagemRecorte"></span>
-        </div>
-        <div class="contadores" id="cards"></div>
-      </section>
-
-      <section class="bloco">
-        <div class="bloco-cabecalho">
-          <h2 id="tituloTabela">Setores em atenção</h2>
-          <div class="bloco-cabecalho-acoes">
-            <span class="contagem" id="contagemAtencao"></span>
-            <button class="botao-exportar" type="button" id="botaoExportarTabelaCSV" title="Exportar tabela como CSV">
-              <svg class="icone"><use href="icons/sprite.svg#icon-download"></use></svg>CSV</button>
-            <button class="botao-exportar" type="button" id="botaoExportarTabelaPDF" title="Exportar tabela como PDF">
-              <svg class="icone"><use href="icons/sprite.svg#icon-printer"></use></svg>PDF</button>
-          </div>
-        </div>
-        <div class="tabela-scroll">
-          <table>
-            <thead>
-              <tr><th>Município</th><th>Grau</th><th>Chuva</th><th></th></tr>
-            </thead>
-            <tbody id="tabelaCorpo"></tbody>
-          </table>
-        </div>
-        <div class="vazio" id="tabelaVazia">
-          <strong>Nenhum setor passou de <span id="vazioLimiar">100</span>mm.</strong>
-          Arraste a régua acima para baixar o limiar e ver o que está mais perto dele.
-        </div>
-      </section>
-
-      <section class="bloco" id="blocoAlertaPrevisto" hidden>
-        <div class="bloco-cabecalho">
-          <h2><svg class="icone"><use href="icons/sprite.svg#icon-triangle-alert"></use></svg>Alerta previsto</h2>
-          <span class="contagem viva" id="contagemPrevisto"></span>
-        </div>
-        <div class="tabela-scroll">
-          <table>
-            <thead>
-              <tr><th>Município</th><th>Grau</th><th>Cruza o limiar</th></tr>
-            </thead>
-            <tbody id="tabelaPrevistoCorpo"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="bloco">
-        <div class="bloco-cabecalho">
-          <h2 id="tituloSerie">Municípios com mais chuva</h2>
-          <span class="contagem" id="estacaoRotulo"></span>
-        </div>
-        <div class="grafico-caixa" id="graficoCaixa" hidden>
-          <canvas id="grafico"></canvas>
-        </div>
-        <ul class="lista-municipios" id="listaMunicipios"></ul>
-        <div class="vazio" id="graficoVazio" hidden></div>
-      </section>
-    </div>
-  </div>
-
+<div class="vista-areas" id="vistaAreas" hidden>
   <section class="areas" id="areasCustomizadas">
     <div class="areas-cabecalho">
-      <h2>Minhas áreas</h2>
+      <h2>Minhas &aacute;reas</h2>
       <span class="rotulo-inst">roda no seu navegador</span>
     </div>
     <p class="areas-intro">
-      A setorização da CPRM/SGB não cobre tudo. Carregue uma área sua (GeoJSON, KML ou shapefile
-      em .zip) para ver a chuva acumulada e o alerta previsto nela. O arquivo é lido pelo seu
+      A setoriza&ccedil;&atilde;o da CPRM/SGB n&atilde;o cobre tudo. Carregue uma &aacute;rea sua (GeoJSON, KML ou shapefile
+      em .zip) para ver a chuva acumulada e o alerta previsto nela. O arquivo &eacute; lido pelo seu
       navegador e a chuva vem direto da Open-Meteo: nada passa por um servidor do ORCA nem fica
-      salvo, e tudo some quando você recarregar. Até 5 áreas, 10MB por arquivo.
+      salvo, e tudo some quando voc&ecirc; recarregar. At&eacute; 5 &aacute;reas, 10MB por arquivo.
     </p>
 
     <div class="upload-linha">
@@ -202,9 +227,9 @@
       </label>
       <input type="file" id="uploadArquivo" accept=".geojson,.json,.kml,.zip" hidden>
       <div class="campo campo-classificacao">
-        <label for="classificacaoSelect">Classificação (opcional, sua)</label>
+        <label for="classificacaoSelect">Classifica&ccedil;&atilde;o (opcional, sua)</label>
         <select id="classificacaoSelect">
-          <option value="">Não informada</option>
+          <option value="">N&atilde;o informada</option>
           <option value="alto">Alto</option>
           <option value="muito alto">Muito alto</option>
         </select>
@@ -217,15 +242,9 @@
 
     <div class="cards-areas" id="cardsAreas"></div>
   </section>
-</main>
+</div>
 
-<footer>
-  <span>Dados públicos da CPRM/SGB, INMET, ANA e Open-Meteo. Site estático, atualizado diariamente.</span>
-  <span>
-    <a href="https://github.com/hcristosm/ORCA#readme">Sobre o projeto</a> ·
-    <a href="https://github.com/hcristosm/ORCA">GitHub <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg></a>
-  </span>
-</footer>
+</main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -441,7 +460,10 @@
     return HACHURA_POR_GRAU[(grau || "").toLowerCase()] || "url(#hach-padrao)";
   }
 
-  const estado = { janela: 72, limiar: 100, municipio: "" };
+  // `ocultos`: classes escondidas do MAPA pelo clique na legenda/KPI. Não entra
+  // nas contagens nem na tabela de propósito — contador que muda com o filtro
+  // mente sobre quantos setores existem.
+  const estado = { janela: 72, limiar: 100, municipio: "", ocultos: new Set() };
   let setoresGeoJSON = null;
   let series = {};
   let previsao = null;
@@ -1075,9 +1097,16 @@
     legenda.onAdd = function () {
       legendaDiv = L.DomUtil.create("div", "legenda");
       legendaDiv.innerHTML = conteudoLegenda();
+      L.DomEvent.disableClickPropagation(legendaDiv);
+      legendaDiv.addEventListener("click", ev => {
+        const botao = ev.target.closest("button[data-filtro]");
+        if (botao) alternarFiltro(botao.dataset.filtro);
+      });
       return legendaDiv;
     };
     legenda.addTo(mapa);
+
+    criarToolbar().addTo(mapa);
 
     camadaSetoresTodos = L.layerGroup();
     const overlays = { "Setores do estado inteiro": camadaSetoresTodos };
@@ -1129,6 +1158,44 @@
     mapa.on("overlayremove", ev => {
       if (ev.name === "Setores do estado inteiro") { camadaSetoresTodos.clearLayers(); atualizarLegenda(); }
     });
+  }
+
+  // Toolbar do mapa: as três ações que se quer no mapa, no mapa — voltar ao
+  // estado, reenquadrar e esconder as colunas laterais.
+  function criarToolbar() {
+    const BOTOES = [
+      ["voltar", "icon-corner-up-left", "Voltar ao estado"],
+      ["enquadrar", "icon-crosshair", "Enquadrar o que está na tela"],
+      ["cheio", "icon-maximize", "Tela cheia do mapa"],
+    ];
+    const controle = L.control({ position: "topleft" });
+    controle.onAdd = function () {
+      const div = L.DomUtil.create("div", "toolbar-mapa");
+      div.innerHTML = BOTOES.map(([acao, icone, titulo]) =>
+        `<button type="button" data-acao="${acao}" title="${titulo}" aria-label="${titulo}">` +
+        `<svg class="icone"><use href="icons/sprite.svg#${icone}"></use></svg></button>`).join("");
+      L.DomEvent.disableClickPropagation(div);
+      div.addEventListener("click", ev => {
+        const acao = ev.target.closest("button[data-acao]")?.dataset.acao;
+        if (acao === "voltar") subirParaEstado();
+        else if (acao === "enquadrar") enquadrarMapa();
+        else if (acao === "cheio") alternarMapaCheio();
+      });
+      return div;
+    };
+    return controle;
+  }
+
+  function enquadrarMapa() {
+    const camada = camadaSetores || camadaChoropleth;
+    if (camada && camada.getBounds().isValid()) mapa.fitBounds(camada.getBounds(), { padding: [24, 24] });
+  }
+
+  function alternarMapaCheio() {
+    document.getElementById("vistaMapa").classList.toggle("mapa-cheio");
+    // O container do mapa muda de largura: sem invalidateSize o Leaflet continua
+    // desenhando tiles no tamanho antigo.
+    mapa.invalidateSize();
   }
 
   function setoresFiltrados(municipio = estado.municipio, excluirMunicipio = null) {
@@ -1266,18 +1333,24 @@
     const grauMuitoAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "muito alto").length;
 
     const cards = [
-      { rotulo: "Grau alto", valor: grauAlto },
-      { rotulo: "Grau muito alto", valor: grauMuitoAlto },
-      { rotulo: `Em atenção (≥ ${estado.limiar}mm)`, valor: emAtencao.length, destaque: true },
+      { filtro: "alto", icone: "icon-mountain", rotulo: "Grau alto", valor: grauAlto },
+      { filtro: "muito alto", icone: "icon-mountain", rotulo: "Grau muito alto", valor: grauMuitoAlto },
+      { filtro: "atencao", icone: "icon-triangle-alert", rotulo: `Em atenção (≥ ${estado.limiar}mm)`,
+        valor: emAtencao.length, destaque: true },
     ];
     if (previsao) {
-      cards.push({ rotulo: "Alerta previsto em 72h", valor: alertaPrevisto.length, destaque: true });
+      cards.push({ filtro: "previsto", icone: "icon-clock", rotulo: "Alerta previsto em 72h",
+        valor: alertaPrevisto.length, destaque: true });
     }
 
     document.getElementById("cards").innerHTML = cards.map(c => {
       const classe = c.destaque ? (c.valor > 0 ? "contador destaque" : "contador zerado") : "contador";
-      return `<div class="${classe}"><span class="valor">${c.valor}</span>` +
-        `<span class="rotulo">${c.rotulo}</span></div>`;
+      const visivel = !estado.ocultos.has(c.filtro);
+      return `<button type="button" class="${classe}" data-filtro="${c.filtro}" aria-pressed="${visivel}"` +
+        ` title="${visivel ? "Esconder" : "Mostrar"} no mapa">` +
+        `<span class="valor">${c.valor}</span>` +
+        `<span class="rotulo"><svg class="icone"><use href="icons/sprite.svg#${c.icone}"></use></svg>` +
+        `${c.rotulo}</span></button>`;
     }).join("");
 
     document.getElementById("tituloRecorte").textContent =
@@ -1310,15 +1383,31 @@
       `<rect width="22" height="11" fill="${idPattern}"></rect></svg>`;
   }
 
+  // Cada linha da legenda é um botão que esconde a classe do mapa (mesmo
+  // `estado.ocultos` dos KPIs): a legenda explica e filtra no mesmo lugar.
+  function linhaLegenda(filtro, amostra, rotulo) {
+    const visivel = !estado.ocultos.has(filtro);
+    return `<button type="button" data-filtro="${filtro}" aria-pressed="${visivel}"` +
+      ` title="${visivel ? "Esconder" : "Mostrar"} no mapa">${amostra}${rotulo}</button>`;
+  }
+
   function conteudoLegenda() {
     const linhasSetor = modoSetoresVisivel()
-      ? `<div><span class="amostra" style="background:${corAtencao()}"></span>Acima do limiar</div>` +
-        `<div><span class="amostra" style="background:transparent;border:2px dashed ${corAtencao()}"></span>Alerta previsto</div>`
+      ? linhaLegenda("atencao", `<span class="amostra" style="background:${corAtencao()}"></span>`, "Acima do limiar") +
+        linhaLegenda("previsto",
+          `<span class="amostra" style="background:transparent;border:2px dashed ${corAtencao()}"></span>`,
+          "Alerta previsto")
       : `<span class="nota">Escolha um município para ver setor por setor.</span>`;
     return `<span class="titulo">Grau de risco</span>` +
-      `<div>${amostraHachura("url(#hach-alto)")}Alto</div>` +
-      `<div>${amostraHachura("url(#hach-muito-alto)")}Muito alto</div>` +
+      linhaLegenda("alto", amostraHachura("url(#hach-alto)"), "Alto") +
+      linhaLegenda("muito alto", amostraHachura("url(#hach-muito-alto)"), "Muito alto") +
       linhasSetor;
+  }
+
+  function alternarFiltro(filtro) {
+    if (estado.ocultos.has(filtro)) estado.ocultos.delete(filtro);
+    else estado.ocultos.add(filtro);
+    renderizarTudo();
   }
 
   function atualizarLegenda() {
@@ -1329,13 +1418,62 @@
     return grau ? grau.charAt(0).toUpperCase() + grau.slice(1) : "—";
   }
 
+  function tooltipSetor(p, quando) {
+    const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+    const linhaFonte = p.fonte_estacao === "openmeteo"
+      ? `Fonte: ${(p.fonte_estacao || "—").toUpperCase()}`
+      : `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
+        `(${(p.fonte_estacao || "—").toUpperCase()})`;
+    return `<b>${escaparHtml(p.munic)}</b><br>` +
+      `<span class="mono">${escaparHtml(p.num_setor)}</span><br>` +
+      `Grau: ${escaparHtml(p.grau_risco)}<br>` +
+      `Chuva ${estado.janela}h: <span class="mono">${formatarMm(p[campo])}mm</span><br>` +
+      linhaFonte +
+      (quando ? `<br>Cruza o limiar em ${formatarData(quando)}` : "");
+  }
+
+  // ponytail: centro do bounding box, não centroide do polígono. Setor de risco
+  // é pequeno e convexo o bastante para a diferença não aparecer na tela; se um
+  // dia aparecer, o caminho é o centroide de verdade (área ponderada).
+  function pinSetor(feature, previsto, html) {
+    const centro = L.geoJSON(feature).getBounds().getCenter();
+    const pin = L.marker(centro, {
+      keyboard: false,
+      icon: L.divIcon({
+        className: `pin-setor${previsto ? " previsto" : ""}`,
+        html: '<svg viewBox="0 0 24 24"><use href="icons/sprite.svg#icon-map-pin"></use></svg>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 20],
+      }),
+    }).bindTooltip(html);
+    // No recorte estadual o polígono do setor tem poucos pixels: o pin é o que
+    // dá onde clicar para descer ao município.
+    if (!estado.municipio) pin.on("click", () => selecionarMunicipio(feature.properties.munic));
+    return pin;
+  }
+
+  function escondidoPeloFiltro(p, emAtencaoAgora, previstoAgora) {
+    const o = estado.ocultos;
+    return o.has((p.grau_risco || "").toLowerCase())
+      || (o.has("atencao") && emAtencaoAgora)
+      || (o.has("previsto") && previstoAgora);
+  }
+
+  // Devolve um featureGroup (polígonos + pins) para que remover/limpar a camada
+  // leve os pins junto, e getBounds() continue existindo para o fitBounds.
   function criarCamadaSetores(filtrados, emAtencao, alertaPrevisto) {
     const codigosAtencao = new Set(emAtencao.map(r => r.f.properties.num_setor));
     const codigosPrevisto = new Set(alertaPrevisto.map(r => r.f.properties.num_setor));
     const quandoPorSetor = new Map(alertaPrevisto.map(r => [r.f.properties.num_setor, r.quando]));
-    const colecao = { type: "FeatureCollection", features: filtrados.map(r => r.f) };
 
-    return L.geoJSON(colecao, {
+    const visiveis = filtrados.map(r => r.f).filter(f => !escondidoPeloFiltro(
+      f.properties,
+      codigosAtencao.has(f.properties.num_setor),
+      codigosPrevisto.has(f.properties.num_setor)
+    ));
+
+    const pins = [];
+    const poligonos = L.geoJSON({ type: "FeatureCollection", features: visiveis }, {
       style: feature => {
         const numSetor = feature.properties.num_setor;
         const emAtencaoAgora = codigosAtencao.has(numSetor);
@@ -1351,24 +1489,15 @@
       },
       onEachFeature: (feature, layer) => {
         const p = feature.properties;
-        const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
-        const chuva = formatarMm(p[campo]);
-        const linhaFonte = p.fonte_estacao === "openmeteo"
-          ? `Fonte: ${(p.fonte_estacao || "—").toUpperCase()}`
-          : `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
-            `(${(p.fonte_estacao || "—").toUpperCase()})`;
-        const quando = quandoPorSetor.get(p.num_setor);
-        const linhaPrevisao = quando ? `<br>Cruza o limiar em ${formatarData(quando)}` : "";
-        layer.bindTooltip(
-          `<b>${escaparHtml(p.munic)}</b><br>` +
-          `<span class="mono">${escaparHtml(p.num_setor)}</span><br>` +
-          `Grau: ${escaparHtml(p.grau_risco)}<br>` +
-          `Chuva ${estado.janela}h: <span class="mono">${chuva}mm</span><br>` +
-          linhaFonte +
-          linhaPrevisao
-        );
+        const emAtencaoAgora = codigosAtencao.has(p.num_setor);
+        const previstoAgora = codigosPrevisto.has(p.num_setor);
+        const html = tooltipSetor(p, quandoPorSetor.get(p.num_setor));
+        layer.bindTooltip(html);
+        if (emAtencaoAgora || previstoAgora) pins.push(pinSetor(feature, !emAtencaoAgora, html));
       },
     });
+
+    return L.featureGroup([poligonos, ...pins]);
   }
 
   function renderizarMapa(filtrados, emAtencao, alertaPrevisto) {
@@ -1382,7 +1511,7 @@
     } else {
       if (camadaChoropleth) { mapa.removeLayer(camadaChoropleth); camadaChoropleth = null; }
       camadaSetores = criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(mapa);
-      if (filtrados.length) mapa.fitBounds(camadaSetores.getBounds(), { padding: [24, 24] });
+      if (camadaSetores.getBounds().isValid()) mapa.fitBounds(camadaSetores.getBounds(), { padding: [24, 24] });
     }
     atualizarLegenda();
   }
@@ -1618,6 +1747,27 @@
     if (!botao) return;
     const p = tabelaSetoresAtual[Number(botao.dataset.exportarSetor)];
     if (p) window.ORCA_relatorio.abrirRelatorioImpressao([setorParaRelatorio(p)], `ORCA — Setor ${p.num_setor}`);
+  });
+
+  document.getElementById("cards").addEventListener("click", ev => {
+    const botao = ev.target.closest("button[data-filtro]");
+    if (botao) alternarFiltro(botao.dataset.filtro);
+  });
+
+  document.getElementById("abas").addEventListener("click", ev => {
+    const botao = ev.target.closest("button[data-vista]");
+    if (!botao) return;
+    document.querySelectorAll("#abas button").forEach(b => {
+      const ativo = b === botao;
+      b.classList.toggle("ativo", ativo);
+      if (ativo) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+      document.getElementById(b.dataset.vista).hidden = !ativo;
+    });
+    // Os dois mapas foram criados (ou não) com o container escondido: o Leaflet
+    // mede 0x0 nesse caso e só se corrige quando mandam medir de novo.
+    if (botao.dataset.vista === "vistaMapa") mapa?.invalidateSize();
+    else window.ORCA_atualizarTemaAreas?.();
   });
 
   aplicarTema(temaAtual());
