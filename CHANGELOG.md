@@ -12,6 +12,8 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-13
+
 ### FEATURES
 - feat(dashboard): layout de dashboard em altura de tela — três colunas com rolagem própria (contexto, mapa, painel), "Minhas áreas" como aba e o mapa sempre à vista; abaixo de 1081px tudo empilha como antes
 - feat(dashboard): toolbar de ícones no mapa (voltar ao estado, enquadrar, tela cheia) e pin nos setores acima do limiar e em alerta previsto, com clique para descer ao município
@@ -43,7 +45,8 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 - refactor(dashboard): `escaparHtml` e `token` saem das três cópias para `comum.js` (`window.ORCA`)
 
 ### CHORE
-- chore(deps): atualiza `ruff` de >=0.14.0 para >=0.16.6
+- chore(deps): atualiza `ruff` de >=0.14.0 para >=0.16.9
+- chore(deps): atualiza `geopandas` de >=1.1.4 para >=1.2.0
 - chore(deps): remove `defusedxml`, que só era usado pelo parser XML da ANA
 
 ## [1.1.0] - 2026-09-12
@@ -132,7 +135,9 @@ tipos, segurança) reforçados em CI.
 ### Added
 - Primeira versão do ORCA: dashboard local de risco geológico x chuva, cruzando setores de risco da CPRM/SGB com dados de chuva do INMET.
 
-[Unreleased]: https://github.com/hcristosm/ORCA/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/hcristosm/ORCA/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/hcristosm/ORCA/compare/v1.1.0...v2.0.0
+[1.1.0]: https://github.com/hcristosm/ORCA/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hcristosm/ORCA/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/hcristosm/ORCA/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hcristosm/ORCA/compare/v0.2.0...v0.3.0
