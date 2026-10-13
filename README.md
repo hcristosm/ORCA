@@ -38,7 +38,7 @@ nunca aparecem juntas.
 publicado no GitHub Pages e atualizado todo dia por cron.
 
 <p align="center">
-  <img src="docs/screenshots/dashboard-claro.png" alt="Dashboard do ORCA em tema claro: mapa de setores de risco geológico coloridos por grau, cards de contagem, tabela de setores em atenção e gráfico de série temporal de chuva" width="49%">
+  <img src="docs/screenshots/dashboard-claro.png" alt="Dashboard do ORCA em tema claro, no Rio Grande do Sul com limiar de 50mm: à esquerda os contadores e a régua de chuva por setor, no centro o mapa com os setores hachurados por grau e pins nos que passaram do limiar, à direita as tabelas de setores em atenção e de alerta previsto" width="49%">
   <img src="docs/screenshots/dashboard-escuro.png" alt="Mesmo dashboard do ORCA em tema escuro" width="49%">
 </p>
 
@@ -52,21 +52,32 @@ publicado no GitHub Pages e atualizado todo dia por cron.
 - Calcula acumulado de 24h e 72h e uma trajetória de alerta previsto para as
   próximas 72h.
 - Exporta tudo como GeoJSON/JSON estático e serve um dashboard em HTML, CSS e JS
-  puro, com mapa (Leaflet), tabela, contadores e gráfico (Chart.js). O grau de
-  risco aparece como hachura, no estilo de carta geológica, para que a cor fique
-  reservada a uma coisa só: setor acima do limiar. Uma régua no topo plota todos
-  os setores contra o limiar, que você arrasta.
-- Deixa o visitante subir uma área própria (GeoJSON, KML ou shapefile em `.zip`)
-  e ver a chuva calculada pra ela, tudo dentro do navegador, sem enviar o arquivo
-  pra lugar nenhum.
+  puro, com mapa (Leaflet), tabelas, contadores e gráfico (Chart.js), em tema
+  claro e escuro. O grau de risco aparece como hachura, no estilo de carta
+  geológica, para que a cor fique reservada a uma coisa só: setor acima do
+  limiar. Uma régua plota todos os setores contra o limiar, que você arrasta.
+- Layout em altura de tela, em três colunas com rolagem própria (contexto, mapa e
+  painel), com o mapa sempre à vista. Abaixo de 1081px de largura, tudo empilha.
+- Pins marcam no mapa os setores acima do limiar e em alerta previsto; clicar
+  num deles desce ao município. A legenda e os contadores filtram o mapa por
+  classe (grau, acima do limiar, alerta previsto).
+- Exporta relatórios em CSV e PDF dentro do navegador: a tabela inteira
+  (respeitando a UF e o limiar), uma linha só ou uma área própria.
+- Na aba "Minhas áreas", o visitante sobe uma área própria (GeoJSON, KML ou
+  shapefile em `.zip`; até 5 áreas, 10MB por arquivo) e vê a chuva acumulada e o
+  alerta previsto pra ela, tudo dentro do navegador, sem enviar o arquivo pra
+  lugar nenhum.
 - Busca de município em todo o Brasil (não só na UF selecionada): escolher uma
   cidade de outro estado troca a UF sozinho. Navegação por UF/município fica na
   URL (`#/<uf>/<município>`), com Voltar/Avançar do navegador, link
   compartilhável e trilha clicável.
 - Selo de atualização por fonte (setores da CPRM/SGB e chuva), em horário de
   Brasília, com idade do dado e alerta quando algo passa do ciclo esperado.
-- Camada opcional de radar de chuva (RainViewer) no mapa.
-- Camada opcional de raios (GOES-19 GLM, via SSEC RealEarth) no mapa: atividade elétrica dos últimos minutos, como indicador de tempestade.
+- Camadas ao vivo no mapa, que você liga e desliga: avisos meteorológicos
+  oficiais do INMET (ligada por padrão; polígono na cor da severidade, com riscos
+  e instruções, filtrado pela UF), radar de chuva (RainViewer) e raios (GOES-19
+  GLM, via SSEC RealEarth: atividade elétrica dos últimos minutos, como
+  indicador de tempestade).
 - Roda dois workflows separados: setores uma vez por mês, chuva uma vez por dia.
 - 144 testes com HTTP mockado, rodando no CI a cada push.
 
@@ -81,9 +92,20 @@ A CPRM virou SGB. Os domínios antigos (`geoportal.cprm.gov.br` e companhia)
 ainda respondem em parte, mas a camada de risco hoje mora em
 `geoportal.sgb.gov.br`.
 
-O choropleth de municípios do mapa usa a malha do IBGE, buscada ao vivo pelo
-navegador. É a única dependência de IBGE que sobrou, e ela vive só no front-end.
-Se o IBGE cair, o mapa degrada pra quem está olhando e o pipeline nem percebe.
+O pipeline só fala com essas duas. As camadas abaixo são buscadas ao vivo pelo
+navegador de quem está olhando e não passam pelo pipeline:
+
+| Fonte | Camada no mapa |
+|---|---|
+| [IBGE](https://servicodados.ibge.gov.br/) | Malha de municípios (choropleth) |
+| [INMET](https://portal.inmet.gov.br/) | Avisos meteorológicos oficiais |
+| [RainViewer](https://www.rainviewer.com/) | Radar de chuva |
+| [SSEC RealEarth](https://realearth.ssec.wisc.edu/) | Raios (GOES-19 GLM) |
+| [OpenStreetMap](https://www.openstreetmap.org/) | Mapa de fundo |
+
+Se uma delas cair, a camada some ou o mapa degrada pra quem está olhando, e o
+pipeline nem percebe. Em "Minhas áreas", a chuva também vem da Open-Meteo
+direto do navegador.
 
 ## Arquitetura
 
@@ -222,6 +244,10 @@ de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
   repetir esse volume gera `429` de forma consistente.
   `src/ingest/openmeteo.py` divide em lotes de 50 pontos, usa janela de histórico
   curta e espera 60s em `429`.
+- **As camadas ao vivo dependem de terceiros.** Avisos do INMET, radar e raios
+  são buscados na hora; se a fonte cair, a camada não aparece. A de raios também
+  é omitida quando o quadro mais recente tem mais de 30 minutos, e mostra raio
+  total (nuvem e solo), não ponto de impacto.
 - **Sem autenticação e sem multiusuário.** É ferramenta local e de portfólio.
 - **O dashboard não atualiza sob demanda.** Ele mostra a última exportação, que
   roda uma vez por dia. Pra ver dado mais novo na hora, rode
@@ -250,7 +276,8 @@ As decisões maiores foram testadas com requisição real, não por suposição:
   depender de estação. INMET e ANA foram implementados e descartados: o INMET só
   publica o ZIP anual (dias de defasagem) e a rede da ANA é majoritariamente
   fluviométrica. Manter as duas trilhas custava ~1.900 linhas que nenhum workflow
-  executava.
+  executava. Os avisos oficiais do INMET voltaram só como camada do mapa, lida
+  pelo navegador; não entram no cálculo.
 - **Cobertura nacional:** ingestão incremental da CPRM mais uma grade espacial
   calibrada por busca binária, em vez de limiar de densidade escolhido a dedo.
 
@@ -288,4 +315,5 @@ e o crédito ao autor original (Mateus Hcristos Leptokarydis) preservado.
 
 Os dados públicos pertencem aos seus órgãos:
 [CPRM/SGB](https://www.sgb.gov.br/) e [Open-Meteo](https://open-meteo.com/).
-Consulte os termos de uso de cada um antes de redistribuir.
+As camadas ao vivo do mapa vêm de INMET, IBGE, RainViewer, SSEC RealEarth e
+OpenStreetMap. Consulte os termos de uso de cada um antes de redistribuir.

@@ -39,7 +39,7 @@ almost never show up together.
 published on GitHub Pages and refreshed daily by cron.
 
 <p align="center">
-  <img src="docs/screenshots/dashboard-claro.png" alt="ORCA dashboard in light theme: map of geological risk sectors colored by degree, count cards, table of sectors of concern, and a rainfall time series chart" width="49%">
+  <img src="docs/screenshots/dashboard-claro.png" alt="ORCA dashboard in light theme, showing Rio Grande do Sul with a 50mm threshold: counters and the per-sector rainfall ruler on the left, the map in the center with sectors hatched by risk degree and pins on those above the threshold, and the tables of sectors of concern and predicted alerts on the right" width="49%">
   <img src="docs/screenshots/dashboard-escuro.png" alt="Same ORCA dashboard in dark theme" width="49%">
 </p>
 
@@ -53,14 +53,35 @@ published on GitHub Pages and refreshed daily by cron.
 - Computes 24h and 72h accumulated rainfall and a predicted 72h alert
   trajectory.
 - Exports everything as static GeoJSON/JSON and serves a dashboard in plain
-  HTML, CSS and JS, with a map (Leaflet), table, counters and chart
-  (Chart.js). Risk degree is shown as hachure patterns, in the style of a
-  geological map, so color stays reserved for one thing only: a sector above
-  the threshold. A ruler at the top plots every sector against the
-  threshold, which you can drag.
-- Lets visitors upload their own area (GeoJSON, KML, or a zipped shapefile)
-  and see rainfall calculated for it, entirely in the browser, without
-  uploading the file anywhere.
+  HTML, CSS and JS, with a map (Leaflet), tables, counters and chart
+  (Chart.js), in light and dark themes. Risk degree is shown as hachure
+  patterns, in the style of a geological map, so color stays reserved for one
+  thing only: a sector above the threshold. A ruler plots every sector
+  against the threshold, which you can drag.
+- Full-height layout in three independently scrolling columns (context, map
+  and panel), with the map always in view. Below 1081px wide, everything
+  stacks.
+- Pins mark the sectors above the threshold and under predicted alert;
+  clicking one drills down to the municipality. The legend and counters filter
+  the map by class (risk degree, above threshold, predicted alert).
+- Exports CSV and PDF reports in the browser: the whole table (honoring the
+  selected state and threshold), a single row, or a custom area.
+- In the "Minhas áreas" (My areas) tab, visitors upload their own area
+  (GeoJSON, KML, or a zipped shapefile; up to 5 areas, 10MB per file) and see
+  accumulated rainfall and the predicted alert for it, entirely in the
+  browser, without uploading the file anywhere.
+- Municipality search across all of Brazil (not just the selected state):
+  picking a city in another state switches the state automatically. State and
+  municipality navigation lives in the URL (`#/<uf>/<municipality>`), with
+  browser Back/Forward, shareable links and a clickable breadcrumb.
+- Freshness badge per source (CPRM/SGB sectors and rainfall), in Brasília
+  time, with the data's age and a warning when something is past its expected
+  cycle.
+- Live map layers you can toggle: official INMET weather warnings (on by
+  default; polygon in the severity color, with risks and instructions,
+  filtered to the selected state), rain radar (RainViewer), and lightning
+  (GOES-19 GLM, via SSEC RealEarth: electrical activity from the last few
+  minutes, as a storm indicator).
 - Runs two separate workflows: sectors once a month, rainfall once a day.
 - 144 tests with mocked HTTP, running in CI on every push.
 
@@ -75,10 +96,20 @@ CPRM was renamed to SGB. The old domains (`geoportal.cprm.gov.br` and
 similar) still respond partially, but the risk layer now lives at
 `geoportal.sgb.gov.br`.
 
-The map's municipality choropleth uses IBGE's mesh, fetched live by the
-browser. It's the only IBGE dependency left, and it lives only in the
-front-end. If IBGE goes down, the map degrades for the viewer but the
-pipeline doesn't notice.
+The pipeline only talks to those two. The layers below are fetched live by
+the viewer's browser and never go through the pipeline:
+
+| Source | Map layer |
+|---|---|
+| [IBGE](https://servicodados.ibge.gov.br/) | Municipality mesh (choropleth) |
+| [INMET](https://portal.inmet.gov.br/) | Official weather warnings |
+| [RainViewer](https://www.rainviewer.com/) | Rain radar |
+| [SSEC RealEarth](https://realearth.ssec.wisc.edu/) | Lightning (GOES-19 GLM) |
+| [OpenStreetMap](https://www.openstreetmap.org/) | Basemap |
+
+If one of them goes down, that layer disappears or the map degrades for the
+viewer, and the pipeline doesn't notice. In "Minhas áreas", rainfall also
+comes from Open-Meteo straight from the browser.
 
 ## Architecture
 
@@ -225,6 +256,11 @@ failing on timeout.
   repeating that volume consistently triggers `429`.
   `src/ingest/openmeteo.py` batches in groups of 50 points, uses a short
   history window, and waits 60s on `429`.
+- **The live layers depend on third parties.** INMET warnings, radar and
+  lightning are fetched on the spot; if the source goes down, the layer
+  doesn't show. The lightning layer is also left out when the latest frame is
+  more than 30 minutes old, and it shows total lightning (in-cloud and
+  cloud-to-ground), not strike points.
 - **No authentication and no multi-user support.** It's a local, portfolio
   tool.
 - **The dashboard doesn't update on demand.** It shows the last export,
@@ -256,7 +292,8 @@ The bigger decisions were tested with real requests, not assumed:
   without depending on a station. INMET and ANA were implemented and dropped:
   INMET only publishes the annual ZIP (days of lag) and ANA's network is
   mostly fluviometric. Keeping both paths cost ~1,900 lines that no workflow
-  ever ran.
+  ever ran. INMET's official warnings came back only as a map layer, read by
+  the browser; they don't feed into the calculation.
 - **National coverage:** incremental CPRM ingestion plus a spatial grid
   calibrated by binary search, instead of a hand-picked density threshold.
 
@@ -296,4 +333,5 @@ Leptokarydis) is preserved.
 
 The public data belongs to their respective agencies:
 [CPRM/SGB](https://www.sgb.gov.br/) and [Open-Meteo](https://open-meteo.com/).
-Check each one's terms of use before redistributing.
+The live map layers come from INMET, IBGE, RainViewer, SSEC RealEarth and
+OpenStreetMap. Check each one's terms of use before redistributing.
