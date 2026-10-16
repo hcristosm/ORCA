@@ -11,7 +11,7 @@ dependencies = [
     "geopandas>=1.2.0",
     "shapely>=2.1.2",
     "requests>=2.34.2",
-    "typer>=0.27.2",
+    "typer>=0.27.3",
 ]
 
 [project.scripts]
