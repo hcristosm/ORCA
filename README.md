@@ -67,6 +67,11 @@ publicado no GitHub Pages e atualizado todo dia por cron.
   shapefile em `.zip`; até 5 áreas, 10MB por arquivo) e vê a chuva acumulada e o
   alerta previsto pra ela, tudo dentro do navegador, sem enviar o arquivo pra
   lugar nenhum.
+- Na aba "Tutorial", o dashboard explica como ler a régua e reúne limiares de
+  referência com fonte (Defesa Civil de Santos, Concessionária Tamoios, PPDC-SP,
+  sirenes do Rio, Petrópolis, Belo Horizonte, Tatizana et al.), além da
+  literatura que justifica o acumulado de 72h. Os critérios que cabem na régua
+  têm botão "Usar Xmm/Yh", que aplica janela e limiar e volta ao mapa.
 - Busca de município em todo o Brasil (não só na UF selecionada): escolher uma
   cidade de outro estado troca a UF sozinho. Navegação por UF/município fica na
   URL (`#/<uf>/<município>`), com Voltar/Avançar do navegador, link
@@ -233,7 +238,8 @@ de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
   preserva o dado da véspera) em vez de sumir.
 - **O limiar de atenção (padrão 100mm/72h) é ilustrativo.** É referência comum
   na literatura de deslizamento, não um valor oficial calibrado pros setores da
-  CPRM/SGB. O dashboard avisa isso e deixa o valor ajustável.
+  CPRM/SGB. O dashboard avisa isso, deixa o valor ajustável e, na aba Tutorial,
+  mostra os limiares que órgãos reais usam em cada região.
 - **A publicação no `gh-pages` ainda não é reversível.** O deploy usa
   `force_orphan: true`, então a branch tem um commit só. Isso existe por causa do
   blob de cache da Open-Meteo (~45MB) que muda todo dia. Tirar o cache de lá é

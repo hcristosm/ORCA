@@ -70,6 +70,12 @@ published on GitHub Pages and refreshed daily by cron.
   (GeoJSON, KML, or a zipped shapefile; up to 5 areas, 10MB per file) and see
   accumulated rainfall and the predicted alert for it, entirely in the
   browser, without uploading the file anywhere.
+- The "Tutorial" tab explains how to read the ruler and lists sourced reference
+  thresholds (Santos civil defense, Concessionária Tamoios, São Paulo state
+  PPDC, Rio de Janeiro sirens, Petrópolis, Belo Horizonte, Tatizana et al.),
+  plus the literature behind the 72h accumulation. Criteria that fit the ruler
+  get a "Usar Xmm/Yh" button that applies the window and threshold and returns
+  to the map.
 - Municipality search across all of Brazil (not just the selected state):
   picking a city in another state switches the state automatically. State and
   municipality navigation lives in the URL (`#/<uf>/<municipality>`), with
@@ -244,8 +250,8 @@ failing on timeout.
   `gh-pages` merge keeps the previous day's data) instead of disappearing.
 - **The attention threshold (default 100mm/72h) is illustrative.** It's a
   common reference in landslide literature, not an official value calibrated
-  for CPRM/SGB sectors. The dashboard flags this and lets you adjust the
-  value.
+  for CPRM/SGB sectors. The dashboard flags this, lets you adjust the value,
+  and its Tutorial tab shows the thresholds real agencies use in each region.
 - **Publishing to `gh-pages` isn't reversible yet.** The deploy uses
   `force_orphan: true`, so the branch has a single commit. That's because of
   the Open-Meteo cache blob (~45MB) that changes daily. Getting the cache
