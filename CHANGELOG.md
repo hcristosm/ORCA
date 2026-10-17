@@ -12,6 +12,11 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-17
+
+### FEATURES
+- feat(dashboard): aba Tutorial — como ler a régua e o limiar, limiares de referência (Defesa Civil de Santos, Concessionária Tamoios, PPDC-SP, sirenes do Rio, Petrópolis, Belo Horizonte, Tatizana et al.) com fontes, e botões "Usar Xmm/Yh" que aplicam o critério na régua
+
 ## [2.0.0] - 2026-10-13
 
 ### FEATURES
@@ -135,7 +140,8 @@ tipos, segurança) reforçados em CI.
 ### Added
 - Primeira versão do ORCA: dashboard local de risco geológico x chuva, cruzando setores de risco da CPRM/SGB com dados de chuva do INMET.
 
-[Unreleased]: https://github.com/hcristosm/ORCA/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/hcristosm/ORCA/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/hcristosm/ORCA/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/hcristosm/ORCA/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/hcristosm/ORCA/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hcristosm/ORCA/compare/v0.4.0...v1.0.0
