@@ -856,6 +856,25 @@ td.mm { color: var(--sinal); font-weight: 500; }
   color: var(--tinta-media);
 }
 
+/* --------------------------------------------------------------- tutorial */
+/* Reaproveita .vista-areas/.areas; aqui s&oacute; o que texto corrido e tabela larga pedem. */
+
+.tutorial { padding-bottom: var(--s7); }
+.tutorial h3 {
+  margin: var(--s6) 0 var(--s3);
+  font-family: var(--font-cond);
+  font-size: var(--step-1);
+  font-weight: 600;
+}
+.tutorial p, .tutorial ul { max-width: 78ch; font-size: var(--step-0); line-height: 1.6; }
+.tutorial li { margin-bottom: var(--s2); }
+.tutorial-tabela { overflow-x: auto; max-width: 1100px; }
+.tutorial-tabela td { vertical-align: top; min-width: 150px; line-height: 1.5; }
+.tutorial-tabela .botao-exportar { margin: 0 var(--s1) var(--s1) 0; }
+.nota-tutorial { color: var(--tinta-media); }
+.referencias { max-width: 100ch; font-size: var(--micro); line-height: 1.6; color: var(--tinta-media); }
+.referencias a { color: var(--agua); overflow-wrap: anywhere; }
+
 .upload-linha { display: flex; align-items: flex-end; gap: var(--s4); flex-wrap: wrap; }
 
 .botao-upload {
