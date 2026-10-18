@@ -177,15 +177,31 @@ def _mesclar_setores(existente: gpd.GeoDataFrame | None, novos: gpd.GeoDataFrame
     return gpd.GeoDataFrame(combinado, geometry="geometry", crs=existente.crs)
 
 
+def data_setor_mais_recente(datas: pd.Series) -> str | None:
+    """Maior `data_setor` como AAAA-MM-DD, ou `None` se nenhuma for legível.
+
+    O ArcGIS da CPRM/SGB entrega a data como milissegundos desde 1970; sem
+    `unit="ms"` o pandas lê o número como nanossegundos e tudo vira 01/01/1970.
+    Texto de data continua aceito.
+    """
+    if pd.api.types.is_numeric_dtype(datas):
+        convertidas = pd.to_datetime(datas, unit="ms", errors="coerce")
+    else:
+        convertidas = pd.to_datetime(datas, errors="coerce")
+    if not convertidas.notna().any():
+        return None
+    return convertidas.max().strftime("%Y-%m-%d")
+
+
 def _atualizar_marcador_dagua(manifesto: dict, setores: gpd.GeoDataFrame) -> dict:
     if setores.empty or "objectid" not in setores.columns:
         return dict(manifesto)
     novo = dict(manifesto)
     novo["last_objectid"] = int(setores["objectid"].max())
     if "data_setor" in setores.columns:
-        datas = pd.to_datetime(setores["data_setor"], errors="coerce")
-        if datas.notna().any():
-            novo["last_data_setor"] = datas.max().strftime("%Y-%m-%d")
+        mais_recente = data_setor_mais_recente(setores["data_setor"])
+        if mais_recente:
+            novo["last_data_setor"] = mais_recente
     return novo
 
 

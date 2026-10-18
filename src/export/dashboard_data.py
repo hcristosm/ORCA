@@ -22,6 +22,7 @@ from src.config import (
     caminho_manifesto_cprm,
     caminho_setores,
 )
+from src.ingest.cprm import data_setor_mais_recente
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_precipitacao_batch
 from src.processing.cruzamento import (
     CRS_METRICO,
@@ -296,9 +297,7 @@ def _datas_cprm(setores: gpd.GeoDataFrame, uf: str, diretorio_dados: Path) -> di
 
     setor_mais_recente = None
     if "data_setor" in setores.columns:
-        datas = pd.to_datetime(setores["data_setor"], errors="coerce")
-        if datas.notna().any():
-            setor_mais_recente = datas.max().strftime("%Y-%m-%d")
+        setor_mais_recente = data_setor_mais_recente(setores["data_setor"])
 
     return {"ingerido_em": ingerido_em, "setor_mais_recente": setor_mais_recente}
 

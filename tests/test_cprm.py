@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pandas as pd
 import pytest
 import responses
 from responses import matchers
@@ -8,6 +9,7 @@ from responses import matchers
 from src.ingest.cprm import (
     FEATURE_LAYER_URL,
     CPRMFetchError,
+    data_setor_mais_recente,
     fetch_setores_risco,
     ingerir_uf,
 )
@@ -274,3 +276,10 @@ def test_ingerir_uf_atualiza_registro_existente_sem_duplicar(tmp_path: Path):
 
     assert len(resultado) == 1
     assert resultado.iloc[0]["grau_risco"] == "Muito alto"
+
+
+def test_data_setor_mais_recente_le_milissegundos_do_arcgis():
+    # O ArcGIS entrega data_setor em ms desde 1970; lido como ns, tudo virava 01/01/1970.
+    assert data_setor_mais_recente(pd.Series([1711497600000, 1769731200000])) == "2026-01-30"
+    assert data_setor_mais_recente(pd.Series(["2020-01-01", "2021-06-15"])) == "2021-06-15"
+    assert data_setor_mais_recente(pd.Series([None, None], dtype="float64")) is None
