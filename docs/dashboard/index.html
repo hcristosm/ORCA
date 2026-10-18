@@ -1272,21 +1272,24 @@
       // `mapa` pode já ter sido recriado (troca de UF, Voltar/Avançar) antes
       // da RainViewer responder; nesse caso o controle antigo não existe mais.
       if (!urlTemplate || mapa !== mapaDesteInit) return;
-      // maxNativeZoom: a RainViewer devolve uma tile "zoom not supported" (200 OK,
-      // mas é uma imagem de aviso) acima do zoom 12; sem o teto o Leaflet pediria
-      // essas tiles como se fossem dado real. Acima de 12 ele amplia a última tile
-      // nativa em vez de buscar uma nova.
+      // maxNativeZoom: a RainViewer devolve uma tile "Zoom Level Not Supported" (200 OK,
+      // mas é uma imagem de aviso) acima do zoom 7 (antes era 12); sem o teto o
+      // Leaflet pediria essas tiles como se fossem dado real. Acima de 7 ele amplia a
+      // última tile nativa em vez de buscar uma nova.
       const camadaRadar = L.tileLayer(urlTemplate, {
-        opacity: 0.6, attribution: "© RainViewer", maxNativeZoom: 12, pane: "sobreposicoes",
+        opacity: 0.6, attribution: "© RainViewer", maxNativeZoom: 7, pane: "sobreposicoes",
       });
       controleCamadas.addOverlay(camadaRadar, "Chuva agora (radar)");
     });
 
     carregarRaiosGlm().then(raios => {
       if (!raios || mapa !== mapaDesteInit) return;
-      // maxNativeZoom 7: zoom máximo do produto no RealEarth; acima, o Leaflet amplia.
+      // maxNativeZoom 5, não o 7 que o produto anuncia: nos zooms 6 e 7 o RealEarth
+      // devolve boa parte dos tiles como "Size limit exceeded" (200 OK, quadrado preto
+      // com texto). No 5 o pixel tem ~4,9 km, mais fino que os ~8 km do GLM: acima
+      // dele o Leaflet amplia sem perder nada real.
       const camadaRaios = L.tileLayer(raios.url, {
-        opacity: 0.8, maxNativeZoom: 7, pane: "sobreposicoes",
+        opacity: 0.8, maxNativeZoom: 5, pane: "sobreposicoes",
         attribution: "Raios totais (nuvem-solo + intranuvem) · GOES-19 GLM/NOAA via SSEC RealEarth",
       });
       controleCamadas.addOverlay(camadaRaios, `Raios (GLM, ${raios.hora})`);
