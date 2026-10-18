@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ORCA: Dashboard</title>
-<meta name="description" content="Setores de risco geológico (CPRM/SGB) cruzados com chuva recente (INMET/ANA).">
+<meta name="description" content="Setores de risco geológico (CPRM/SGB) cruzados com chuva recente e previsão (Open-Meteo), radar, raios e avisos do INMET.">
 <!-- 'unsafe-inline' em script-src/style-src é necessário porque o dashboard
      usa <script>/style="" inline (site estático sem build step, sem
      nonce/hash); a CSP ainda restringe de onde scripts/estilos/conexões
@@ -146,7 +146,7 @@
     <div class="selo" id="selo" aria-live="polite">Carregando dados&hellip;</div>
 
     <footer>
-      <span>Dados p&uacute;blicos da CPRM/SGB, INMET, ANA e Open-Meteo. Site est&aacute;tico, atualizado diariamente.</span>
+      <span>Dados p&uacute;blicos da CPRM/SGB, Open-Meteo, INMET, RainViewer e NOAA. Site est&aacute;tico, atualizado diariamente.</span>
       <span>
         <a href="https://github.com/hcristosm/ORCA#readme">Sobre o projeto</a> &middot;
         <a href="https://github.com/hcristosm/ORCA">GitHub <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg></a>
@@ -720,10 +720,7 @@
     previsao = previsaoCarregada;
     ufCarregada = ufAlvo;
 
-    const detalheFonte = meta.fonte === "openmeteo"
-      ? "Open-Meteo, consulta direta por setor"
-      : `${meta.total_estacoes_inmet} estações INMET e ${meta.total_estacoes_ana} da ANA`;
-    renderizarSelo(meta, detalheFonte);
+    renderizarSelo(meta, "Open-Meteo, consulta direta por setor");
 
     popularBuscaMunicipios();
     // Município vindo da URL/histórico: resolve o slug agora que há lista. Slug
@@ -797,7 +794,7 @@
     // Meta antigo (sem os blocos por fonte) cai nos campos do topo.
     const chuva = meta.chuva || { ate: meta.referencia, consultado_em: meta.gerado_em };
     const cprm = meta.cprm || {};
-    const nomeChuva = meta.fonte === "openmeteo" ? "Chuva e previsão (Open-Meteo)" : "Chuva (INMET/ANA)";
+    const nomeChuva = "Chuva e previsão (Open-Meteo)";
     // setor_mais_recente é só data (AAAA-MM-DD): meio-dia UTC evita cair no dia anterior em Brasília.
     const setorRecente = cprm.setor_mais_recente ? `${cprm.setor_mais_recente}T12:00:00Z` : null;
     document.getElementById("selo").innerHTML =

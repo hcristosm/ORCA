@@ -88,7 +88,7 @@
         @media print { .rodape { position: fixed; bottom: 0; } }
       </style></head><body>` +
       `<h1>${escaparHtml(titulo)}</h1>` +
-      `<p class="rodape">Gerado em ${escaparHtml(agora)} · dados públicos CPRM/SGB + Open-Meteo/INMET/ANA · hcristosm.github.io/ORCA</p>` +
+      `<p class="rodape">Gerado em ${escaparHtml(agora)} · dados públicos CPRM/SGB + Open-Meteo · hcristosm.github.io/ORCA</p>` +
       itens.map(blocoRelatorioHTML).join("") +
       `</body></html>`;
 
