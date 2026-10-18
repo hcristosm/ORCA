@@ -37,6 +37,11 @@ nunca aparecem juntas.
 **Dashboard ao vivo:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/),
 publicado no GitHub Pages e atualizado todo dia por cron.
 
+**Instalar como app:** no Chrome ou no Edge, abra o dashboard e clique no ícone de
+instalar na barra de endereço. No celular, use "Adicionar à tela inicial". O ORCA
+ganha ícone e janela próprios, se atualiza sozinho e se desinstala como qualquer
+programa.
+
 <p align="center">
   <img src="docs/screenshots/dashboard-claro.png" alt="Dashboard do ORCA em tema claro, no Rio Grande do Sul com limiar de 50mm: à esquerda os contadores e a régua de chuva por setor, no centro o mapa com os setores hachurados por grau e pins nos que passaram do limiar, à direita as tabelas de setores em atenção e de alerta previsto" width="49%">
   <img src="docs/screenshots/dashboard-escuro.png" alt="Mesmo dashboard do ORCA em tema escuro" width="49%">

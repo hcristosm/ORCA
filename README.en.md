@@ -38,6 +38,10 @@ almost never show up together.
 **Live dashboard:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/),
 published on GitHub Pages and refreshed daily by cron.
 
+**Install as an app:** in Chrome or Edge, open the dashboard and click the install
+icon in the address bar. On mobile, use "Add to Home Screen". ORCA gets its own
+icon and window, updates itself, and uninstalls like any other program.
+
 <p align="center">
   <img src="docs/screenshots/dashboard-claro.png" alt="ORCA dashboard in light theme, showing Rio Grande do Sul with a 50mm threshold: counters and the per-sector rainfall ruler on the left, the map in the center with sectors hatched by risk degree and pins on those above the threshold, and the tables of sectors of concern and predicted alerts on the right" width="49%">
   <img src="docs/screenshots/dashboard-escuro.png" alt="Same ORCA dashboard in dark theme" width="49%">
