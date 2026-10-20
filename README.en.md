@@ -15,7 +15,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](#installation)
 [![Live dashboard](https://img.shields.io/badge/dashboard-live%20on%20GitHub%20Pages-c0472f)](https://hcristosm.github.io/ORCA/)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 *[Leia em português](README.md)*
 
@@ -336,10 +336,11 @@ Issues, PRs and suggestions are welcome. See the
 
 ## License
 
-[BSD 3-Clause](LICENSE): free use, copying, modification and
-redistribution, commercial included, as long as the copyright notice and
-license are kept and credit to the original author (Mateus Hcristos
-Leptokarydis) is preserved.
+[GNU AGPL v3.0 or later](LICENSE): free use, copying, modification and
+redistribution, commercial included, as long as any version distributed
+**or offered as a network service** publishes its complete source code under
+the same license, keeping Mateus Hcristos Leptokarydis's copyright notice.
+Versions up to v2.1.0 were released under BSD 3-Clause.
 
 The public data belongs to their respective agencies:
 [CPRM/SGB](https://www.sgb.gov.br/) and [Open-Meteo](https://open-meteo.com/).

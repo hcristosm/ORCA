@@ -12,6 +12,9 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+### CHORE
+- chore: relicencia de BSD 3-Clause para AGPL-3.0-or-later — versões distribuídas ou oferecidas como serviço pela rede precisam publicar o código-fonte sob a mesma licença; até a v2.1.0 continua BSD 3-Clause
+
 ## [2.1.0] - 2026-10-17
 
 ### FEATURES
