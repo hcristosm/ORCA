@@ -142,13 +142,3 @@ tipos, segurança) reforçados em CI.
 
 ### Added
 - Primeira versão do ORCA: dashboard local de risco geológico x chuva, cruzando setores de risco da CPRM/SGB com dados de chuva do INMET.
-
-[Unreleased]: https://github.com/hcristosm/ORCA/compare/v2.1.0...HEAD
-[2.1.0]: https://github.com/hcristosm/ORCA/compare/v2.0.0...v2.1.0
-[2.0.0]: https://github.com/hcristosm/ORCA/compare/v1.1.0...v2.0.0
-[1.1.0]: https://github.com/hcristosm/ORCA/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/hcristosm/ORCA/compare/v0.4.0...v1.0.0
-[0.4.0]: https://github.com/hcristosm/ORCA/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/hcristosm/ORCA/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/hcristosm/ORCA/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/hcristosm/ORCA/releases/tag/v0.1.0
