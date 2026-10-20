@@ -12,8 +12,19 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-20
+
+### FEATURES
+- feat(dashboard): instalável como app (PWA)
+
+### FIXES
+- fix(dashboard): tira INMET/ANA da atribuição de chuva
+- fix(cprm): lê `data_setor` em milissegundos, não como 01/01/1970
+- fix(dashboard): teto de zoom do radar e dos raios conforme o que as fontes servem
+
 ### CHORE
 - chore: relicencia de BSD 3-Clause para AGPL-3.0-or-later — versões distribuídas ou oferecidas como serviço pela rede precisam publicar o código-fonte sob a mesma licença; até a v2.1.0 continua BSD 3-Clause
+- chore(deps): atualiza `mypy`, `ruff`, `shapely` e `typer`
 
 ## [2.1.0] - 2026-10-17
 
