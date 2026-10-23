@@ -12,6 +12,13 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+### FEATURES
+- feat(dashboard): lista de avisos do INMET no painel, com filtro de abrangência (esta UF, macrorregião do IBGE ou Brasil) e de dia (hoje, amanhã e os próximos dias com aviso); a camada do mapa segue o mesmo recorte, a busca tem timeout e a fonte fora do ar vira um estado próprio no bloco, distinto de "nenhum aviso"
+
+### FIXES
+- fix(dashboard): `aviso_cor` vinda da API do INMET ia crua para atributo `style` e para o Leaflet; `escaparHtml` serializa via `textContent` e não escapa aspas duplas. Agora passa por validação de hex, e a severidade virou tarja (o amarelo oficial do "Perigo Potencial" era ilegível como texto no tema claro)
+- fix(dashboard): resposta 200 com corpo inesperado da API do INMET era tratada como "zero avisos"; um `.gov.br` fora do ar responde 200 com HTML de portal
+
 ## [2.2.0] - 2026-10-20
 
 ### FEATURES

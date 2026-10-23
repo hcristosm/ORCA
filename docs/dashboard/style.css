@@ -1084,3 +1084,56 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* avisos do INMET: filtros de abrangência/dia + lista */
+.filtros-avisos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: var(--fio) solid var(--fio-cor);
+}
+.filtros-avisos .campo { flex: 1 1 150px; min-width: 0; }
+.filtros-avisos select { width: 100%; }
+
+.lista-avisos { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
+.lista-avisos li {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr);
+  gap: var(--s3);
+  padding: var(--s2) var(--s4);
+  border-bottom: var(--fio) solid var(--fio-cor);
+  cursor: pointer;
+}
+.lista-avisos li:last-child { border-bottom: 0; }
+.lista-avisos li:hover { background: var(--superficie-2); }
+.lista-avisos li:focus-visible { outline: 2px solid var(--agua); outline-offset: -2px; }
+.lista-avisos .faixa { border-radius: 1px; }
+.lista-avisos .aviso-corpo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lista-avisos .aviso-linha {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s2);
+}
+.lista-avisos .tipo { font-size: var(--step-0); font-weight: 500; }
+.lista-avisos .severidade {
+  font-family: var(--font-cond);
+  font-size: var(--micro);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  /* A cor oficial do INMET vira fundo da tarja, não tinta: o amarelo do
+     "Perigo Potencial" (#FFFE00) seria ilegível como texto no tema claro.
+     A tinta é escura fixa (não segue o tema) porque o fundo é a cor da API. */
+  color: #14191a;
+  padding: 1px 5px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.lista-avisos .periodo,
+.lista-avisos .abrangencia {
+  font-family: var(--font-mono);
+  font-size: var(--micro);
+  color: var(--tinta-media);
+}

@@ -199,6 +199,25 @@
       </div>
     </section>
 
+    <section class="bloco" id="blocoAvisosInmet">
+      <div class="bloco-cabecalho">
+        <h2><svg class="icone"><use href="icons/sprite.svg#icon-triangle-alert"></use></svg>Avisos do INMET</h2>
+        <span class="contagem" id="contagemAvisos"></span>
+      </div>
+      <div class="filtros-avisos">
+        <div class="campo">
+          <label for="escopoAvisos">Abrang&ecirc;ncia</label>
+          <select id="escopoAvisos"></select>
+        </div>
+        <div class="campo">
+          <label for="diaAvisos">Dia</label>
+          <select id="diaAvisos"></select>
+        </div>
+      </div>
+      <ul class="lista-avisos" id="listaAvisos"></ul>
+      <div class="vazio" id="avisosVazio">Carregando avisos do INMET&hellip;</div>
+    </section>
+
     <section class="bloco">
       <div class="bloco-cabecalho">
         <h2 id="tituloSerie">Munic&iacute;pios com mais chuva</h2>
@@ -1190,31 +1209,322 @@
   }
 
   const INMET_AVISOS_URL = "https://apiprevmet3.inmet.gov.br/avisos/ativos";
+  const TIMEOUT_INMET_MS = 8000;
   let promessaAvisosInmet = null;
+  let controleCamadas = null;
+  let camadaAvisosInmet = null;
+  let camadasAvisoPorId = {};
 
   // Avisos meteorológicos oficiais do INMET (a mesma API que alimenta o
   // alerta-as.inmet.gov.br). A resposta já traz o polígono como GeoJSON (em
   // string) e a cor oficial da severidade, então não há aqui tabela de cores
-  // nem parser de CAP. Buscado uma vez por sessão; se a API cair, a camada
-  // some do controle em vez de quebrar o mapa (ver CLAUDE.md).
+  // nem parser de CAP. Buscado uma vez por sessão (trocar de UF só re-filtra).
+  //
+  // Resolve com a lista de features, ou com `null` quando a API não responde,
+  // devolve erro ou devolve 200 com corpo inesperado -- um .gov.br fora do ar
+  // responde 200 com HTML de portal (ver CLAUDE.md). "Indisponível" e "nenhum
+  // aviso" são estados diferentes na interface, então não podem virar o mesmo
+  // `[]` aqui.
   function carregarAvisosInmet() {
     if (!promessaAvisosInmet) {
-      promessaAvisosInmet = fetch(INMET_AVISOS_URL)
-        .then(r => r.json())
-        .then(dados => [...(dados.hoje || []), ...(dados.futuro || [])].flatMap(aviso => {
-          try { return [{ type: "Feature", geometry: JSON.parse(aviso.poligono), properties: aviso }]; }
-          catch (e) { return []; }
-        }))
-        .catch(e => { console.warn("Avisos INMET indisponíveis, camada omitida:", e); return []; });
+      promessaAvisosInmet = fetchComTimeout(INMET_AVISOS_URL, TIMEOUT_INMET_MS)
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+        .then(dados => {
+          if (!dados || !Array.isArray(dados.hoje) || !Array.isArray(dados.futuro)) {
+            throw new Error("corpo inesperado");
+          }
+          // Polígono ilegível não esconde o aviso: ele continua na lista, só não
+          // vai para o mapa. Esconder aviso oficial é pior que mostrar um a mais.
+          return [...dados.hoje, ...dados.futuro].map(aviso => {
+            let geometry = null;
+            try { geometry = JSON.parse(aviso.poligono); } catch (e) { /* sem polígono */ }
+            return { type: "Feature", geometry, properties: aviso };
+          });
+        })
+        .catch(e => { console.warn("Avisos INMET indisponíveis:", e); return null; });
     }
     return promessaAvisosInmet;
+  }
+
+  // escaparHtml() serializa via textContent, que não escapa aspas duplas: uma cor
+  // vinda da API não pode ir crua para um atributo style nem para o Leaflet.
+  const COR_HEX = /^#[0-9a-fA-F]{3,8}$/;
+  function corAviso(valor) {
+    const cor = String(valor == null ? "" : valor).trim();
+    return COR_HEX.test(cor) ? cor : token("--sinal");
+  }
+
+  // ------------------------------------------------- avisos: escopo e dia
+  // Macrorregiões do IBGE. A API traz um campo `regioes`, mas é o conjunto de
+  // regiões que o aviso toca -- não serve para saber a região da UF selecionada.
+  const REGIOES_UF = {
+    "Norte": ["ac", "am", "ap", "pa", "ro", "rr", "to"],
+    "Nordeste": ["al", "ba", "ce", "ma", "pb", "pe", "pi", "rn", "se"],
+    "Centro-Oeste": ["df", "go", "mt", "ms"],
+    "Sudeste": ["es", "mg", "rj", "sp"],
+    "Sul": ["pr", "rs", "sc"],
+  };
+  const ORDEM_SEVERIDADE = ["Grande Perigo", "Perigo", "Perigo Potencial"];
+  const UM_DIA_MS = 86400000;
+
+  let escopoAvisos = "uf";
+  let diaAvisos = "todos";
+  let avisosInmetTodos = null;   // features | null (indisponível)
+  let avisosInmetCarregou = false;
+
+  function regiaoDaUf(uf) {
+    return Object.keys(REGIOES_UF).find(r => REGIOES_UF[r].includes(uf)) || null;
+  }
+
+  // `inicio`/`fim` vêm como "AAAA-MM-DD HH:MM" no horário de Brasília, sem fuso no
+  // texto (confirmado na API em 2026-10-23). Brasília não tem horário de verão
+  // desde 2019, então -03:00 é fixo.
+  function dataAvisoInmet(texto) {
+    if (typeof texto !== "string") return null;
+    const casou = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(texto);
+    return casou ? dataValida(`${casou[1]}T${casou[2]}:00-03:00`) : null;
+  }
+
+  // en-CA devolve AAAA-MM-DD: compara como string e é o próprio value do select.
+  function diaBrasilia(d) {
+    return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  }
+
+  function rotuloDia(chave) {
+    if (chave === diaBrasilia(new Date())) return "Hoje";
+    if (chave === diaBrasilia(new Date(Date.now() + UM_DIA_MS))) return "Amanhã";
+    const d = dataValida(`${chave}T12:00:00-03:00`);
+    if (!d) return chave;
+    return d.toLocaleDateString("pt-BR", {
+      timeZone: "America/Sao_Paulo", weekday: "short", day: "2-digit", month: "2-digit",
+    }).replace(/\.,?/g, "").trim();
+  }
+
+  function ufsDoEscopo() {
+    if (escopoAvisos === "brasil") return null;   // null = sem filtro de UF
+    if (escopoAvisos === "regiao") {
+      const regiao = regiaoDaUf(UF);
+      if (regiao) return REGIOES_UF[regiao];
+    }
+    return [UF];
+  }
+
+  function rotuloEscopo() {
+    if (escopoAvisos === "brasil") return "o Brasil";
+    if (escopoAvisos === "regiao") return regiaoDaUf(UF) || UF.toUpperCase();
+    return UF.toUpperCase();
+  }
+
+  function fraseDia() {
+    if (diaAvisos === "todos") return "";
+    const rotulo = rotuloDia(diaAvisos);
+    if (rotulo === "Hoje" || rotulo === "Amanhã") return " " + rotulo.toLowerCase();
+    return ` em ${rotulo}`;
+  }
+
+  function noEscopo(aviso, ufs) {
+    if (!ufs) return true;
+    const texto = String(aviso.municipios || "");
+    return ufs.some(uf => texto.includes(` - ${uf.toUpperCase()} (`));
+  }
+
+  // "Nome - UF (geocode),..." -- nomes de município não têm vírgula, então o
+  // split por vírgula basta para contar quantos entram no recorte atual.
+  function municipiosNoEscopo(aviso, ufs) {
+    const itens = String(aviso.municipios || "").split(",").filter(t => t.trim());
+    if (!ufs) return itens.length;
+    return itens.filter(t => ufs.some(uf => t.includes(` - ${uf.toUpperCase()} (`))).length;
+  }
+
+  function avisosFiltrados() {
+    if (!Array.isArray(avisosInmetTodos)) return [];
+    const ufs = ufsDoEscopo();
+    return avisosInmetTodos
+      .filter(f => {
+        const p = f.properties;
+        if (!noEscopo(p, ufs)) return false;
+        if (diaAvisos === "todos") return true;
+        const ini = dataAvisoInmet(p.inicio);
+        const fim = dataAvisoInmet(p.fim);
+        // Data irreconhecível fica fora só do filtro de dia; em "Todos" o aviso
+        // continua na lista, com o texto cru.
+        if (!ini || !fim) return false;
+        return diaBrasilia(ini) <= diaAvisos && diaAvisos <= diaBrasilia(fim);
+      })
+      .sort((a, b) => {
+        const posicao = s => {
+          const i = ORDEM_SEVERIDADE.indexOf(s);
+          return i < 0 ? ORDEM_SEVERIDADE.length : i;
+        };
+        const d = posicao(a.properties.severidade) - posicao(b.properties.severidade);
+        if (d !== 0) return d;
+        return String(a.properties.inicio || "").localeCompare(String(b.properties.inicio || ""));
+      });
+  }
+
+  function prepararFiltrosAvisos() {
+    const selEscopo = document.getElementById("escopoAvisos");
+    const selDia = document.getElementById("diaAvisos");
+    if (!selEscopo || !selDia) return;
+
+    const regiao = regiaoDaUf(UF);
+    if (escopoAvisos === "regiao" && !regiao) escopoAvisos = "uf";
+    const opcoes = [["uf", `Esta UF (${UF.toUpperCase()})`]];
+    if (regiao) opcoes.push(["regiao", `Região (${regiao})`]);
+    opcoes.push(["brasil", "Brasil"]);
+    selEscopo.innerHTML = opcoes
+      .map(([v, r]) => `<option value="${v}">${escaparHtml(r)}</option>`).join("");
+    selEscopo.value = escopoAvisos;
+
+    // Dias de todos os avisos, não só do escopo atual: o seletor não deve sumir
+    // com um dia só porque o recorte de agora não tem aviso nele.
+    const hoje = diaBrasilia(new Date());
+    const dias = new Set([hoje, diaBrasilia(new Date(Date.now() + UM_DIA_MS))]);
+    (Array.isArray(avisosInmetTodos) ? avisosInmetTodos : []).forEach(f => {
+      const ini = dataAvisoInmet(f.properties.inicio);
+      const fim = dataAvisoInmet(f.properties.fim);
+      if (!ini) return;
+      const fimDia = fim ? diaBrasilia(fim) : diaBrasilia(ini);
+      // Percorre dia a dia ancorado ao meio-dia (um passo de 24h a partir da hora
+      // de início pularia o último dia quando o aviso termina de manhã).
+      const inicioMeioDia = dataValida(`${diaBrasilia(ini)}T12:00:00-03:00`);
+      for (let t = inicioMeioDia.getTime(), i = 0; i < 15; t += UM_DIA_MS, i++) {
+        const chave = diaBrasilia(new Date(t));
+        dias.add(chave);
+        if (chave >= fimDia) break;
+      }
+    });
+    const ordenados = [...dias].filter(d => d >= hoje).sort();
+    if (diaAvisos !== "todos" && !ordenados.includes(diaAvisos)) diaAvisos = "todos";
+    selDia.innerHTML = `<option value="todos">Todos</option>` +
+      ordenados.map(d => `<option value="${d}">${escaparHtml(rotuloDia(d))}</option>`).join("");
+    selDia.value = diaAvisos;
+  }
+
+  function periodoAviso(p) {
+    const ini = dataAvisoInmet(p.inicio);
+    const fim = dataAvisoInmet(p.fim);
+    if (!ini || !fim) return `${escaparHtml(p.inicio || "?")} &rarr; ${escaparHtml(p.fim || "?")}`;
+    return `${escaparHtml(formatarBrasilia(ini))} &rarr; ${escaparHtml(formatarBrasilia(fim))}`;
+  }
+
+  function renderizarListaAvisos() {
+    const lista = document.getElementById("listaAvisos");
+    const vazio = document.getElementById("avisosVazio");
+    const contagem = document.getElementById("contagemAvisos");
+    if (!lista || !vazio || !contagem) return;
+
+    const mostrarAviso = html => {
+      lista.innerHTML = "";
+      vazio.hidden = false;
+      vazio.innerHTML = html;
+    };
+
+    if (!avisosInmetCarregou) {
+      contagem.textContent = "";
+      contagem.classList.remove("viva");
+      mostrarAviso("Carregando avisos do INMET&hellip;");
+      return;
+    }
+    // Fonte fora do ar: estado próprio, distinto de "nenhum aviso". O resto do
+    // painel não depende dessa API e segue funcionando.
+    if (!Array.isArray(avisosInmetTodos)) {
+      contagem.textContent = "—";
+      contagem.classList.remove("viva");
+      mostrarAviso("<strong>Avisos do INMET indisponíveis agora.</strong>" +
+        "O resto do painel não depende dessa fonte. Recarregue mais tarde para tentar de novo.");
+      return;
+    }
+
+    const avisos = avisosFiltrados();
+    const ufs = ufsDoEscopo();
+    contagem.textContent = String(avisos.length);
+    contagem.classList.toggle("viva", avisos.length > 0);
+    if (!avisos.length) {
+      mostrarAviso(`<strong>Nenhum aviso do INMET para ${escaparHtml(rotuloEscopo())}` +
+        `${escaparHtml(fraseDia())}.</strong>` +
+        "A fonte respondeu: não há aviso ativo nesse recorte.");
+      return;
+    }
+    vazio.hidden = true;
+    lista.innerHTML = avisos.map(f => {
+      const p = f.properties;
+      const cor = corAviso(p.aviso_cor);
+      const n = municipiosNoEscopo(p, ufs);
+      return `<li data-aviso="${Number(p.id)}" tabindex="0" role="button">` +
+        `<span class="faixa" style="background:${cor}"></span>` +
+        `<span class="aviso-corpo">` +
+        `<span class="aviso-linha"><span class="tipo">${escaparHtml(p.descricao)}</span>` +
+        `<span class="severidade" style="background:${cor}">${escaparHtml(p.severidade)}</span></span>` +
+        `<span class="periodo">${periodoAviso(p)}</span>` +
+        `<span class="abrangencia">${n} município${n === 1 ? "" : "s"} no recorte</span>` +
+        `</span></li>`;
+    }).join("");
+  }
+
+  function aplicarFiltrosAvisos() {
+    renderizarListaAvisos();
+    redesenharCamadaAvisos();
+  }
+
+  // A camada do mapa segue exatamente o recorte da lista: dois recortes
+  // diferentes na mesma tela se contradiriam.
+  function redesenharCamadaAvisos() {
+    if (!mapa || !controleCamadas) return;
+    const estavaVisivel = camadaAvisosInmet ? mapa.hasLayer(camadaAvisosInmet) : true;
+    if (camadaAvisosInmet) {
+      controleCamadas.removeLayer(camadaAvisosInmet);
+      mapa.removeLayer(camadaAvisosInmet);
+      camadaAvisosInmet = null;
+    }
+    camadasAvisoPorId = {};
+    const features = avisosFiltrados().filter(f => f.geometry);
+    if (!features.length) return;
+    camadaAvisosInmet = L.geoJSON({ type: "FeatureCollection", features }, {
+      pane: "avisosInmet",
+      style: f => ({ color: corAviso(f.properties.aviso_cor), weight: 2, fillOpacity: 0.15 }),
+      onEachFeature: (f, camada) => {
+        camadasAvisoPorId[Number(f.properties.id)] = camada;
+        camada.bindPopup(popupAvisoInmet(f.properties), { maxWidth: 340 });
+      },
+    });
+    controleCamadas.addOverlay(camadaAvisosInmet, `Avisos INMET (${features.length})`);
+    if (estavaVisivel) camadaAvisosInmet.addTo(mapa);
+  }
+
+  function enquadrarAviso(id) {
+    const camada = camadasAvisoPorId[id];
+    if (!mapa || !camada) return;
+    if (!mapa.hasLayer(camadaAvisosInmet)) camadaAvisosInmet.addTo(mapa);
+    mapa.fitBounds(camada.getBounds(), { padding: [20, 20] });
+    camada.openPopup();
+  }
+
+  function ligarFiltrosAvisos() {
+    const selEscopo = document.getElementById("escopoAvisos");
+    const selDia = document.getElementById("diaAvisos");
+    const lista = document.getElementById("listaAvisos");
+    if (!selEscopo || !selDia || !lista) return;
+    selEscopo.addEventListener("change", () => { escopoAvisos = selEscopo.value; aplicarFiltrosAvisos(); });
+    selDia.addEventListener("change", () => { diaAvisos = selDia.value; aplicarFiltrosAvisos(); });
+    const abrir = ev => {
+      const li = ev.target.closest("li[data-aviso]");
+      if (li) enquadrarAviso(Number(li.dataset.aviso));
+    };
+    lista.addEventListener("click", abrir);
+    lista.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      abrir(ev);
+    });
+    renderizarListaAvisos();
   }
 
   function popupAvisoInmet(a) {
     const itens = lista => (lista || [])
       .map(t => `<li>${escaparHtml(String(t).trim())}</li>`).join("");
     return `<strong>${escaparHtml(a.descricao)}</strong><br>` +
-      `<span style="color:${escaparHtml(a.aviso_cor)};font-weight:600">${escaparHtml(a.severidade)}</span>` +
+      `<span style="color:${corAviso(a.aviso_cor)};font-weight:600">${escaparHtml(a.severidade)}</span>` +
       `<div>${escaparHtml(a.inicio)} &rarr; ${escaparHtml(a.fim)}</div>` +
       (a.riscos && a.riscos.length ? `<ul>${itens(a.riscos)}</ul>` : "") +
       (a.instrucoes && a.instrucoes.length
@@ -1232,6 +1542,8 @@
       mapa._animatingZoom = false;
       mapa.remove();
       mapa = null; camadaSetores = null; camadaChoropleth = null; camadaSetoresTodos = null;
+      // Camada e índice de avisos pertencem ao mapa que acabou de sair.
+      controleCamadas = null; camadaAvisosInmet = null; camadasAvisoPorId = {};
     }
     mapa = L.map("mapa");
     // Base neutralizada por filtro CSS (ver .leaflet-tile-pane no style.css): o
@@ -1266,7 +1578,7 @@
 
     camadaSetoresTodos = L.layerGroup();
     const overlays = { "Setores do estado inteiro": camadaSetoresTodos };
-    const controleCamadas = L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
+    controleCamadas = L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
 
     const mapaDesteInit = mapa;
     carregarRadarRainViewer().then(urlTemplate => {
@@ -1296,19 +1608,14 @@
       controleCamadas.addOverlay(camadaRaios, `Raios (GLM, ${raios.hora})`);
     });
 
+    // A busca é cacheada por sessão: trocar de UF cai no `then` de novo e só
+    // refaz o recorte (escopo "Região" acompanha a UF nova sem rede).
     carregarAvisosInmet().then(features => {
+      avisosInmetTodos = features;
+      avisosInmetCarregou = true;
       if (mapa !== mapaDesteInit) return;
-      // `municipios` vem como "Nome - UF (geocode),...": dispensa uma tabela sigla -> nome do estado.
-      const daUf = features.filter(f =>
-        (f.properties.municipios || "").includes(` - ${UF.toUpperCase()} (`));
-      if (!daUf.length) return;
-      const camadaAvisos = L.geoJSON({ type: "FeatureCollection", features: daUf }, {
-        pane: "avisosInmet",
-        style: f => ({ color: f.properties.aviso_cor, weight: 2, fillOpacity: 0.15 }),
-        onEachFeature: (f, camada) => camada.bindPopup(popupAvisoInmet(f.properties), { maxWidth: 340 }),
-      });
-      controleCamadas.addOverlay(camadaAvisos, `Avisos INMET (${daUf.length})`);
-      camadaAvisos.addTo(mapa);
+      prepararFiltrosAvisos();
+      aplicarFiltrosAvisos();
     });
 
     mapa.on("overlayadd", ev => {
@@ -1946,6 +2253,7 @@
   document.getElementById("botaoTema").addEventListener("click", alternarTema);
   configurarBuscaMunicipios();
   configurarNavegacao();
+  ligarFiltrosAvisos();
 
   carregarUfsDisponiveis().then(carregarDados);
 })();
