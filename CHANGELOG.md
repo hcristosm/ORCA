@@ -13,6 +13,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 ## [Unreleased]
 
 ### FEATURES
+- feat(dashboard): lista de avisos do INMET no painel, com filtro de abrangência (esta UF, macrorregião do IBGE ou Brasil) e de dia (hoje, amanhã e os próximos dias com aviso); a camada do mapa segue o mesmo recorte, a busca tem timeout e a fonte fora do ar vira um estado próprio no bloco, distinto de "nenhum aviso"
 - feat(dashboard): layout de dashboard em altura de tela — três colunas com rolagem própria (contexto, mapa, painel), "Minhas áreas" como aba e o mapa sempre à vista; abaixo de 1081px tudo empilha como antes
 - feat(dashboard): toolbar de ícones no mapa (voltar ao estado, enquadrar, tela cheia) e pin nos setores acima do limiar e em alerta previsto, com clique para descer ao município
 - feat(dashboard): legenda e contadores filtram o mapa por classe (grau, acima do limiar, alerta previsto); as contagens e a tabela seguem as do recorte inteiro
