@@ -12,6 +12,8 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-23
+
 ### FEATURES
 - feat(dashboard): lista de avisos do INMET no painel, com filtro de abrangência (esta UF, macrorregião do IBGE ou Brasil) e de dia (hoje, amanhã e os próximos dias com aviso); a camada do mapa segue o mesmo recorte, a busca tem timeout e a fonte fora do ar vira um estado próprio no bloco, distinto de "nenhum aviso"
 

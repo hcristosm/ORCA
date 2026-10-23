@@ -83,13 +83,17 @@ programa.
   compartilhável e trilha clicável.
 - Selo de atualização por fonte (setores da CPRM/SGB e chuva), em horário de
   Brasília, com idade do dado e alerta quando algo passa do ciclo esperado.
-- Camadas ao vivo no mapa, que você liga e desliga: avisos meteorológicos
-  oficiais do INMET (ligada por padrão; polígono na cor da severidade, com riscos
-  e instruções, filtrado pela UF), radar de chuva (RainViewer) e raios (GOES-19
-  GLM, via SSEC RealEarth: atividade elétrica dos últimos minutos, como
-  indicador de tempestade).
+- Avisos meteorológicos oficiais do INMET como lista no painel, ordenada por
+  severidade, com dois recortes: abrangência (esta UF, a macrorregião do IBGE da
+  UF atual ou o Brasil) e dia (hoje, amanhã e os próximos dias com aviso).
+  Responde "vai cair tempestade no Sudeste no domingo?". Clicar num aviso
+  enquadra o polígono no mapa; a camada segue o mesmo recorte da lista.
+- Camadas ao vivo no mapa, que você liga e desliga: avisos do INMET (ligada por
+  padrão; polígono na cor da severidade, com riscos e instruções), radar de
+  chuva (RainViewer) e raios (GOES-19 GLM, via SSEC RealEarth: atividade
+  elétrica dos últimos minutos, como indicador de tempestade).
 - Roda dois workflows separados: setores uma vez por mês, chuva uma vez por dia.
-- 144 testes com HTTP mockado, rodando no CI a cada push.
+- 145 testes com HTTP mockado, rodando no CI a cada push.
 
 ## Fontes de dados
 
@@ -256,7 +260,10 @@ de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
   `src/ingest/openmeteo.py` divide em lotes de 50 pontos, usa janela de histórico
   curta e espera 60s em `429`.
 - **As camadas ao vivo dependem de terceiros.** Avisos do INMET, radar e raios
-  são buscados na hora; se a fonte cair, a camada não aparece. A de raios também
+  são buscados na hora (com timeout); se a fonte cair, a camada não aparece e o
+  bloco de avisos diz que a fonte está indisponível — estado distinto de "nenhum
+  aviso ativo", porque um `.gov.br` fora do ar responde 200 com HTML de portal.
+  O resto do painel não depende dessas fontes. A de raios também
   é omitida quando o quadro mais recente tem mais de 30 minutos, e mostra raio
   total (nuvem e solo), não ponto de impacto.
 - **Sem autenticação e sem multiusuário.** É ferramenta local e de portfólio.
@@ -270,7 +277,7 @@ de 27 fechando como `success`, com a ingestão da CPRM falhando por timeout.
 pytest
 ```
 
-144 testes cobrindo ingestão da CPRM (ArcGIS REST, paginação, incremental por
+145 testes cobrindo ingestão da CPRM (ArcGIS REST, paginação, incremental por
 marcador d'água, retry), lotes e retry da Open-Meteo, cache SQLite, grade
 espacial nacional, acumulação de chuva, previsão, exportação, a guarda
 anti-regressão de publicação e a mescla não-destrutiva com o `gh-pages`. Toda
@@ -287,8 +294,8 @@ As decisões maiores foram testadas com requisição real, não por suposição:
   depender de estação. INMET e ANA foram implementados e descartados: o INMET só
   publica o ZIP anual (dias de defasagem) e a rede da ANA é majoritariamente
   fluviométrica. Manter as duas trilhas custava ~1.900 linhas que nenhum workflow
-  executava. Os avisos oficiais do INMET voltaram só como camada do mapa, lida
-  pelo navegador; não entram no cálculo.
+  executava. Os avisos oficiais do INMET voltaram só como lista e camada do
+  mapa, lidas pelo navegador; não entram no cálculo.
 - **Cobertura nacional:** ingestão incremental da CPRM mais uma grade espacial
   calibrada por busca binária, em vez de limiar de densidade escolhido a dedo.
 

@@ -87,13 +87,18 @@ icon and window, updates itself, and uninstalls like any other program.
 - Freshness badge per source (CPRM/SGB sectors and rainfall), in Brasília
   time, with the data's age and a warning when something is past its expected
   cycle.
-- Live map layers you can toggle: official INMET weather warnings (on by
-  default; polygon in the severity color, with risks and instructions,
-  filtered to the selected state), rain radar (RainViewer), and lightning
-  (GOES-19 GLM, via SSEC RealEarth: electrical activity from the last few
-  minutes, as a storm indicator).
+- Official INMET weather warnings as a list in the panel, sorted by severity,
+  with two filters: scope (this state, the IBGE macro-region of the current
+  state, or all of Brazil) and day (today, tomorrow, and the next days that
+  have warnings). It answers "will a storm hit the Southeast on Sunday?".
+  Clicking a warning frames its polygon on the map; the layer follows the same
+  scope as the list.
+- Live map layers you can toggle: INMET warnings (on by default; polygon in the
+  severity color, with risks and instructions), rain radar (RainViewer), and
+  lightning (GOES-19 GLM, via SSEC RealEarth: electrical activity from the last
+  few minutes, as a storm indicator).
 - Runs two separate workflows: sectors once a month, rainfall once a day.
-- 144 tests with mocked HTTP, running in CI on every push.
+- 145 tests with mocked HTTP, running in CI on every push.
 
 ## Data sources
 
@@ -267,8 +272,11 @@ failing on timeout.
   `src/ingest/openmeteo.py` batches in groups of 50 points, uses a short
   history window, and waits 60s on `429`.
 - **The live layers depend on third parties.** INMET warnings, radar and
-  lightning are fetched on the spot; if the source goes down, the layer
-  doesn't show. The lightning layer is also left out when the latest frame is
+  lightning are fetched on the spot (with a timeout); if the source goes down,
+  the layer doesn't show and the warnings block says the source is unavailable
+  — a state distinct from "no active warnings", because a `.gov.br` that is
+  down answers 200 with a portal HTML page. The rest of the panel does not
+  depend on those sources. The lightning layer is also left out when the latest frame is
   more than 30 minutes old, and it shows total lightning (in-cloud and
   cloud-to-ground), not strike points.
 - **No authentication and no multi-user support.** It's a local, portfolio
@@ -283,7 +291,7 @@ failing on timeout.
 pytest
 ```
 
-144 tests covering CPRM ingestion (ArcGIS REST, pagination, incremental
+145 tests covering CPRM ingestion (ArcGIS REST, pagination, incremental
 watermark, retry), Open-Meteo batching and retry, SQLite cache, national
 spatial grid, rainfall accumulation, forecasting, export, the publication
 anti-regression guard, and the non-destructive merge with `gh-pages`. Every
@@ -302,8 +310,8 @@ The bigger decisions were tested with real requests, not assumed:
   without depending on a station. INMET and ANA were implemented and dropped:
   INMET only publishes the annual ZIP (days of lag) and ANA's network is
   mostly fluviometric. Keeping both paths cost ~1,900 lines that no workflow
-  ever ran. INMET's official warnings came back only as a map layer, read by
-  the browser; they don't feed into the calculation.
+  ever ran. INMET's official warnings came back only as a list and a map
+  layer, read by the browser; they don't feed into the calculation.
 - **National coverage:** incremental CPRM ingestion plus a spatial grid
   calibrated by binary search, instead of a hand-picked density threshold.
 
