@@ -1,0 +1,27 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-10-24T12:00:00+00:00",
+  "total_setores": 98,
+  "total_municipios": 8,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-10-24T13:00:37.640214+00:00",
+  "cprm": {
+    "ingerido_em": "2026-10-01T12:05:53.365206+00:00",
+    "setor_mais_recente": "2017-06-13"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-10-24T12:00:00+00:00",
+    "consultado_em": "2026-10-24T13:00:37.640214+00:00"
+  },
+  "municipios": [
+    "CALÇOENE",
+    "FERREIRA GOMES",
+    "LARANJAL DO JARI",
+    "MACAPÁ",
+    "PEDRA BRANCA DO AMAPARI",
+    "PORTO GRANDE",
+    "SANTANA",
+    "VITÓRIA DO JARI"
+  ]
+}

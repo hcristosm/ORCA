@@ -1,0 +1,24 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-10-24T13:00:00+00:00",
+  "total_setores": 692,
+  "total_municipios": 5,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-10-24T13:19:52.929057+00:00",
+  "cprm": {
+    "ingerido_em": "2026-10-01T12:06:43.567039+00:00",
+    "setor_mais_recente": "2012-06-10"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-10-24T13:00:00+00:00",
+    "consultado_em": "2026-10-24T13:19:52.929057+00:00"
+  },
+  "municipios": [
+    "ANGRA DOS REIS",
+    "CANTAGALO",
+    "NOVA FRIBURGO",
+    "SANTA MARIA MADALENA",
+    "SUMIDOURO"
+  ]
+}
