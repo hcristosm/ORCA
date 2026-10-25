@@ -12,6 +12,34 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-10-24
+
+### FIXES
+- fix(openmeteo): o cache gravava as horas de previsão junto com as observadas, e um run diário que falhasse transformava previsão em chuva "medida" no acumulado de 72h (reproduzido: 117 mm onde não choveu). Agora só grava hora já passada, e o cache publicado é descartado uma vez (`PRAGMA user_version`)
+- fix(openmeteo): resposta com menos itens que pontos era aceita e desalinhava pontos e séries (um município recebia o gráfico de outro); HTTP 200 com HTML escapava como `JSONDecodeError`. As duas são validadas dentro do retry
+- fix(openmeteo): timeout e 5xx esperavam o backoff segurando o único slot de concorrência e congelavam todas as UFs; só o 429 (limite por IP) espera segurando o slot, de propósito
+- fix(openmeteo): hora gravada como `null` no cache nunca era rebuscada
+- fix(openmeteo): caminho do cache saía do diretório de execução, não de `config.py`, e ignorava `--diretorio`
+- fix(nacional): exceção fora de uma lista fechada (ex.: `KeyError` por mudança de schema da CPRM, GeoPackage corrompido) numa UF derrubava a exportação das 27
+- fix(cli): erro inesperado numa UF interrompia a ingestão mensal das UFs seguintes
+- fix(cprm): erro do ArcGIS com HTTP 200 não era retentado
+- fix(cprm): carga completa vazia (HTTP 200 sem features) gravava um GeoPackage de 0 setores e um manifesto de sucesso, que passavam pelo limiar de 10 KiB do workflow
+- fix(cprm): a ingestão incremental nunca removia setores apagados ou renumerados na fonte (agora poda pelos `objectid` vivos, via `returnIdsOnly`), e um manifesto sem GeoPackage salvava só os setores novos
+- fix(publicacao): `workflow_dispatch` com `ufs` nunca publicava; o piso de cobertura agora é medido contra as UFs pedidas (`--pedidas`)
+- fix(dashboard): o mapa reenquadrava a cada movimento do slider, da janela ou dos filtros, jogando fora o zoom do usuário
+- fix(dashboard): na janela de 24h, setor com 72h acima e 24h abaixo do limiar sumia de "Em atenção" e de "Alerta previsto"
+- fix(dashboard): falha de rede ou JSON inválido deixava o selo em "Carregando dados…" para sempre
+- fix(dashboard): os filtros de grau da legenda não faziam nada no choropleth
+- fix(dashboard): áreas customizadas usavam sempre 72h para "Em atenção", ignorando o seletor de janela
+- fix(dashboard): o download do CSV revogava o blob logo após o clique, e a impressão do relatório dependia de um `onload` que podia já ter passado
+
+### REFACTOR
+- refactor(export): remove a mescla com o `meta_<uf>.json` anterior, que só servia ao extinto bloco `vento` e derrubava a UF quando o arquivo antigo estava corrompido
+- refactor(nacional): remove `tamanho_celula_grade_graus` e `total_celulas_grade`, que nunca chegavam ao meta (o dado continua no log da exportação)
+
+### CHORE
+- chore(deps-dev): atualiza `ruff` e `setuptools`
+
 ## [2.3.0] - 2026-10-23
 
 ### FEATURES
