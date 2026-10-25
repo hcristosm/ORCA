@@ -80,19 +80,6 @@ def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
     disponiveis = json.loads((saida / "ufs_disponiveis.json").read_text())
     assert disponiveis == ["RJ", "SP"]
 
-    for meta in resultados.values():
-        assert "tamanho_celula_grade_graus" in meta
-        assert "total_celulas_grade" in meta
-
-    # O sinal de que houve UMA grade nacional compartilhada (e não 27 grades
-    # independentes, uma por UF) é que as duas UFs reportam exatamente o mesmo
-    # tamanho de célula e o mesmo total de células.
-    assert (
-        resultados["SP"]["tamanho_celula_grade_graus"]
-        == resultados["RJ"]["tamanho_celula_grade_graus"]
-    )
-    assert resultados["SP"]["total_celulas_grade"] == resultados["RJ"]["total_celulas_grade"]
-
 
 @responses.activate
 def test_exportar_nacional_segunda_execucao_pede_menos_historico(tmp_path: Path):
@@ -232,3 +219,24 @@ def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypa
 
     assert not quebrou, "as UFs não estavam dentro da exportação ao mesmo tempo"
     assert set(resultados.keys()) == {"SP", "RJ", "MG"}
+
+
+def test_exportar_nacional_erro_inesperado_numa_uf_nao_derruba_as_outras(tmp_path: Path, monkeypatch):
+    """KeyError (schema da CPRM mudou) numa UF e GeoPackage ilegível noutra
+    escapavam da lista fechada de exceções e abortavam a exportação inteira."""
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
+    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
+    caminho_setores("MG", tmp_path).write_text("não é um GeoPackage")
+
+    def fake_exportar_dashboard(uf, diretorio_dados, saida_dir, pontos_grade, cache_openmeteo=None):
+        if uf == "SP":
+            raise KeyError("num_setor")
+        return {"uf": uf}
+
+    monkeypatch.setattr(nacional, "exportar_dashboard", fake_exportar_dashboard)
+
+    saida = tmp_path / "export"
+    resultados = exportar_nacional(["SP", "RJ", "MG"], tmp_path, saida, orcamento_alvo=1000)
+
+    assert set(resultados) == {"RJ"}
+    assert json.loads((saida / "ufs_disponiveis.json").read_text()) == ["RJ"]

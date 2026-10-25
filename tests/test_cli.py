@@ -114,8 +114,13 @@ def test_ingerir_setores_falha_se_alguma_uf_falhar(tmp_path: Path):
     assert caminho_setores("BA", tmp_path).exists()
 
     # Execução real: AP responde, BA cai. As respostas são consumidas na
-    # ordem de registro (AP faz 1 requisição; BA repete a última, 500).
+    # ordem de registro (AP faz 1 requisição; BA repete a última, 500). A
+    # consulta de ids vivos da poda incremental de AP tem resposta própria.
     responses.reset()
+    responses.add(
+        responses.GET, FEATURE_LAYER_URL, json={"objectIds": [1]}, status=200,
+        match=[matchers.query_param_matcher({"returnIdsOnly": "true", "where": "uf='AP'"}, strict_match=False)],
+    )
     responses.add(
         responses.GET, FEATURE_LAYER_URL,
         json={"type": "FeatureCollection", "features": []},
@@ -131,6 +136,7 @@ def test_ingerir_setores_falha_se_alguma_uf_falhar(tmp_path: Path):
 
     assert resultado.exit_code == 1
     assert "BA" in resultado.output
+    assert "1/2 UF(s) ingerida(s)" in resultado.output
     assert caminho_setores("AP", tmp_path).exists()
 
 
@@ -170,3 +176,22 @@ def test_ingerir_setores_falha_mesmo_com_geopackage_ja_no_diretorio(tmp_path: Pa
     assert segunda.exit_code == 1, segunda.output
     assert "AP" in segunda.output
     assert "0/1" in segunda.output
+
+
+@responses.activate
+def test_ingerir_setores_erro_inesperado_numa_uf_nao_para_as_seguintes(tmp_path: Path):
+    """GeoPackage corrompido em AP levantava DataSourceError (RuntimeError), que
+    escapava do except e deixava BA sem ingestão naquele mês."""
+    caminho_setores("AP", tmp_path).write_text("não é um GeoPackage")
+    responses.add(
+        responses.GET, FEATURE_LAYER_URL,
+        json={"type": "FeatureCollection", "features": [_feature(1, "BA")]}, status=200,
+    )
+
+    resultado = runner.invoke(
+        app, ["ingerir-setores", "--ufs", "AP,BA", "--diretorio", str(tmp_path), "--backoff-factor", "0"],
+    )
+
+    assert resultado.exit_code == 1
+    assert "AP" in resultado.output
+    assert caminho_setores("BA", tmp_path).exists()

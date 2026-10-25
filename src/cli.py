@@ -17,10 +17,15 @@ from pathlib import Path
 
 import typer
 
-from src.config import DASHBOARD_DATA_DIR, DATA_DIR, UFS_VALIDAS, caminho_setores
+from src.config import (
+    DASHBOARD_DATA_DIR,
+    DATA_DIR,
+    UFS_VALIDAS,
+    caminho_cache_openmeteo,
+    caminho_setores,
+)
 from src.export.dashboard_data import exportar_dashboard
 from src.export.nacional import ORCAMENTO_ALVO_PADRAO, exportar_nacional
-from src.ingest.cprm import CPRMFetchError
 from src.ingest.cprm import ingerir_uf as ingerir_cprm
 from src.storage_cache_openmeteo import CacheOpenMeteo
 
@@ -52,7 +57,8 @@ def exportar_dashboard_cmd(
 ) -> None:
     """Pré-computa a chuva por setor e gera os arquivos estáticos do dashboard (GeoJSON/JSON)."""
     saida_dir = saida or DASHBOARD_DATA_DIR
-    meta = exportar_dashboard(uf, diretorio, saida_dir, cache_openmeteo=CacheOpenMeteo())
+    cache = CacheOpenMeteo(caminho_cache_openmeteo(diretorio))
+    meta = exportar_dashboard(uf, diretorio, saida_dir, cache_openmeteo=cache)
     typer.echo(f"{meta['total_setores']} setores exportados para {saida_dir}")
 
 
@@ -86,7 +92,7 @@ def atualizar_nacional_cmd(
     """
     lista_ufs = [u.strip().upper() for u in ufs.split(",") if u.strip()]
 
-    cache = CacheOpenMeteo()
+    cache = CacheOpenMeteo(caminho_cache_openmeteo(diretorio))
     try:
         resultados = exportar_nacional(
             lista_ufs, diretorio, saida,
@@ -130,8 +136,11 @@ def ingerir_setores_cmd(
                 uf, caminho_setores(uf, diretorio),
                 backoff_factor=backoff_factor, permitir_cache=False,
             )
-        except (CPRMFetchError, ValueError) as exc:
-            typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc}", err=True)
+        except Exception as exc:  # noqa: BLE001 - ver comentário abaixo
+            # Qualquer exceção (gpkg corrompido, schema novo da SGB), não só
+            # CPRMFetchError: uma UF ruim interrompia o laço e as seguintes
+            # ficavam um mês sem ingestão. O exit 1 abaixo mantém a falha visível.
+            typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc!r}", err=True)
             falhas.append(uf)
 
     typer.echo(f"{len(lista_ufs) - len(falhas)}/{len(lista_ufs)} UF(s) ingerida(s).")

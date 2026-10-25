@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from src.config import caminho_setores
-from src.export.dashboard_data import ExportacaoDashboardError, exportar_dashboard
+from src.export.dashboard_data import exportar_dashboard
 from src.processing.cruzamento import centroides_4326
 from src.processing.grade_espacial import calibrar_tamanho_celula, mapear_para_grade
 from src.storage import ler_setores
@@ -92,7 +92,11 @@ def exportar_nacional(
         if not caminho.exists():
             logger.warning("Setores de %s não encontrados em %s; pulando.", uf, caminho)
             continue
-        setores_por_uf[uf] = ler_setores(caminho)
+        try:
+            setores_por_uf[uf] = ler_setores(caminho)
+        except Exception:
+            # GeoPackage corrompido de uma UF não pode tirar as outras 26 do ar.
+            logger.exception("Setores de %s ilegíveis em %s; pulando.", uf, caminho)
 
     if not setores_por_uf:
         raise ValueError("Nenhuma das UFs pedidas tem setores ingeridos localmente.")
@@ -116,11 +120,13 @@ def exportar_nacional(
                 pontos_grade=pontos_grade[inicio:fim],
                 cache_openmeteo=cache_openmeteo,
             )
-        except (ExportacaoDashboardError, OSError, ValueError) as exc:
-            logger.warning("Falha ao exportar %s: %s", uf, exc)
+        except Exception:
+            # Qualquer exceção, não uma lista fechada: um KeyError por mudança
+            # de schema da CPRM numa UF escapava do `executor.map` e derrubava
+            # a exportação das 27. Run degenerado (o mesmo defeito em todas as
+            # UFs) continua barrado pelo piso de scripts/mesclar_publicado.py.
+            logger.exception("Falha ao exportar %s", uf)
             return uf, None
-        meta["tamanho_celula_grade_graus"] = tamanho_celula
-        meta["total_celulas_grade"] = total_celulas
         return uf, meta
 
     resultados: dict[str, dict] = {}

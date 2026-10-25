@@ -282,23 +282,6 @@ def test_exportar_dashboard_fonte_openmeteo_gera_previsao(tmp_path: Path, setore
     assert set(previsao.keys()) == {"S1", "S2"}
 
 
-def test_exportar_dashboard_preserva_bloco_vento_existente_no_meta(tmp_path: Path, setores):
-    salvar_setores(setores, caminho_setores("SP", tmp_path))
-
-    saida = tmp_path / "export"
-    saida.mkdir(parents=True)
-    bloco_vento = {"referencia": "2026-01-01T00:00:00+00:00", "total_municipios_sinalizados": 2}
-    (saida / "meta_sp.json").write_text(json.dumps({"vento": bloco_vento}))
-
-    with _openmeteo_stubbado():
-        exportar_dashboard("SP", tmp_path, saida)
-
-    meta = json.loads((saida / "meta_sp.json").read_text())
-    assert meta["vento"] == bloco_vento
-    assert meta["total_setores"] == 2
-    assert meta["fonte"] == "openmeteo"
-
-
 def _exportar_minimo(tmp_path: Path, setores) -> dict:
     """Exporta uma vez com a Open-Meteo stubbada e devolve o meta gerado.
 
@@ -586,3 +569,15 @@ def test_series_openmeteo_por_municipio_sem_filtro_mantem_comportamento_antigo(t
     assert len(corpos_capturados) == 1
     assert corpos_capturados[0]["past_days"] == JANELA_SERIE_DIAS
     assert set(series.keys()) == {"CIDADE A", "CIDADE B"}
+
+
+def test_meta_antigo_corrompido_nao_derruba_a_exportacao(tmp_path: Path, setores):
+    """O meta anterior era lido para uma mescla (do extinto bloco `vento`); um
+    arquivo corrompido derrubava a UF depois de os outros 3 já estarem gravados."""
+    saida = tmp_path / "export"
+    saida.mkdir(parents=True)
+    (saida / "meta_sp.json").write_text("{truncado")
+
+    meta = _exportar_minimo(tmp_path, setores)
+
+    assert json.loads((saida / "meta_sp.json").read_text()) == meta
