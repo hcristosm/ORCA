@@ -32,3 +32,7 @@ def caminho_setores(uf: str, data_dir: Path = DATA_DIR) -> Path:
 
 def caminho_manifesto_cprm(uf: str, data_dir: Path = DATA_DIR) -> Path:
     return data_dir / f"cprm_manifest_{uf.lower()}.json"
+
+
+def caminho_cache_openmeteo(data_dir: Path = DATA_DIR) -> Path:
+    return data_dir / "cache" / "openmeteo.sqlite"

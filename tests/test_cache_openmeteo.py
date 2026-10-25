@@ -119,3 +119,33 @@ def test_retencao_remove_linhas_mais_velhas_que_retencao_dias(tmp_path: Path):
 
     assert velha not in lido.get(ponto, {})
     assert lido[ponto][nova] == 2.0
+
+
+def test_cache_de_versao_anterior_e_descartado_uma_vez(tmp_path: Path):
+    """Caches v0 misturavam previsão com observado; abrir um deles descarta tudo,
+    mas só na primeira vez (o v1 regravado sobrevive a reaberturas)."""
+    import sqlite3
+
+    caminho = tmp_path / "cache.sqlite"
+    ponto = (-23.5, -46.6)
+    hora = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+    CacheOpenMeteo(caminho).gravar([(ponto, hora, 9.0)], "chuva_mm", "2026-08-10T05:00")
+    with sqlite3.connect(caminho) as conn:
+        conn.execute("PRAGMA user_version = 0")
+
+    cache = CacheOpenMeteo(caminho)
+    assert cache.ler([ponto], "chuva_mm", [hora]) == {}
+
+    cache.gravar([(ponto, hora, 1.0)], "chuva_mm", "2026-08-10T05:00")
+    assert CacheOpenMeteo(caminho).ler([ponto], "chuva_mm", [hora]) != {}
+
+
+def test_hora_gravada_como_null_continua_faltante(tmp_path: Path):
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    cache.gravar([(ponto, "2026-08-10T00:00", None), (ponto, "2026-08-10T01:00", 0.0)],
+                 "chuva_mm", "2026-08-10T05:00")
+
+    faltando = cache.horas_faltantes([ponto], "chuva_mm", ["2026-08-10T00:00", "2026-08-10T01:00"])
+
+    assert faltando == {ponto: ["2026-08-10T00:00"]}

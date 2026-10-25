@@ -27,12 +27,14 @@ from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from src.config import caminho_cache_openmeteo
+
 logger = logging.getLogger(__name__)
 
 PRECISAO_DECIMAIS = 4  # ~11m no equador; fixo e independente da grade
                         # espacial recalibrada por execução (ver spec).
 ESCALA_COORDENADA = 10 ** PRECISAO_DECIMAIS
-CAMINHO_PADRAO = Path("data/cache/openmeteo.sqlite")
+CAMINHO_PADRAO = caminho_cache_openmeteo()
 RETENCAO_DIAS_PADRAO = 35  # cobre JANELA_SERIE_DIAS (30, o maior histórico
                            # pedido hoje) com folga; linhas mais velhas não
                            # servem a nenhum consumidor atual.
@@ -91,6 +93,11 @@ class CacheOpenMeteo:
                 "data_hora INTEGER NOT NULL, valor REAL, buscado_em INTEGER NOT NULL, "
                 "PRIMARY KEY (lat, lon, variavel_id, data_hora)) WITHOUT ROWID"
             )
+            # Versão 1: caches anteriores gravavam horas de previsão junto com
+            # as observadas, sem como separar as duas; descarta tudo uma vez.
+            if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
+                conn.execute("DELETE FROM cache_horario")
+                conn.execute("PRAGMA user_version = 1")
             conn.commit()
             self._podar(conn)
             return conn
@@ -184,7 +191,9 @@ class CacheOpenMeteo:
         cacheado = self._linhas_cacheadas(pontos, variavel, horas)
         faltando = {}
         for ponto in pontos:
-            presentes = cacheado.get(ponto, {})
+            # `null` gravado é hora que a API ainda não tinha: conta como
+            # faltante, senão ficaria congelada como buraco na série.
+            presentes = {h for h, v in cacheado.get(ponto, {}).items() if v is not None}
             faltantes_ponto = [h for h in horas if h not in presentes]
             if faltantes_ponto:
                 faltando[ponto] = faltantes_ponto

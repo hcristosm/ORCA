@@ -485,3 +485,78 @@ def test_fetch_variavel_batch_dedup_quando_past_days_encolhido_ainda_sobrepoe_o_
     sobreposta = serie[serie["data_hora"] == pd.Timestamp("2026-08-09T00:00", tz="UTC")]
     assert len(sobreposta) == 1
     assert sobreposta["chuva_mm"].iloc[0] == 5.0
+
+
+@responses.activate
+def test_previsao_nao_vira_chuva_observada_depois_de_um_dia_sem_run(tmp_path):
+    """Run A grava a resposta (observado 0.0 + previsão 9.0); o run do dia
+    seguinte não acontece; no run B, nenhuma hora passada pode trazer o 9.0
+    previsto por A -- isso inflava a chuva 72h com chuva que nunca caiu."""
+    cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
+    ponto = (-23.5, -46.6)
+    agora = {"t": pd.Timestamp("2026-10-20T10:00", tz="UTC")}
+
+    def callback(request):
+        corpo = json_module.loads(request.body)
+        meia_noite = agora["t"].floor("D")
+        horas = pd.date_range(
+            meia_noite - pd.Timedelta(days=corpo["past_days"]),
+            meia_noite + pd.Timedelta(days=corpo["forecast_days"]), freq="h", inclusive="left",
+        )
+        chuva = [0.0 if h <= agora["t"] else 9.0 for h in horas]
+        return (200, {}, json_module.dumps(_resposta(horas.strftime("%Y-%m-%dT%H:%M").tolist(), [chuva])))
+
+    responses.add_callback(responses.POST, FORECAST_URL, callback=callback, content_type="application/json")
+
+    fetch_precipitacao_batch([ponto], dias_historico=4, dias_previsao=4, cache=cache, agora=agora["t"])
+    agora["t"] += pd.Timedelta(days=2)
+    serie = fetch_precipitacao_batch([ponto], dias_historico=4, dias_previsao=4, cache=cache, agora=agora["t"])[0]
+
+    passado = serie[serie["data_hora"] <= agora["t"]]
+    assert (passado["chuva_mm"] == 0.0).all()
+
+
+@responses.activate
+def test_resposta_curta_ou_nao_json_e_retentada_em_vez_de_desalinhar_series():
+    """HTTP 200 com menos itens que pontos (desalinhava pontos x séries) e
+    HTTP 200 com HTML (escapava como JSONDecodeError sem retry) são retentados."""
+    horas = ["2026-08-10T00:00"]
+    responses.add(responses.POST, FORECAST_URL, json=_resposta(horas, [[1.0]]), status=200)
+    responses.add(responses.POST, FORECAST_URL, body="<html>fora do ar</html>", status=200)
+    responses.add(responses.POST, FORECAST_URL, json=_resposta(horas, [[1.0], [2.0]]), status=200)
+
+    series = fetch_precipitacao_batch([(-23.5, -46.6), (-22.9, -43.2)], max_retries=3, backoff_factor=0)
+
+    assert len(responses.calls) == 3
+    assert [s["chuva_mm"].iloc[0] for s in series] == [1.0, 2.0]
+
+
+@pytest.mark.parametrize("status, slot_livre_na_espera", [(500, True), (429, False)])
+def test_backoff_libera_slot_salvo_em_429(monkeypatch, status, slot_livre_na_espera):
+    """Erro do lote espera fora do slot único (não congela as outras UFs);
+    429 é limite por IP e espera segurando o slot (pausa global de propósito)."""
+    import requests
+
+    from src.ingest.rate_limiter import RateLimiter
+
+    limiter = RateLimiter(10**6, 10**6, max_concorrentes=1)
+    observado = []
+
+    def sleep_espiao(_segundos):
+        livre = limiter._semaforo.acquire(blocking=False)
+        if livre:
+            limiter._semaforo.release()
+        observado.append(livre)
+
+    monkeypatch.setattr(openmeteo.time, "sleep", sleep_espiao)
+
+    class Sessao:
+        def post(self, *args, **kwargs):
+            resp = requests.Response()
+            resp.status_code = status
+            raise requests.HTTPError(response=resp)
+
+    with pytest.raises(OpenMeteoFetchError):
+        openmeteo._post_lote([(0.0, 0.0)], ["precipitation"], 1, 1, 1.0, 2, 1.0, Sessao(), limiter=limiter)
+
+    assert observado == [slot_livre_na_espera]

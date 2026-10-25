@@ -138,49 +138,55 @@ def _post_lote(
         "forecast_days": dias_previsao,
     }
 
-    resposta_ok = None
+    payload: list[dict] | None = None
     last_exc: Exception | None = None
     for tentativa in range(1, max_retries + 1):
         limiter.acquire()
         try:
             resp = session.post(FORECAST_URL, json=corpo, timeout=timeout)
             resp.raise_for_status()
-            resposta_ok = resp
+            # Corpo validado DENTRO do retry: HTTP 200 com HTML ou com menos
+            # itens que pontos é falha transitória como qualquer outra. Aceitar
+            # uma resposta curta desalinhava pontos e séries (o chamador casa
+            # por posição) e entregava a chuva de um ponto a outro.
+            dados = resp.json()
+            # A API devolve um objeto único (não uma lista) quando o lote tem
+            # só 1 coordenada, diferente do array que devolve para lotes maiores.
+            dados = dados if isinstance(dados, list) else [dados]
+            if len(dados) != len(pontos):
+                raise ValueError(f"resposta com {len(dados)} itens para {len(pontos)} pontos")
+            payload = dados
             break
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
             last_exc = exc
             # HTTP 429 da Open-Meteo é "Minutely API request limit exceeded"; a
             # própria API pede pra tentar de novo em um minuto; o backoff
             # exponencial normal (poucos segundos) não é suficiente para isso.
-            if exc.response is not None and exc.response.status_code == 429:
-                espera = 60.0
-            else:
-                espera = backoff_factor * (2 ** (tentativa - 1))
+            resposta = getattr(exc, "response", None)
+            limite_por_ip = resposta is not None and resposta.status_code == 429
+            espera = 60.0 if limite_por_ip else backoff_factor * (2 ** (tentativa - 1))
             logger.warning(
                 "Falha ao consultar a Open-Meteo (tentativa %d/%d, lote de %d pontos): %s. "
                 "Aguardando %.1fs.",
                 tentativa, max_retries, len(pontos), exc, espera,
             )
-            if tentativa < max_retries:
+            # 429 é limite do IP inteiro: espera SEGURANDO o slot, senão as
+            # outras threads disparam, levam 429 também e queimam as próprias
+            # tentativas. Os demais erros são do lote, e esperam fora do slot.
+            if limite_por_ip and tentativa < max_retries:
                 time.sleep(espera)
+                espera = 0.0
         finally:
-            # Libera o slot de concorrência assim que a resposta (ou erro)
-            # desta tentativa chega — não durante a espera de backoff acima,
-            # que não ocupa uma conexão.
             limiter.release()
+        if payload is None and tentativa < max_retries and espera:
+            time.sleep(espera)
 
-    if resposta_ok is None:
+    if payload is None:
         raise OpenMeteoFetchError(
             f"Não foi possível consultar a Open-Meteo após {max_retries} tentativas "
             f"(lote de {len(pontos)} pontos)"
         ) from last_exc
-
-    payload = resposta_ok.json()
-    # A API devolve um objeto único (não uma lista) quando o lote tem só 1
-    # coordenada, diferente do array que devolve para lotes maiores; sem
-    # normalizar aqui, `_fetch_variavel_batch` (que sempre espera uma lista
-    # de objetos) quebra iterando as chaves do dict como se fossem itens.
-    return payload if isinstance(payload, list) else [payload]
+    return payload
 
 
 def _serie_do_gap(
@@ -260,6 +266,11 @@ def _fetch_variavel_batch(
             timeout, max_retries, backoff_factor, sess,
         )
         if cache is not None:
+            # Só hora já passada: a resposta também traz `forecast_days` de
+            # previsão, e previsão cacheada passaria por chuva observada quando
+            # um run diário falha (as horas que o run seguinte não rebusca
+            # viriam do cache com o valor previsto).
+            ate = agora.strftime("%Y-%m-%dT%H:%M")
             registros = [
                 (ponto, hora, valor)
                 for ponto, item in zip(lote, payload)
@@ -267,6 +278,7 @@ def _fetch_variavel_batch(
                     item.get("hourly", {}).get("time", []),
                     item.get("hourly", {}).get(variavel_hourly, []),
                 )
+                if hora <= ate
             ]
             cache.gravar(registros, variavel_hourly, agora.isoformat())
         return [(ponto, item, dias_historico_lote) for ponto, item in zip(lote, payload)]
