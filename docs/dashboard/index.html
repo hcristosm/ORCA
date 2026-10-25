@@ -707,21 +707,24 @@
     // esta chamada foi superada por uma mais nova e NÃO pode gravar nada no estado --
     // senão a UI reverteria silenciosamente para os dados da UF errada.
     const ufAlvo = UF;
-    const [setoresResp, seriesResp, metaResp] = await Promise.all([
-      fetch(`data/setores_${ufAlvo}.geojson`),
-      fetch(`data/series_${ufAlvo}.json`),
-      fetch(`data/meta_${ufAlvo}.json`),
-    ]);
-    if (UF !== ufAlvo) return;
-    if (!setoresResp.ok || !seriesResp.ok || !metaResp.ok) {
+    // Rede fora, HTTP de erro e JSON truncado caem no mesmo aviso: sem o catch,
+    // a promessa rejeitava em silêncio e o selo ficava em "Carregando" para sempre.
+    let setoresCarregados, seriesCarregadas, meta;
+    try {
+      const respostas = await Promise.all(
+        [`setores_${ufAlvo}.geojson`, `series_${ufAlvo}.json`, `meta_${ufAlvo}.json`].map(a => fetch(`data/${a}`))
+      );
+      if (UF !== ufAlvo) return;
+      const falha = respostas.find(r => !r.ok);
+      if (falha) throw new Error(`HTTP ${falha.status} em ${falha.url}`);
+      [setoresCarregados, seriesCarregadas, meta] = await Promise.all(respostas.map(r => r.json()));
+    } catch (e) {
+      if (UF !== ufAlvo) return;
+      console.warn(`Falha ao carregar os dados de ${ufAlvo}:`, e);
       document.getElementById("selo").textContent =
-        "Não foi possível carregar os dados desta UF. Rode `python -m src.cli exportar-dashboard --uf " +
-        ufAlvo.toUpperCase() + "` para gerá-los.";
+        `Não foi possível carregar os dados de ${ufAlvo.toUpperCase()} agora. Recarregue a página para tentar de novo.`;
       return;
     }
-    const setoresCarregados = await setoresResp.json();
-    const seriesCarregadas = await seriesResp.json();
-    const meta = await metaResp.json();
 
     let previsaoCarregada = null;
     try {
@@ -1546,6 +1549,7 @@
       controleCamadas = null; camadaAvisosInmet = null; camadasAvisoPorId = {};
     }
     mapa = L.map("mapa");
+    recorteEnquadrado = null;  // mapa novo nasce sem vista: o próximo render enquadra
     // Base neutralizada por filtro CSS (ver .leaflet-tile-pane no style.css): o
     // basemap é fundo, o dado é figura, nos dois temas e sem depender de chave.
     L.tileLayer(TILE_URL, {
@@ -1685,9 +1689,9 @@
     const previsto = [];
     for (const r of filtrados) {
       const numSetor = r.f.properties.num_setor;
-      const chuva72hAtual = r.f.properties.chuva_72h;
-      const jaEmAtencao72h = typeof chuva72hAtual === "number" && chuva72hAtual >= estado.limiar;
-      if (jaEmAtencao72h) continue;
+      // Mesmo critério do card "Em atenção" (janela atual), não sempre 72h: na
+      // janela de 24h, setor com 72h acima e 24h abaixo do limiar sumia dos dois.
+      if (typeof r.chuva === "number" && r.chuva >= estado.limiar) continue;
       const quando = primeiroPontoQueCruza(previsao[numSetor], estado.limiar);
       if (quando) previsto.push({ f: r.f, quando });
     }
@@ -1873,6 +1877,9 @@
   function alternarFiltro(filtro) {
     if (estado.ocultos.has(filtro)) estado.ocultos.delete(filtro);
     else estado.ocultos.add(filtro);
+    // O choropleth só é refeito quando some do mapa (não depende de janela nem
+    // de limiar); o filtro de grau é a exceção, então derruba para refazer.
+    if (camadaChoropleth) { mapa.removeLayer(camadaChoropleth); camadaChoropleth = null; }
     renderizarTudo();
   }
 
@@ -1966,6 +1973,7 @@
     return L.featureGroup([poligonos, ...pins]);
   }
 
+  let recorteEnquadrado = null;
   function renderizarMapa(filtrados, emAtencao, alertaPrevisto) {
     if (camadaSetores) { mapa.removeLayer(camadaSetores); camadaSetores = null; }
     const modo = modoMapa();
@@ -1977,7 +1985,13 @@
     } else {
       if (camadaChoropleth) { mapa.removeLayer(camadaChoropleth); camadaChoropleth = null; }
       camadaSetores = criarCamadaSetores(filtrados, emAtencao, alertaPrevisto).addTo(mapa);
-      if (camadaSetores.getBounds().isValid()) mapa.fitBounds(camadaSetores.getBounds(), { padding: [24, 24] });
+      // Só enquadra quando o recorte muda: slider, janela e filtros também
+      // passam por aqui, e reenquadrar a cada tick jogava fora o zoom do usuário.
+      const recorte = `${UF}|${estado.municipio}`;
+      if (recorte !== recorteEnquadrado && camadaSetores.getBounds().isValid()) {
+        mapa.fitBounds(camadaSetores.getBounds(), { padding: [24, 24] });
+        recorteEnquadrado = recorte;
+      }
     }
     atualizarLegenda();
   }
@@ -2007,7 +2021,10 @@
   function filtrarMalhaPorCodarea(dadosPorCodarea) {
     return {
       type: "FeatureCollection",
-      features: malhaMunicipios.features.filter(f => dadosPorCodarea.has(String(f.properties.codarea))),
+      features: malhaMunicipios.features.filter(f => {
+        const r = dadosPorCodarea.get(String(f.properties.codarea));
+        return r && !estado.ocultos.has(r.grauMax);
+      }),
     };
   }
 
@@ -2030,7 +2047,11 @@
       },
     }).addTo(mapa);
 
-    if (colecao.features.length) mapa.fitBounds(camadaChoropleth.getBounds(), { padding: [24, 24] });
+    const recorte = `${UF}|`;
+    if (colecao.features.length && recorte !== recorteEnquadrado) {
+      mapa.fitBounds(camadaChoropleth.getBounds(), { padding: [24, 24] });
+      recorteEnquadrado = recorte;
+    }
   }
 
   let idAgendaSetoresCompleto = null;

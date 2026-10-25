@@ -170,6 +170,11 @@
     return slider ? Number(slider.value) : 100;
   }
 
+  function janelaAtual() {
+    const botao = document.querySelector("#janelaToggle button.ativo");
+    return botao ? Number(botao.dataset.janela) : 72;
+  }
+
   function formatarMm(valor) {
     return typeof valor === "number" ? `${valor.toFixed(1)}mm` : "—";
   }
@@ -234,7 +239,9 @@
         `<button class="botao-retentar" type="button" data-retentar="${area.id}">` +
         `<svg class="icone"><use href="icons/sprite.svg#icon-refresh-cw"></use></svg>Tentar novamente</button>`;
     } else {
-      const emAtencao = typeof area.chuva72 === "number" && area.chuva72 >= limiarAtual();
+      // Mesma janela do painel principal (24h ou 72h), não sempre 72h.
+      const chuva = janelaAtual() === 24 ? area.chuva24 : area.chuva72;
+      const emAtencao = typeof chuva === "number" && chuva >= limiarAtual();
       corpo =
         `<div class="card-area-metricas">` +
         `<div><span class="rotulo">24h</span><span class="valor">${formatarMm(area.chuva24)}</span></div>` +
@@ -333,6 +340,11 @@
 
   const limiarSliderEl = document.getElementById("limiarSlider");
   if (limiarSliderEl) limiarSliderEl.addEventListener("input", () => renderizarAreas());
+  // No `document`, não no #janelaToggle: este script carrega antes do inline do
+  // index.html, e no próprio botão rodaria antes de ele marcar a janela ativa.
+  document.addEventListener("click", ev => {
+    if (ev.target.closest("#janelaToggle button[data-janela]")) renderizarAreas();
+  });
 
   document.getElementById("uploadArquivo").addEventListener("change", async ev => {
     const file = ev.target.files[0];

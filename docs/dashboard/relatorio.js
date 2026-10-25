@@ -38,7 +38,9 @@
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    // Revogar logo após o click pode abortar o download (Safari/Firefox); o
+    // FileSaver.js espera 40s pelo mesmo motivo. O blob é pequeno.
+    setTimeout(() => URL.revokeObjectURL(url), 40000);
   }
 
   function exportarCSV(itens, nomeArquivo) {
@@ -94,7 +96,10 @@
 
     janela.document.write(html);
     janela.document.close();
-    janela.onload = () => janela.print();
+    // Direto, não em `onload`: atribuído depois do close(), o load pode já ter
+    // passado. A página não tem recurso externo para esperar.
+    janela.focus();
+    janela.print();
   }
 
   window.ORCA_relatorio = { paraCSV, exportarCSV, abrirRelatorioImpressao };
