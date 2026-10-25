@@ -196,6 +196,11 @@ def main(argv: list[str] | None = None) -> int:
         help=f"fração mínima do escopo exportada por este run, em (0, 1] "
              f"(padrão {PISO_COBERTURA_PADRAO}; ou ORCA_PISO_COBERTURA)",
     )
+    parser.add_argument(
+        "--pedidas", default="",
+        help="UFs pedidas a este run, separadas por vírgula (vazio = todo o escopo); "
+             "só mudam o denominador do piso, não o que é preservado",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -228,11 +233,15 @@ def main(argv: list[str] | None = None) -> int:
         # Interseção, não `len(exportadas)`: o denominador vem dos gpkg do
         # escopo, então o numerador precisa vir do mesmo conjunto -- uma UF
         # no índice que não está no escopo inflaria a cobertura medida.
-        novas = len(set(exportadas) & escopo)
-        minimo = piso * len(escopo)
+        # Run manual com `--ufs SP` mede contra as UFs pedidas: contra as 27
+        # do escopo, 1/27 ficava abaixo do piso e o dispatch nunca publicava.
+        pedidas = {u.strip().lower() for u in args.pedidas.split(",") if u.strip()}
+        alvo = (pedidas & escopo) or escopo
+        novas = len(set(exportadas) & alvo)
+        minimo = piso * len(alvo)
         if novas < minimo:
             print(
-                f"::error::Run degenerado: {novas} de {len(escopo)} UF(s) do escopo "
+                f"::error::Run degenerado: {novas} de {len(alvo)} UF(s) pedidas "
                 f"exportadas nesta execução, abaixo do piso de {piso:.0%}. Mesclar "
                 "completaria o resto com dado velho e o run fecharia verde sem sinal nenhum. "
                 "Mescla e publicação recusadas.",

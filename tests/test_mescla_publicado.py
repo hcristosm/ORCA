@@ -303,3 +303,23 @@ def test_aviso_de_escopo_reduzido_orienta_o_operador(tmp_path, capsys):
     assert "rj" in saida
     assert "ingerir-setores.yml" in saida
     assert "regressão" in saida
+
+
+def test_dispatch_parcial_mede_piso_contra_as_ufs_pedidas(tmp_path):
+    # `--ufs SP` no workflow_dispatch: 1 de 1 pedida é cobertura total. Contra
+    # o escopo (5 gpkg) seria 1/5 < 60%, e o dispatch manual nunca publicava.
+    todas = ["ac", "al", "am", "ap", "sp"]
+    pub, atual = _montar(tmp_path, todas, ["sp"])
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]
+
+    assert mp.main(argv + ["--pedidas", "SP"]) == 0
+    assert json.loads((atual / mp.INDICE).read_text()) == todas
+
+
+def test_pedidas_vazio_mantem_o_escopo_inteiro_como_denominador(tmp_path):
+    todas = ["ac", "al", "am", "ap", "sp"]
+    pub, atual = _montar(tmp_path, todas, ["sp"])
+    escopo = _escopo(tmp_path, todas)
+    argv = ["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo), "--pedidas", ""]
+    assert mp.main(argv) == 1

@@ -149,6 +149,9 @@ jobs:
         # publicação, ou fetch que falhou) não há nada a preservar.
         shell: bash -eo pipefail {0}
         if: "!cancelled()"
+        env:
+          # Vazio no cron (todas as UFs); no dispatch, o piso mede contra as pedidas.
+          UFS_PEDIDAS: ${{ github.event.inputs.ufs }}
         run: |
           if ! git rev-parse --verify --quiet refs/remotes/origin/gh-pages > /dev/null; then
             echo "gh-pages não disponível localmente (1a publicação ou fetch falhou); nada a preservar."
@@ -167,7 +170,8 @@ jobs:
           python3 scripts/mesclar_publicado.py \
             --publicado "$publicado_dir/data" \
             --atual docs/dashboard/data \
-            --escopo data
+            --escopo data \
+            --pedidas "$UFS_PEDIDAS"
 
       - name: Conferir antes de publicar
         id: conferir
