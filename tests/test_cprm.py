@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import geopandas as gpd
 import pandas as pd
 import pytest
 import responses
@@ -32,6 +33,16 @@ def _feature(objectid: int, grau_risco: str = "Alto", data_setor: str | None = N
             "data_setor": data_setor,
         },
     }
+
+
+def _ids_vivos(*objectids: int) -> None:
+    """Responde a consulta `returnIdsOnly` da poda incremental (registrar ANTES
+    das respostas sem matcher, que casariam com qualquer GET)."""
+    responses.add(
+        responses.GET, FEATURE_LAYER_URL, status=200,
+        json={"objectIdFieldName": "objectid", "objectIds": list(objectids)},
+        match=[matchers.query_param_matcher({"returnIdsOnly": "true"}, strict_match=False)],
+    )
 
 
 @responses.activate
@@ -185,10 +196,12 @@ def test_ingerir_uf_registra_ingerido_em_mesmo_sem_setores_novos(tmp_path: Path)
     # Consulta bem-sucedida sem novidades ainda prova que a fonte foi checada:
     # a data de ingestão avança, o marcador d'água não.
     output = tmp_path / "risco_sp.gpkg"
+    salvar_setores(gpd.GeoDataFrame.from_features([_feature(1), _feature(2)], crs="EPSG:4326"), output)
     manifesto_path = tmp_path / "cprm_manifest_sp.json"
     manifesto_path.write_text(json.dumps({
         "last_objectid": 2, "last_data_setor": "2021-06-15", "ingerido_em": "2020-01-01T00:00:00+00:00",
     }))
+    _ids_vivos(1, 2)
     responses.add(
         responses.GET,
         FEATURE_LAYER_URL,
@@ -231,6 +244,7 @@ def test_ingerir_uf_segunda_chamada_usa_where_incremental_e_mescla(tmp_path: Pat
         }
         return (200, {}, json.dumps(payload))
 
+    _ids_vivos(1, 2, 3)
     responses.add_callback(responses.GET, FEATURE_LAYER_URL, callback=_callback)
 
     resultado = ingerir_uf("SP", output)
@@ -261,6 +275,7 @@ def test_ingerir_uf_atualiza_registro_existente_sem_duplicar(tmp_path: Path):
     ingerir_uf("SP", output)
     responses.reset()
 
+    _ids_vivos(1)
     responses.add(
         responses.GET,
         FEATURE_LAYER_URL,
@@ -283,3 +298,92 @@ def test_data_setor_mais_recente_le_milissegundos_do_arcgis():
     assert data_setor_mais_recente(pd.Series([1711497600000, 1769731200000])) == "2026-01-30"
     assert data_setor_mais_recente(pd.Series(["2020-01-01", "2021-06-15"])) == "2021-06-15"
     assert data_setor_mais_recente(pd.Series([None, None], dtype="float64")) is None
+
+
+@responses.activate
+def test_erro_arcgis_com_http_200_e_retentado():
+    """O ArcGIS devolve erro transitório com HTTP 200; antes desistia na 1a tentativa."""
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200,
+                  json={"error": {"code": 500, "message": "Error performing query operation"}})
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200,
+                  json={"type": "FeatureCollection", "features": [_feature(1)]})
+
+    gdf = fetch_setores_risco("SP", backoff_factor=0)
+
+    assert len(gdf) == 1
+    assert len(responses.calls) == 2
+
+
+@responses.activate
+def test_erro_arcgis_persistente_vira_cprm_fetch_error():
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={"error": {"code": 500}})
+
+    with pytest.raises(CPRMFetchError):
+        fetch_setores_risco("SP", max_retries=2, backoff_factor=0)
+
+
+@responses.activate
+def test_carga_completa_vazia_falha_em_vez_de_gravar_gpkg_vazio(tmp_path: Path):
+    """HTTP 200 sem features na 1a ingestão gravava um .gpkg de 0 setores (~96 KiB,
+    acima do limiar de 10 KiB do workflow) e um manifesto de sucesso."""
+    output = tmp_path / "risco_sp.gpkg"
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200,
+                  json={"type": "FeatureCollection", "features": []})
+
+    with pytest.raises(CPRMFetchError):
+        ingerir_uf("SP", output, backoff_factor=0, permitir_cache=False)
+
+    assert not output.exists()
+    assert not (tmp_path / "cprm_manifest_sp.json").exists()
+
+
+@responses.activate
+def test_incremental_poda_setor_apagado_na_fonte(tmp_path: Path):
+    output = tmp_path / "risco_sp.gpkg"
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={
+        "type": "FeatureCollection", "features": [_feature(1, data_setor="2020-01-01"), _feature(2)],
+    })
+    ingerir_uf("SP", output)
+    responses.reset()
+
+    _ids_vivos(2, 3)  # o setor 1 foi apagado na SGB
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={
+        "type": "FeatureCollection", "features": [_feature(3, data_setor="2026-08-01")],
+    })
+    resultado = ingerir_uf("SP", output, permitir_cache=False)
+
+    assert set(resultado["objectid"]) == {2, 3}
+
+
+@responses.activate
+def test_incremental_com_lista_de_ids_vazia_falha_sem_podar(tmp_path: Path):
+    output = tmp_path / "risco_sp.gpkg"
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={
+        "type": "FeatureCollection", "features": [_feature(1, data_setor="2020-01-01")],
+    })
+    ingerir_uf("SP", output)
+    responses.reset()
+
+    _ids_vivos()
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={"type": "FeatureCollection", "features": []})
+
+    with pytest.raises(CPRMFetchError):
+        ingerir_uf("SP", output, backoff_factor=0, permitir_cache=False)
+    assert len(gpd.read_file(output)) == 1
+
+
+@responses.activate
+def test_manifesto_sem_geopackage_faz_carga_completa(tmp_path: Path):
+    """Só com o marcador, o incremental salvava apenas os setores novos."""
+    output = tmp_path / "risco_sp.gpkg"
+    (tmp_path / "cprm_manifest_sp.json").write_text(json.dumps({"last_objectid": 5, "last_data_setor": None}))
+    capturado = []
+    responses.add_callback(responses.GET, FEATURE_LAYER_URL, callback=lambda req: (
+        capturado.append(req.url),
+        (200, {}, json.dumps({"type": "FeatureCollection", "features": [_feature(1), _feature(9)]})),
+    )[1])
+
+    resultado = ingerir_uf("SP", output)
+
+    assert "objectid" not in capturado[0].split("where=")[1].split("&")[0]
+    assert set(resultado["objectid"]) == {1, 9}

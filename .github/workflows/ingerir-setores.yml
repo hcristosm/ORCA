@@ -61,7 +61,10 @@ jobs:
         # também passariam em atual >= anterior. Limiar de 10 KiB: o menor
         # .gpkg real hoje em dados-base é risco_to.gpkg com ~108 KiB (a UF
         # com menos setores), então 10 KiB fica bem abaixo de qualquer
-        # arquivo real e ainda pega vazio/truncado com folga.
+        # arquivo real e ainda pega 0 byte/truncado com folga. NÃO pega um
+        # GeoPackage válido com 0 setores (só os metadados já dão ~96 KiB):
+        # esse caso é recusado antes, em `ingerir_uf` (carga completa vazia
+        # vira CPRMFetchError).
         #
         # Recusa aqui zera a contagem atual passada à guarda, em vez de
         # gravar `publicar=false` por conta própria: uma única porta de

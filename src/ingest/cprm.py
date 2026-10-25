@@ -43,23 +43,13 @@ class CPRMFetchError(RuntimeError):
     """Erro ao buscar dados da camada de risco da CPRM/SGB."""
 
 
-def _query_pagina(
-    where: str,
-    offset: int,
+def _query(
+    params: dict[str, str | int],
     session: requests.Session,
     timeout: float,
     max_retries: int,
     backoff_factor: float,
 ) -> dict:
-    params: dict[str, str | int] = {
-        "where": where,
-        "outFields": "*",
-        "outSR": "4326",
-        "f": "geojson",
-        "resultOffset": offset,
-        "resultRecordCount": PAGE_SIZE,
-    }
-
     last_exc: Exception | None = None
     for tentativa in range(1, max_retries + 1):
         try:
@@ -67,7 +57,10 @@ def _query_pagina(
             resp.raise_for_status()
             payload = resp.json()
             if "error" in payload:
-                raise CPRMFetchError(f"API retornou erro: {payload['error']}")
+                # ValueError, não CPRMFetchError: o ArcGIS devolve erro
+                # transitório ("Error performing query operation") com HTTP 200,
+                # e só o que o `except` abaixo pega é retentado.
+                raise ValueError(f"API retornou erro: {payload['error']}")
             return payload
         except (requests.RequestException, ValueError) as exc:
             last_exc = exc
@@ -111,7 +104,11 @@ def fetch_setores_risco(
     features: list[dict] = []
     offset = 0
     while True:
-        payload = _query_pagina(where, offset, sess, timeout, max_retries, backoff_factor)
+        params: dict[str, str | int] = {
+            "where": where, "outFields": "*", "outSR": "4326", "f": "geojson",
+            "resultOffset": offset, "resultRecordCount": PAGE_SIZE,
+        }
+        payload = _query(params, sess, timeout, max_retries, backoff_factor)
         pagina_features = payload.get("features", [])
         features.extend(pagina_features)
 
@@ -128,6 +125,30 @@ def fetch_setores_risco(
 
     gdf = gpd.GeoDataFrame.from_features(features, crs="EPSG:4326")
     return gdf
+
+
+def fetch_objectids(
+    uf: str,
+    timeout: float = 120.0,
+    max_retries: int = 5,
+    backoff_factor: float = 5.0,
+    session: requests.Session | None = None,
+) -> set[int]:
+    """`objectid` de todos os setores da UF hoje na fonte, numa consulta só.
+
+    Sem `resultOffset`/`resultRecordCount` de propósito: com eles o
+    `returnIdsOnly` é cortado no tamanho da página (MG: 2000 de 3695,
+    conferido em 2026-10-24); sem eles vem a lista inteira.
+    """
+    params: dict[str, str | int] = {
+        "where": f"uf='{validar_uf(uf)}'", "returnIdsOnly": "true", "f": "json",
+    }
+    ids = _query(params, session or requests.Session(), timeout, max_retries, backoff_factor).get("objectIds")
+    if not ids:
+        # Toda UF tem setores: lista vazia é a fonte falhando, e podar com ela
+        # apagaria a UF inteira.
+        raise CPRMFetchError(f"Lista de objectid de {uf} voltou vazia da CPRM/SGB")
+    return {int(i) for i in ids}
 
 
 def _carregar_manifesto(caminho: Path) -> dict:
@@ -219,8 +240,9 @@ def ingerir_uf(
     A partir da segunda execução, consulta só `objectid`/`data_setor` acima
     do marcador d'água salvo em `manifesto_path` (padrão:
     `caminho_manifesto_cprm(uf, output.parent)`), mescla com o GeoPackage
-    existente e atualiza o marcador. Uma edição de atributo que não altera
-    `data_setor` não é capturada por este filtro.
+    existente, poda o que não existe mais na fonte (`fetch_objectids`) e
+    atualiza o marcador. Uma edição de atributo que não altera `data_setor`
+    não é capturada por este filtro.
 
     Se a busca remota falhar e já existir um GeoPackage em cache local
     (`output`), usa o cache e avisa, em vez de quebrar a ingestão inteira.
@@ -237,16 +259,30 @@ def ingerir_uf(
     uf_norm = validar_uf(uf)
     caminho_manifesto = manifesto_path or caminho_manifesto_cprm(uf_norm, output.parent)
     manifesto = _carregar_manifesto(caminho_manifesto)
-    where_extra = _where_incremental(manifesto)
-
     existente = ler_setores(output) if output.exists() else None
+    # Marcador sem GeoPackage não serve de base: o incremental salvaria só os
+    # setores novos e perderia a UF inteira.
+    where_extra = _where_incremental(manifesto) if existente is not None else None
 
     try:
         novos = fetch_setores_risco(
             uf, timeout=timeout, max_retries=max_retries,
             backoff_factor=backoff_factor, where_extra=where_extra,
         )
-        gdf = _mesclar_setores(existente, novos)
+        # Vazio só é normal na consulta incremental ("nada novo desde o mês
+        # passado"). Na carga completa toda UF tem setores, então é a fonte
+        # respondendo HTTP 200 sem dado, não uma UF sem risco mapeado.
+        if where_extra is None and novos.empty:
+            raise CPRMFetchError(f"Carga completa de {uf_norm} voltou vazia da CPRM/SGB")
+        if where_extra is None:
+            gdf = novos  # carga completa já é a UF inteira, nada a mesclar
+        else:
+            # O incremental só vê o que é novo; setor apagado ou renumerado na
+            # fonte ficaria para sempre no GeoPackage sem esta poda.
+            vivos = fetch_objectids(uf, timeout=timeout, max_retries=max_retries,
+                                    backoff_factor=backoff_factor)
+            gdf = _mesclar_setores(existente, novos)
+            gdf = gdf[gdf["objectid"].isin(vivos)]
         salvar_setores(gdf, output)
         manifesto_novo = _atualizar_marcador_dagua(manifesto, novos)
         # Só no caminho de sucesso: o fallback para o cache local abaixo não
