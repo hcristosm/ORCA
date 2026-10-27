@@ -463,9 +463,11 @@ is manual.
   divides the points into batches of 50, uses a short history window and waits
   60s on a `429`.
 - **The live layers depend on third parties.** The browser gets the INMET
-  warnings, the radar and the lightning at that moment, with a timeout. If the
-  source fails, the layer does not appear and the warning block says that the
-  source is unavailable. This condition is different from "no active warning",
+  warnings, the radar and the lightning at that moment, with a timeout of 8s.
+  If the source fails, or stops answering, the layer does not appear and the
+  warning block says that the source is unavailable. The timeout is what makes
+  these two cases equal: a host that hangs does not reject the `fetch`, and
+  without the timeout the layer disappeared in silence. This condition is different from "no active warning",
   because a `.gov.br` site that is down answers 200 with the HTML of its portal.
   The rest of the panel does not depend on these sources. The lightning layer is
   also hidden when the most recent frame is more than 30 minutes old. It shows

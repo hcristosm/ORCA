@@ -455,8 +455,10 @@ dele é manual.
   `src/ingest/openmeteo.py` divide em lotes de 50 pontos, usa janela de
   histórico curta e espera 60s em `429`.
 - **As camadas ao vivo dependem de terceiros.** O navegador busca os avisos do
-  INMET, o radar e os raios na hora, com timeout. Se a fonte cair, a camada não
-  aparece e o bloco de avisos diz que a fonte está indisponível. Esse estado é
+  INMET, o radar e os raios na hora, com timeout de 8s. Se a fonte cair ou
+  parar de responder, a camada não aparece e o bloco de avisos diz que a fonte
+  está indisponível. O timeout é o que torna esses dois casos iguais: um host
+  que pendura não rejeita o `fetch`, e sem ele a camada sumia em silêncio. Esse estado é
   distinto de "nenhum aviso ativo", porque um `.gov.br` fora do ar responde 200
   com o HTML do portal. O resto do painel não depende dessas fontes. A camada de
   raios é omitida também quando o quadro mais recente tem mais de 30 minutos.

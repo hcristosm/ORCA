@@ -834,6 +834,11 @@
   }
 
   const TIMEOUT_IBGE_MS = 6000;
+  // Camadas de terceiros do mapa (radar, raios). Host que *pendura* não rejeita o
+  // `fetch`: sem timeout a promessa nunca assenta, o `.then` não roda (a camada
+  // nem entra no controle) e o `.catch` não roda (nada no console). Era o caso do
+  // RealEarth, que deixou de responder e levou a camada de raios sem um aviso.
+  const TIMEOUT_CAMADA_VIVA_MS = 8000;
 
   async function fetchComTimeout(url, ms = TIMEOUT_IBGE_MS) {
     const controlador = new AbortController();
@@ -1160,7 +1165,7 @@
   // mapa -- coerente com "funcionar sem paus" (ver CLAUDE.md).
   function carregarRadarRainViewer() {
     if (!promessaRadarRainViewer) {
-      promessaRadarRainViewer = fetch(RAINVIEWER_API_URL)
+      promessaRadarRainViewer = fetchComTimeout(RAINVIEWER_API_URL, TIMEOUT_CAMADA_VIVA_MS)
         .then(r => r.json())
         .then(dados => {
           const frames = dados.radar && dados.radar.past;
@@ -1187,7 +1192,7 @@
   // de ingerir continua respondendo 200 (ver CLAUDE.md).
   function carregarRaiosGlm() {
     if (!promessaRaiosGlm) {
-      promessaRaiosGlm = fetch(REALEARTH_GLM_URL)
+      promessaRaiosGlm = fetchComTimeout(REALEARTH_GLM_URL, TIMEOUT_CAMADA_VIVA_MS)
         .then(r => r.json())
         .then(dados => {
           const times = dados[0] && dados[0].times;
