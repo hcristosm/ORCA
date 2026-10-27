@@ -25,6 +25,8 @@ concurrency:
 
 permissions:
   contents: write
+  # Só para o passo de limpeza do histórico de deployments do Pages, no fim.
+  deployments: write
 
 jobs:
   atualizar:
@@ -287,3 +289,46 @@ jobs:
           done
           echo "::error::Após ~10 min a URL pública ainda não serve o deploy deste run (versao.txt='${versao:-ausente}', esperado ${GITHUB_RUN_ID}). O build do Pages pode ter falhado -- confira a aba Actions > pages build and deployment."
           exit 1
+
+      - name: Limpar deployments antigos do Pages
+        # O environment `github-pages` ganha uma entrada por publicação e a
+        # lista da página do repo só cresce (eram 127). Mantém o deployment
+        # mais recente e apaga o resto; a API exige marcar `inactive` antes do
+        # DELETE, porque o Pages deixa os anteriores em `success`.
+        #
+        # Roda DEPOIS do teste de fumaça de propósito: o deployment deste run é
+        # criado pelo "pages build and deployment", que é assíncrono, e o teste
+        # acima só passa quando esse build já publicou -- então aqui o mais
+        # recente é o deste run.
+        #
+        # `continue-on-error` porque isto é cosmético: o site mora na branch
+        # `gh-pages` e não depende deste histórico. Ao contrário da guarda de
+        # publicação, que falha alto de propósito, uma limpeza que falhe não
+        # pode derrubar o cron diário -- ela avisa e segue.
+        if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash -uo pipefail {0}
+        run: |
+          manter=$(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=github-pages&per_page=1" --jq '.[0].id')
+          if [ -z "$manter" ]; then
+            echo "::warning::Nenhum deployment listado; nada a limpar."
+            exit 0
+          fi
+          echo "Mantendo o deployment ${manter}."
+
+          apagados=0
+          while :; do
+            ids=$(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=github-pages&per_page=100" --jq '.[].id' | grep -v "^${manter}$" || true)
+            [ -z "$ids" ] && break
+            for id in $ids; do
+              gh api -X POST "repos/${GITHUB_REPOSITORY}/deployments/${id}/statuses" -f state=inactive >/dev/null 2>&1
+              if gh api -X DELETE "repos/${GITHUB_REPOSITORY}/deployments/${id}" >/dev/null 2>&1; then
+                apagados=$((apagados+1))
+              else
+                echo "::warning::Não apagou o deployment ${id}."
+              fi
+            done
+          done
+          echo "Deployments antigos apagados: ${apagados}."

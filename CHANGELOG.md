@@ -12,6 +12,9 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+### CHORE
+- chore(ci): o workflow diário passa a apagar os deployments antigos do environment `github-pages`, mantendo só o do run atual (eram 127 entradas acumuladas na página do repo). A API exige marcar `inactive` antes do DELETE. O passo roda depois do teste de fumaça, quando o deployment deste run já existe, e é `continue-on-error`: limpeza cosmética não derruba a publicação
+
 ## [2.3.2] - 2026-10-26
 
 ### FIXES
