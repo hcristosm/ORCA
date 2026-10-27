@@ -23,108 +23,156 @@
 
 ---
 
+
 ## About
 
-ORCA downloads the geological risk sectorization published by CPRM/SGB
-(Brazil's geological survey), cross-references each sector with publicly
-available recent rainfall, and shows on a map which sectors are above a
-threshold you choose.
+ORCA shows two sets of public data on the same map: the geological risk sectors
+and the recent rainfall. It downloads the risk sectors from CPRM/SGB, the
+Brazilian geological survey. Then it gets the rainfall for each sector. Then it
+marks the sectors where the accumulated rainfall is above a threshold that you
+select.
 
-The idea came from a concrete problem: as a geologist who's mapped risk areas
-in the field, I wanted to see risk data and rainfall data side by side without
-needing a backend, a server, or any cost. Both datasets are public, but they
-almost never show up together.
+The idea comes from a real problem. I am a geologist and I have mapped risk
+areas. I wanted to see the risk data and the rainfall data side by side, with no
+backend, no server and no cost. Both sets of data are public, but they almost
+never appear together.
 
-**Live dashboard:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/),
-published on GitHub Pages and refreshed daily by cron.
+ORCA has no backend. A Python pipeline makes static files. The dashboard in the
+browser reads these files. Therefore the site runs on GitHub Pages at no cost.
 
-**Install as an app:** in Chrome or Edge, open the dashboard and click the install
-icon in the address bar. On mobile, use "Add to Home Screen". ORCA gets its own
-icon and window, updates itself, and uninstalls like any other program.
+**Live dashboard:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/).
+A cron job updates the data every day.
+
+**Install it as an app:** open the dashboard in Chrome or in Edge. Click the
+install icon in the address bar. On a telephone, use "Add to Home screen". ORCA
+then has its own icon and window. It updates itself, and you remove it as you
+remove any other program.
 
 <p align="center">
-  <img src="docs/screenshots/dashboard-claro.png" alt="ORCA dashboard in light theme, showing Rio Grande do Sul with a 50mm threshold: counters and the per-sector rainfall ruler on the left, the map in the center with sectors hatched by risk degree and pins on those above the threshold, and the tables of sectors of concern and predicted alerts on the right" width="49%">
-  <img src="docs/screenshots/dashboard-escuro.png" alt="Same ORCA dashboard in dark theme" width="49%">
+  <img src="docs/screenshots/dashboard-claro.png" alt="ORCA dashboard in light theme, showing Rio Grande do Sul with a 50mm threshold: counters and the per-sector rainfall ruler on the left, the map with sectors hatched by risk level and pins on those above the threshold in the center, and the tables of sectors in attention and forecast alert on the right" width="49%">
+  <img src="docs/screenshots/dashboard-escuro.png" alt="The same ORCA dashboard in dark theme" width="49%">
 </p>
 
 ## What the project does today
 
-- Covers all **27 Brazilian states**, with a state selector on the dashboard.
-- Downloads CPRM/SGB risk sectors incrementally and stores them in
+**Data and coverage**
+
+- It covers the **27 states**. The dashboard has a state selector.
+- It downloads the CPRM/SGB risk sectors incrementally. It keeps each state in a
   GeoPackage.
-- Fetches hourly rainfall from **Open-Meteo**, queried at each sector's
-  centroid — no weather station needed.
-- Computes 24h and 72h accumulated rainfall and a predicted 72h alert
-  trajectory.
-- Exports everything as static GeoJSON/JSON and serves a dashboard in plain
-  HTML, CSS and JS, with a map (Leaflet), tables, counters and chart
-  (Chart.js), in light and dark themes. Risk degree is shown as hachure
-  patterns, in the style of a geological map, so color stays reserved for one
-  thing only: a sector above the threshold. A ruler plots every sector
-  against the threshold, which you can drag.
-- Full-height layout in three independently scrolling columns (context, map
-  and panel), with the map always in view. Below 1081px wide, everything
-  stacks.
-- Pins mark the sectors above the threshold and under predicted alert;
-  clicking one drills down to the municipality. The legend and counters filter
-  the map by class (risk degree, above threshold, predicted alert).
-- Exports CSV and PDF reports in the browser: the whole table (honoring the
-  selected state and threshold), a single row, or a custom area.
-- In the "Minhas áreas" (My areas) tab, visitors upload their own area
-  (GeoJSON, KML, or a zipped shapefile; up to 5 areas, 10MB per file) and see
-  accumulated rainfall and the predicted alert for it, entirely in the
-  browser, without uploading the file anywhere.
-- The "Tutorial" tab explains how to read the ruler and lists sourced reference
-  thresholds (Santos civil defense, Concessionária Tamoios, São Paulo state
-  PPDC, Rio de Janeiro sirens, Petrópolis, Belo Horizonte, Tatizana et al.),
-  plus the literature behind the 72h accumulation. Criteria that fit the ruler
-  get a "Usar Xmm/Yh" button that applies the window and threshold and returns
-  to the map.
-- Municipality search across all of Brazil (not just the selected state):
-  picking a city in another state switches the state automatically. State and
-  municipality navigation lives in the URL (`#/<uf>/<municipality>`), with
-  browser Back/Forward, shareable links and a clickable breadcrumb.
-- Freshness badge per source (CPRM/SGB sectors and rainfall), in Brasília
-  time, with the data's age and a warning when something is past its expected
-  cycle.
-- Official INMET weather warnings as a list in the panel, sorted by severity,
-  with two filters: scope (this state, the IBGE macro-region of the current
-  state, or all of Brazil) and day (today, tomorrow, and the next days that
-  have warnings). It answers "will a storm hit the Southeast on Sunday?".
-  Clicking a warning frames its polygon on the map; the layer follows the same
-  scope as the list.
-- Live map layers you can toggle: INMET warnings (on by default; polygon in the
-  severity color, with risks and instructions), rain radar (RainViewer), and
-  lightning (GOES-19 GLM, via SSEC RealEarth: electrical activity from the last
-  few minutes, as a storm indicator).
-- Runs two separate workflows: sectors once a month, rainfall once a day.
-- 145 tests with mocked HTTP, running in CI on every push.
+- It gets the hourly rainfall from **Open-Meteo**, at the center of each sector.
+  It does not depend on a weather station.
+- It calculates the accumulated rainfall for 24h and for 72h.
+- It calculates a forecast alert track for the next 72h.
+- It exports all the results as static GeoJSON and JSON.
+
+**Map and interpretation**
+
+- It serves a dashboard in plain HTML, CSS and JavaScript. The map uses Leaflet
+  and the chart uses Chart.js. There is a light theme and a dark theme.
+- It shows the risk level as a hatch pattern, in the style of a geological map.
+  Color has one meaning only: the sector is above the threshold.
+- It plots all the sectors of the state against the threshold, on a ruler. You
+  drag the threshold and the ruler responds.
+- It puts pins on the sectors above the threshold and on the sectors in forecast
+  alert. Click a pin to go down to the municipality.
+- It filters the map from the legend and from the counters, by risk level, by
+  "above the threshold" and by "forecast alert".
+- It uses three columns with independent scroll: context, map and panel. The map
+  stays in view. Below a width of 1081px, the columns stack.
+
+**Visitor tools**
+
+- It exports reports in CSV and in PDF, inside the browser. You export the
+  complete table, a single row or your own area.
+- It accepts your own area on the "Minhas áreas" tab, as GeoJSON, KML or a
+  shapefile in a `.zip`. The limit is 5 areas and 10MB per file. The calculation
+  occurs in the browser. The file does not go to any server.
+- It explains the ruler on the "Tutorial" tab. The tab also collects reference
+  thresholds with their source: Defesa Civil de Santos, Concessionária Tamoios,
+  PPDC-SP, the sirens of Rio, Petrópolis, Belo Horizonte and Tatizana et al. It
+  also cites the literature for the 72h accumulation. Each criterion that fits
+  the ruler has a "Usar Xmm/Yh" button. The button applies the window and the
+  threshold, then returns to the map.
+- It finds municipalities in all of Brazil, not only in the selected state. If
+  you select a city in another state, the dashboard changes the state for you.
+- It keeps the navigation in the URL (`#/<state>/<municipality>`). You use the
+  Back and Forward buttons of the browser, you share the link and you click the
+  breadcrumb.
+
+**Live monitoring**
+
+- It shows a freshness badge per source, in Brasília time: CPRM/SGB sectors and
+  rainfall. The badge gives the age of the data. It warns you when a source is
+  later than its expected cycle.
+- It lists the official INMET weather warnings in the panel, in order of
+  severity. The list has two filters: extent (this state, the IBGE macroregion
+  of the current state, or all of Brazil) and day (today, tomorrow, and the next
+  days with a warning). Therefore the list answers "will there be a storm in the
+  Southeast on Sunday?". Click a warning to frame its polygon on the map. The
+  map layer follows the same filter as the list.
+- It turns three live layers on and off: INMET warnings (on by default, with the
+  polygon in the severity color, plus risks and instructions), rainfall radar
+  (RainViewer) and lightning (GOES-19 GLM, through SSEC RealEarth, as a storm
+  indicator).
+
+**Operation**
+
+- It runs two separate workflows: the sectors once per month and the rainfall
+  once per day.
+- It has 161 tests with mocked HTTP. The CI runs the suite on every push.
+
+## How to read the dashboard
+
+The dashboard answers one question: **where does it rain a lot on a known risk
+sector?** Three elements give that answer.
+
+1. **The hatch pattern** gives the risk level of the sector, as CPRM/SGB
+   classified it. It does not change with the rainfall.
+2. **The color** shows a sector where the accumulated rainfall is above the
+   threshold. Only this condition uses color.
+3. **The ruler** shows all the sectors of the state against the threshold. Each
+   mark is one sector. You drag the threshold and you see how many sectors are
+   above it.
+
+The accumulation window and the threshold are yours. The default is 100mm in
+72h. This value is an example, and the "Tutorial" tab gives the thresholds of
+real agencies.
+
+The forecast alert uses the rainfall forecast for the next 72h. It shows the
+sector that will go above the threshold, if the forecast is correct. It is not
+an official alert.
+
+> **Warning:** ORCA is not a replacement for the Civil Defense. It
+> cross-references public, modeled data. In an emergency, follow the official
+> agency of your city.
 
 ## Data sources
 
-| Source | What it provides | Endpoint |
+The pipeline uses two sources:
+
+| Source | What it gives | Endpoint |
 |---|---|---|
-| [CPRM/SGB](https://www.sgb.gov.br/) | Risk sectorization polygons (degree, typology, affected households and people) | `geoportal.sgb.gov.br/.../risco/FeatureServer/0` (ArcGIS REST) |
-| [Open-Meteo](https://open-meteo.com/) | Hourly rainfall by coordinate, no station needed. The only rainfall source | `api.open-meteo.com/v1/forecast` |
+| [CPRM/SGB](https://www.sgb.gov.br/) | Risk sector polygons (level, type, homes and persons affected) | `geoportal.sgb.gov.br/.../risco/FeatureServer/0` (ArcGIS REST) |
+| [Open-Meteo](https://open-meteo.com/) | Hourly rainfall per coordinate, with no station. The only rainfall source | `api.open-meteo.com/v1/forecast` |
 
-CPRM was renamed to SGB. The old domains (`geoportal.cprm.gov.br` and
-similar) still respond partially, but the risk layer now lives at
-`geoportal.sgb.gov.br`.
+CPRM is now SGB. Some of the old domains (`geoportal.cprm.gov.br` and related)
+still answer. The risk layer is now at `geoportal.sgb.gov.br`.
 
-The pipeline only talks to those two. The layers below are fetched live by
-the viewer's browser and never go through the pipeline:
+The browser of the visitor gets five more sources live. These sources do not go
+through the pipeline:
 
 | Source | Map layer |
 |---|---|
-| [IBGE](https://servicodados.ibge.gov.br/) | Municipality mesh (choropleth) |
+| [IBGE](https://servicodados.ibge.gov.br/) | Municipality boundaries (choropleth) |
 | [INMET](https://portal.inmet.gov.br/) | Official weather warnings |
-| [RainViewer](https://www.rainviewer.com/) | Rain radar |
+| [RainViewer](https://www.rainviewer.com/) | Rainfall radar |
 | [SSEC RealEarth](https://realearth.ssec.wisc.edu/) | Lightning (GOES-19 GLM) |
-| [OpenStreetMap](https://www.openstreetmap.org/) | Basemap |
+| [OpenStreetMap](https://www.openstreetmap.org/) | Base map |
 
-If one of them goes down, that layer disappears or the map degrades for the
-viewer, and the pipeline doesn't notice. In "Minhas áreas", rainfall also
-comes from Open-Meteo straight from the browser.
+If one of these five sources fails, the layer disappears or the map degrades for
+the visitor. The pipeline does not detect it. On the "Minhas áreas" tab, the
+rainfall also comes from Open-Meteo directly to the browser.
 
 ## Architecture
 
@@ -144,19 +192,47 @@ flowchart LR
     EXPORT --> DASH["docs/dashboard/<br/>Leaflet + Chart.js"]
 ```
 
-`src/cli.py` gathers the commands. `src/storage/` is a thin layer over
-GeoPackage (sectors), no database.
-`src/storage_cache_openmeteo.py` keeps a SQLite history of what's already
-been downloaded from Open-Meteo, so it doesn't re-fetch hours it already
-has.
+Each module has one responsibility:
 
-The dashboard used to be a Streamlit app. It became a static site because
-that gives full control over layout and aesthetics, lets it be published as
-a page, and drops the need for a running Python process.
+| Module | What it does |
+|---|---|
+| `src/cli.py` | Collects the command-line commands (Typer) |
+| `src/config.py` | Holds **all** path conventions and the constants. Use `caminho_setores()`; do not build a path manually |
+| `src/ingest/cprm.py` | Downloads the risk sectors per state, with pagination and a watermark |
+| `src/ingest/openmeteo.py` | Gets the hourly rainfall per coordinate, in batches of 50 points |
+| `src/ingest/rate_limiter.py` | Controls the request rate. It is shared |
+| `src/storage/` | A thin layer over GeoPackage, for the sectors. There is no database |
+| `src/storage_cache_openmeteo.py` | Keeps the downloaded rainfall in SQLite, to prevent a second request for the same hour. It stores only an hour that is in the past, to keep the forecast out of the accumulation as measured rainfall |
+| `src/processing/cruzamento.py` | Gives the centroids (per sector and per municipality) and accumulates the rainfall in the window |
+| `src/processing/grade_espacial.py` | Builds the adaptive national grid, by binary search |
+| `src/processing/previsao.py` | Calculates the 72h alert track |
+| `src/export/dashboard_data.py` | Exports one state |
+| `src/export/nacional.py` | Orchestrates the 27 states with one shared grid |
+
+The dashboard was a Streamlit app before. It became a static site for three
+reasons: control of the layout and the aesthetics, publication as a page, and
+independence from a running Python process.
+
+## Repository layout
+
+```
+src/                      Python pipeline
+tests/                    161 tests, with mocked HTTP
+scripts/                  publication guard, merge and dashboard helper
+docs/dashboard/           static front-end (published to gh-pages)
+docs/dashboard/data/      pipeline output (ignored by git)
+data/                     local GeoPackages (ignored by git)
+.github/workflows/        CI, monthly ingestion, daily update, release
+.github/actions/          preparar-python and baixar-branch
+```
+
+The front-end has no build step. It is four files: `index.html`, `comum.js`
+(which loads first and exposes `window.ORCA`), `areas-customizadas.js` and
+`relatorio.js`.
 
 ## Installation
 
-Requires Python 3.11+.
+ORCA requires Python 3.11 or later.
 
 ```bash
 git clone https://github.com/hcristosm/ORCA
@@ -170,10 +246,16 @@ pip install -e ".[dev]"
 
 ### Download the risk sectors
 
+This command uses CPRM/SGB. Run it once per month.
+
 ```bash
-python -m src.cli ingest-cprm --uf SP         # one state -> data/risco_sp.gpkg
-python -m src.cli ingerir-setores             # all 27 states
+python -m src.cli ingerir-setores --diretorio data        # the 27 states
+python -m src.cli ingest-cprm --uf SP                     # one state only
+# -> data/risco_sp.gpkg
 ```
+
+The ingestion is incremental. A watermark per state records what came before. In
+the next run, ORCA requests only the changes.
 
 ### Export the dashboard data
 
@@ -182,175 +264,285 @@ python -m src.cli exportar-dashboard --uf SP
 # -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json, previsao_sp.json
 ```
 
-It only needs the already-ingested sectors; rainfall comes from Open-Meteo
-at export time.
+This command needs the sectors in place. The rainfall comes from Open-Meteo at
+that moment.
 
-For all states at once:
+For all the states at the same time:
 
 ```bash
-python -m src.cli atualizar-nacional --ufs SP,RJ,MG   # no --ufs = all 27
+python -m src.cli atualizar-nacional --ufs SP,RJ,MG       # no --ufs = the 27
 ```
 
-This command computes a single national spatial grid before exporting, so
-that nearby sectors (even across neighboring states) share the same query
-point. This keeps the total point count within `--orcamento-alvo` (default
-6,000; Open-Meteo's free tier cap is 10,000/day). It doesn't ingest
-anything: it expects the GeoPackages to already be in `data/`.
+`atualizar-nacional` calculates one national spatial grid before it exports.
+Therefore adjacent sectors share the same query point, also across state
+borders. This keeps the number of points below `--orcamento-alvo` (the default
+is 6,000; the Open-Meteo free limit is 10,000 per day). This command ingests
+nothing. It expects the GeoPackages in `data/`.
 
 ### Open the dashboard
 
 ```bash
-scripts/rodar_dashboard.sh    # shortcut for python -m http.server 8000 --directory docs
-# then open http://localhost:8000/dashboard/
+scripts/rodar_dashboard.sh    # a helper for python -m http.server 8000 --directory docs
 ```
 
-Needs to be served over HTTP because the browser's `fetch()` doesn't read
-`file://`.
+Then open `http://localhost:8000/dashboard/`.
+
+You must serve the dashboard over HTTP. The `fetch()` of the browser does not
+read `file://`.
+
+## Command-line reference
+
+| Command | Purpose | Main options |
+|---|---|---|
+| `ingerir-setores` | Downloads the sectors of several states | `--ufs`, `--diretorio`, `--backoff-factor` |
+| `ingest-cprm` | Downloads the sectors of one state | `--uf`, `--output`, `--timeout`, `--max-retries` |
+| `exportar-dashboard` | Exports one state to the dashboard | `--uf`, `--diretorio`, `--saida` |
+| `atualizar-nacional` | Exports several states with a shared grid | `--ufs`, `--orcamento-alvo`, `--diretorio`, `--saida` |
+
+The workflows call two of these commands: `ingerir-setores` (monthly) and
+`atualizar-nacional` (daily).
+
+## Files the dashboard reads
+
+The pipeline writes to `docs/dashboard/data/`. All the names are in lower case.
+
+| File | Content |
+|---|---|
+| `setores_<uf>.geojson` | Sector polygons, with risk level, accumulated rainfall and alert |
+| `series_<uf>.json` | Hourly rainfall series per municipality |
+| `previsao_<uf>.json` | Alert track for the next 72h |
+| `meta_<uf>.json` | Source, reference date, totals and data age |
+| `ufs_disponiveis.json` | The list of published states |
+| `versao.txt` | The id of the run that published. The smoke test reads it |
+
+`ufs_disponiveis.json` controls the state selector of the front-end. It is also
+the metric of the anti-regression guard.
+
+## Environment variables
+
+| Variable | Effect | Default |
+|---|---|---|
+| `ORCA_PISO_COBERTURA` | The coverage floor that publication accepts | `0.6` |
+| `ORCA_LOG_LEVEL` | The log level of the pipeline | `INFO` |
 
 ## How it runs in production
 
-Risk sectors change on a scale of months. Rainfall changes on a scale of
-hours. That's why there are two workflows:
+```mermaid
+flowchart TB
+    SGB[("CPRM/SGB")] --> ING["ingerir-setores.yml<br/>monthly"]
+    ING --> BASE[("dados-base branch<br/>GeoPackages for the 27 states")]
+    BASE --> ATU["atualizar-dados.yml<br/>daily, 09:00 UTC"]
+    OM[("Open-Meteo")] --> ATU
+    CACHE[("SQLite cache<br/>read from gh-pages")] --> ATU
+    ATU --> SAIDA["docs/dashboard/data/<br/>states this run produced"]
+    SAIDA --> MESCLA["mesclar_publicado.py<br/>keeps the states this run did not produce"]
+    PUB[("gh-pages<br/>what is already live")] --> MESCLA
+    MESCLA --> GUARDA{"conferir_publicacao.py"}
+    GUARDA -->|refuses| RECUSA["publicar=false, then exit 1<br/>0 states, fewer than published<br/>or count unreadable"]
+    GUARDA -->|approves| DEPLOY["deploy with force_orphan<br/>gh-pages becomes docs/dashboard/"]
+    DEPLOY --> SMOKE{"does versao.txt carry this run id<br/>and the same state count?"}
+    SMOKE -->|no| FALHA["red run"]
+    SMOKE -->|yes| AR[("dashboard live")]
+```
+
+A risk sector changes on a scale of months. The rainfall changes on a scale of
+hours. Therefore there are two workflows:
 
 - **Monthly** ([`ingerir-setores.yml`](.github/workflows/ingerir-setores.yml)):
-  downloads sectors for all 27 states and publishes the GeoPackages to the
-  `dados-base` branch. It's the only part of the project that talks to SGB.
-  Generous timeouts (120s, 5 retries) and no cache fallback: if SGB goes
-  down, the run fails loudly instead of closing green with empty data.
+  it downloads the sectors of the 27 states and publishes the GeoPackages to the
+  `dados-base` branch. It is the only part of the project that uses SGB. The
+  timeouts are generous (120s, 5 attempts) and there is no cache fallback. If
+  SGB fails, the run fails loudly. It does not close green with empty data. The
+  ingestion also distrusts HTTP 200: it retries the ArcGIS error that arrives
+  with status 200, and it refuses the empty payload that would write a
+  GeoPackage with 0 sectors.
 - **Daily** ([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml),
-  `0 9 * * *`): reads the sectors from `dados-base`, runs
-  `atualizar-nacional`, and publishes to `gh-pages`. Doesn't touch any
-  `.gov.br` source.
+  `0 9 * * *`): it reads the sectors from `dados-base`, runs
+  `atualizar-nacional` and publishes to `gh-pages`. It uses no `.gov.br` source.
 
-If SGB goes down, the dashboard stays up with the sectors from `dados-base`.
+If SGB fails, the dashboard stays live with the sectors from `dados-base`.
 
-Publishing is non-destructive: before pushing, the job fetches the current
-`gh-pages` and preserves the data for any state this run didn't regenerate
-([`scripts/mesclar_publicado.py`](scripts/mesclar_publicado.py)). A state
-that failed doesn't disappear from the dashboard, it just goes stale. Three
-guards protect this merge, and every rejection fails the run:
+One bad state does not stop the others. An unexpected error in one state — a
+corrupt GeoPackage or a new SGB schema — stops that state only. The other states
+continue, and the run fails at the end, to keep the failure visible.
 
-- rejects if the run exported zero states;
-- rejects if new coverage falls below a floor (default 60%, adjustable via
-  `ORCA_PISO_COBERTURA`). That 0.6 came from the 12 clean runs between
-  2026-08-10 and 2026-08-23, where coverage ranged from 70% to 100%: it sits
-  below the worst normal case while still blocking the real degenerate cases
-  (4% and 7%);
-- rejects an empty set, an unreadable published count, or a regression in
-  total states versus what's already live.
+The publication is non-destructive. Before it uploads, the job gets the current
+`gh-pages`. It keeps the data of the states that this run did not produce
+([`scripts/mesclar_publicado.py`](scripts/mesclar_publicado.py)). A state that
+failed does not disappear from the dashboard: its data gets older.
 
-After deploy, a smoke test waits for the public URL to serve that run's deploy
-(a `versao.txt` marker holding the run id, read past the CDN cache) and checks
-it serves the same number of states that was just published. If the Pages build
-fails or the site serves something else, the run goes red.
+Three guards protect this merge, and each refusal fails the run:
 
-These guards exist because on 2026-08-22 and 2026-08-23 two runs published 1
-and 2 states out of 27 while closing as `success`, with CPRM ingestion
-failing on timeout.
+- The guard refuses if the run exported no state.
+- The guard refuses if the new coverage is below the floor. The default is 60%,
+  and the `ORCA_PISO_COBERTURA` variable changes the value. In a manual run with
+  `--ufs`, the floor measures against the requested states (`--pedidas`), not
+  against all 27. This 0.6 comes from
+  the 12 clean runs between 2026-08-10 and 2026-08-23, with coverage between 70%
+  and 100%. The floor is below the worst normal case, and it still stops the
+  real degenerate cases of 4% and 7%.
+- The guard refuses an empty set, an unreadable published count, or a regression
+  in the total number of states against what is already live.
+
+The logic is in [`scripts/conferir_publicacao.py`](scripts/conferir_publicacao.py).
+Both workflows use this script. The guard always writes `publicar=false` to
+`$GITHUB_OUTPUT` **before** it exits with 1, in that order. The output skips the
+publication. The exit 1 makes the refusal visible: a silent guard in a daily
+cron job could block the publication for weeks, and nobody would notice.
+
+After the deploy, a smoke test waits for the public URL to serve the deploy of
+that run. The marker is `versao.txt` with the id of the run, read past the CDN
+cache. The test also compares the number of states that are live. A count alone
+proves nothing, because yesterday's deploy also has 27 states. The marker is the
+proof that the site comes from this run. If the Pages build fails, or if the
+site serves something else, the run goes red.
+
+These guards exist for a real reason. On 2026-08-22 and 2026-08-23, two runs
+published 1 and 2 states out of 27 and closed as `success`, while the CPRM
+ingestion failed with a timeout. **Never judge a run by its status. Measure the
+result in the logs.**
+
+## Branches
+
+| Branch | Content |
+|---|---|
+| `main` | Code |
+| `dados-base` | GeoPackages of the CPRM sectors (monthly ingestion) |
+| `gh-pages` | The published dashboard and the Open-Meteo cache |
+
+The deploy uses `force_orphan`. Therefore `gh-pages` becomes exactly the content
+of `docs/dashboard/`. A publication with an empty `data/` would erase the 27
+states and the cache with them. The guard exists against this.
+
+## Tests and gates
+
+```bash
+.venv/bin/python -m pytest -q
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy src
+.venv/bin/python -m bandit -q -c pyproject.toml -r src
+```
+
+The CI runs these four commands on every push. Run them before you commit.
+
+The 161 tests cover:
+
+- the CPRM ingestion: ArcGIS REST, pagination, incremental watermark and retry;
+- Open-Meteo: batches, retry and the SQLite cache;
+- the processing: national spatial grid, rainfall accumulation and forecast;
+- the publication: export, anti-regression guard and non-destructive merge with
+  `gh-pages`.
+
+Every network call is mocked, so the suite runs with no internet.
+
+The dashboard itself (HTML and JavaScript) has no automated test. Its validation
+is manual.
 
 ## Known limitations
 
-- **Rainfall is modelled, not measured.** Open-Meteo returns reanalysis and
-  forecast by coordinate, not rain-gauge readings. That's what makes covering
-  27 states possible without depending on station density, but it isn't
-  direct observation.
-- **There is no alternative rainfall source.** Open-Meteo is the only one; if
-  it goes down, the state is left out of the run and the dashboard ages (the
-  `gh-pages` merge keeps the previous day's data) instead of disappearing.
-- **The attention threshold (default 100mm/72h) is illustrative.** It's a
-  common reference in landslide literature, not an official value calibrated
-  for CPRM/SGB sectors. The dashboard flags this, lets you adjust the value,
-  and its Tutorial tab shows the thresholds real agencies use in each region.
-- **Publishing to `gh-pages` isn't reversible yet.** The deploy uses
-  `force_orphan: true`, so the branch has a single commit. That's because of
-  the Open-Meteo cache blob (~45MB) that changes daily. Getting the cache
-  out of there is a prerequisite for dropping `force_orphan`. Until then the
-  protection is preventive, not reversible.
-- **Open-Meteo rate-limits by volume, not just frequency.** Tested with a
-  real request: a single POST with SP's ~900 coordinates works fine, but
-  repeating that volume consistently triggers `429`.
-  `src/ingest/openmeteo.py` batches in groups of 50 points, uses a short
-  history window, and waits 60s on `429`.
-- **The live layers depend on third parties.** INMET warnings, radar and
-  lightning are fetched on the spot (with a timeout); if the source goes down,
-  the layer doesn't show and the warnings block says the source is unavailable
-  — a state distinct from "no active warnings", because a `.gov.br` that is
-  down answers 200 with a portal HTML page. The rest of the panel does not
-  depend on those sources. The lightning layer is also left out when the latest frame is
-  more than 30 minutes old, and it shows total lightning (in-cloud and
-  cloud-to-ground), not strike points.
-- **No authentication and no multi-user support.** It's a local, portfolio
-  tool.
-- **The dashboard doesn't update on demand.** It shows the last export,
-  which runs once a day. To see fresher data right away, run
-  `exportar-dashboard` locally.
-
-## Tests
-
-```bash
-pytest
-```
-
-145 tests covering CPRM ingestion (ArcGIS REST, pagination, incremental
-watermark, retry), Open-Meteo batching and retry, SQLite cache, national
-spatial grid, rainfall accumulation, forecasting, export, the publication
-anti-regression guard, and the non-destructive merge with `gh-pages`. Every
-network call is mocked, so the suite runs without internet.
-
-The dashboard itself (HTML and JS) has no automated tests, validation is
-manual.
+- **The rainfall is modeled, not measured.** Open-Meteo gives reanalysis and
+  forecast per coordinate, not a rain gauge reading. This makes the coverage of
+  27 states possible, with no dependency on station density. It is not a direct
+  observation.
+- **There is no alternative rainfall source.** Open-Meteo is the only one. If it
+  fails, the state stays out of the run and the dashboard data gets older
+  instead of disappearing: the merge with `gh-pages` keeps the data of the day
+  before.
+- **The attention threshold is an example.** The default of 100mm/72h is a common
+  reference in the landslide literature. It is not an official value, calibrated
+  for the CPRM/SGB sectors. The dashboard says this, lets you change the value,
+  and gives the thresholds of real agencies on the "Tutorial" tab.
+- **The publication to `gh-pages` is not reversible yet.** The deploy uses
+  `force_orphan: true`, so the branch has one commit only. This is necessary
+  because of the Open-Meteo cache blob (~45MB), which changes every day. To stop
+  the use of `force_orphan`, first move the cache out of the branch. Until then,
+  the protection is preventive, not reversible.
+- **Open-Meteo limits volume, not only frequency.** A test with a real request
+  showed this: one POST with the ~900 coordinates of São Paulo works alone, but
+  the same volume, repeated, gives a consistent `429`. `src/ingest/openmeteo.py`
+  divides the points into batches of 50, uses a short history window and waits
+  60s on a `429`.
+- **The live layers depend on third parties.** The browser gets the INMET
+  warnings, the radar and the lightning at that moment, with a timeout. If the
+  source fails, the layer does not appear and the warning block says that the
+  source is unavailable. This condition is different from "no active warning",
+  because a `.gov.br` site that is down answers 200 with the HTML of its portal.
+  The rest of the panel does not depend on these sources. The lightning layer is
+  also hidden when the most recent frame is more than 30 minutes old. It shows
+  total lightning (cloud and ground), not the point of impact.
+- **There is no authentication and no multi-user support.** ORCA is a local and
+  portfolio tool.
+- **The dashboard does not update on demand.** It shows the last export, which
+  runs once per day. For newer data at that moment, run `exportar-dashboard`
+  locally.
 
 ## Decisions and investigations
 
-The bigger decisions were tested with real requests, not assumed:
+Real requests, not assumptions, decided the larger questions.
 
-- **Streamlit for a static site:** solved aesthetics, layout and
+- **Streamlit to static site:** this solved the aesthetics, the layout and the
   distribution.
-- **Open-Meteo as the only rainfall source:** answers rainfall by coordinate,
-  without depending on a station. INMET and ANA were implemented and dropped:
-  INMET only publishes the annual ZIP (days of lag) and ANA's network is
-  mostly fluviometric. Keeping both paths cost ~1,900 lines that no workflow
-  ever ran. INMET's official warnings came back only as a list and a map
-  layer, read by the browser; they don't feed into the calculation.
-- **National coverage:** incremental CPRM ingestion plus a spatial grid
-  calibrated by binary search, instead of a hand-picked density threshold.
+- **Open-Meteo as the only rainfall source:** it gives rainfall per coordinate,
+  with no dependency on a station. INMET and ANA were implemented, then removed.
+  INMET publishes only the annual ZIP file, with a delay of days. The ANA
+  network is mostly for river gauges. The two paths cost ~1,900 lines that no
+  workflow ran. The official INMET warnings returned as a list and a map layer
+  only, read by the browser. They do not enter the calculation.
+- **National coverage:** incremental CPRM ingestion, plus a spatial grid
+  calibrated by binary search. The alternative was a density threshold, selected
+  by hand.
+- **Code graph removed:** the evaluation of 2026-09-12 measured a `graph.json`
+  of 825 KB against 121 KB for all of `src/`. The map cost more than the
+  territory. An explicit README and CLAUDE.md are a better answer.
 
 ## Roadmap
 
-- Get the Open-Meteo cache out of `gh-pages` to drop `force_orphan` and
-  recover the published branch's history.
-- Municipal fallback: city-level layers on ArcGIS REST. Investigated for
-  Itaquaquecetuba/SP on 2026-08-14, no confirmed public endpoint. Pending a
-  pilot municipality with open data.
-- Better orchestration of Open-Meteo requests: pagination, more complete
-  backoff, and maybe a queue to space out requests.
+- Move the Open-Meteo cache out of `gh-pages`, to stop the use of `force_orphan`
+  and recover the history of the published branch.
+- A municipal fallback, with city ArcGIS REST layers. The investigation of
+  2026-08-14 for Itaquaquecetuba/SP confirmed no public endpoint. This item
+  waits for a pilot city with open data.
+- Better orchestration of the Open-Meteo requests: pagination, a more complete
+  backoff and possibly a queue to space the requests.
 
 ## How this was built
 
-I'm a geologist, not a developer by training. ORCA was largely built by
-vibe coding with Claude Code: I bring the problem, the domain knowledge and
-the decisions, and Claude writes most of the code. I review, test, and
-correct course when the result doesn't match the reality of the data.
+I am a geologist, not a trained developer. ORCA is in large part the result of
+vibe coding with Claude Code. I bring the problem, the domain knowledge and the
+decisions. Claude writes most of the code. I review it, test it and correct the
+direction when the result does not match the reality of the data.
 
-I figured it's better to be upfront about this than to pretend otherwise.
-If you find something odd in the code, that's probably why, and an issue is
-welcome.
+I prefer to make this clear. If you find something strange in the code, this is
+probably the reason. An issue is welcome.
+
+## About the language of this text
+
+This README follows, in large part, the ASD-STE100 standard (Simplified
+Technical English): short sentences, the active voice, the present tense, one
+idea per sentence, and the same term for the same thing. "Sector", "threshold",
+"run" and "state" have one meaning each in all of the text.
+
+The standard is not applied to the letter. The "About" and "How this was built"
+sections keep a personal voice. The objective is a text that is easy to read,
+also for a reader whose first language is not English and for an AI agent, and
+that does not sound robotic. If you edit this file, keep the same style.
 
 ## Contributing
 
 Issues, PRs and suggestions are welcome. See the
-[contributing guide](CONTRIBUTING.md) and the
+[contribution guide](CONTRIBUTING.md) and the
 [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
 [GNU AGPL v3.0 or later](LICENSE): free use, copying, modification and
-redistribution, commercial included, as long as any version distributed
-**or offered as a network service** publishes its complete source code under
-the same license, keeping Mateus Hcristos Leptokarydis's copyright notice.
-Versions up to v2.1.0 were released under BSD 3-Clause.
+redistribution, including commercial use, on the condition that any distributed
+version **or version offered as a service over a network** publishes the
+complete source code under the same license, and keeps the copyright notice of
+Mateus Hcristos Leptokarydis. Versions up to v2.1.0 were published under BSD
+3-Clause.
 
-The public data belongs to their respective agencies:
+The public data belongs to its agencies:
 [CPRM/SGB](https://www.sgb.gov.br/) and [Open-Meteo](https://open-meteo.com/).
 The live map layers come from INMET, IBGE, RainViewer, SSEC RealEarth and
-OpenStreetMap. Check each one's terms of use before redistributing.
+OpenStreetMap. Read the terms of use of each one before you redistribute.
