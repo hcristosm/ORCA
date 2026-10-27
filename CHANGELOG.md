@@ -12,6 +12,14 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-10-26
+
+### FIXES
+- fix(dashboard): as camadas de raios (RealEarth/GLM) e de radar (RainViewer) usavam `fetch` sem timeout. Host que *pendura* não rejeita o `fetch`: a promessa nunca assentava, a camada não entrava no controle e o `.catch` não rodava, então nada aparecia no console. Reproduzido com o `realearth.ssec.wisc.edu` fora do ar (000 em 10s): a camada de raios sumia em silêncio. As duas passam a usar o `fetchComTimeout` do próprio arquivo, com 8s, como o INMET
+
+### CHORE
+- docs(readme): reescreve os dois READMEs no estilo ASD-STE100 aplicado a ~80% (frases curtas, voz ativa, um termo por conceito; média de 11 palavras por frase) e acrescenta o diagrama Mermaid da publicação, a leitura do dashboard, a estrutura do repositório, a referência da CLI, o contrato dos arquivos do dashboard, as variáveis de ambiente e as branches
+
 ## [2.3.1] - 2026-10-24
 
 ### FIXES
