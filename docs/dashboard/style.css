@@ -520,6 +520,26 @@ select { padding-right: var(--s2); }
 .selo-indisponivel { color: var(--sinal); font-weight: 500; }
 .selo-nota { margin-top: 2px; }
 
+/* Bloco do "Atualizar agora": mesma família do selo, porque fala da mesma
+   coisa -- a procedência e a idade do dado -- só que do ponto consultado na
+   hora, no navegador. */
+.agora {
+  font-family: var(--font-mono);
+  font-size: var(--micro);
+  color: var(--tinta-fraca);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: var(--s2);
+  row-gap: 2px;
+  margin-top: var(--s2);
+  line-height: 1.6;
+}
+.agora b { font-weight: 500; color: var(--tinta-media); }
+.agora time { color: var(--tinta-media); }
+.agora-nota { flex-basis: 100%; color: var(--tinta-fraca); }
+.agora-erro { color: var(--sinal); font-weight: 500; }
+
 /* ------------------------------------------------------------------ corpo */
 
 /* O shell: tr&ecirc;s colunas que rolam sozinhas dentro da altura da tela, para

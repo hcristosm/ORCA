@@ -1,14 +1,14 @@
 (function () {
   "use strict";
 
-  const { escaparHtml, token } = window.ORCA;
+  const {
+    escaparHtml, token,
+    buscarChuvaOpenMeteo, chuvaAcumulada, referenciaObservada,
+  } = window.ORCA;
 
   const LIMITE_AREAS = 5;
   const LIMITE_TAMANHO_BYTES = 10 * 1024 * 1024;
 
-  const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
-  const DIAS_HISTORICO = 4;
-  const DIAS_PREVISAO = 4;
   const PASSO_PREVISAO_HORAS = 3;
   const HORIZONTE_PREVISAO_HORAS = 72;
 
@@ -80,25 +80,6 @@
     return [centro.lat, centro.lng];
   }
 
-  function chuvaAcumulada(serie, referenciaMs, horas) {
-    const inicio = referenciaMs - horas * 3600 * 1000;
-    let soma = 0;
-    let temValor = false;
-    for (const ponto of serie) {
-      if (ponto.dataHoraMs > inicio && ponto.dataHoraMs <= referenciaMs && typeof ponto.chuvaMm === "number") {
-        soma += ponto.chuvaMm;
-        temValor = true;
-      }
-    }
-    return temValor ? soma : null;
-  }
-
-  function referenciaObservada(serie, agoraMs) {
-    const validos = serie.filter(p => p.dataHoraMs <= agoraMs && typeof p.chuvaMm === "number");
-    if (!validos.length) return agoraMs;
-    return Math.max(...validos.map(p => p.dataHoraMs));
-  }
-
   function trajetoria72h(serie, agoraMs, passoHoras, horizonteHoras) {
     const passo = (passoHoras || PASSO_PREVISAO_HORAS) * 3600 * 1000;
     const limite = agoraMs + (horizonteHoras || HORIZONTE_PREVISAO_HORAS) * 3600 * 1000;
@@ -114,28 +95,6 @@
       }
     }
     return pontos;
-  }
-
-  async function buscarChuvaOpenMeteo(lat, lon) {
-    const url = new URL(FORECAST_URL);
-    url.searchParams.set("latitude", lat);
-    url.searchParams.set("longitude", lon);
-    url.searchParams.set("hourly", "precipitation");
-    url.searchParams.set("past_days", String(DIAS_HISTORICO));
-    url.searchParams.set("forecast_days", String(DIAS_PREVISAO));
-
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      throw new Error(`Open-Meteo respondeu ${resp.status}. Tente novamente em instantes.`);
-    }
-    const dados = await resp.json();
-    const horario = (dados && dados.hourly) || {};
-    const horas = horario.time || [];
-    const precipitacoes = horario.precipitation || [];
-    return horas.map((iso, i) => ({
-      dataHoraMs: Date.parse(iso.endsWith("Z") ? iso : `${iso}Z`),
-      chuvaMm: typeof precipitacoes[i] === "number" ? precipitacoes[i] : null,
-    }));
   }
 
   async function processarArea(area) {

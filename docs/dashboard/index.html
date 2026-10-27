@@ -144,6 +144,7 @@
     </section>
 
     <div class="selo" id="selo" aria-live="polite">Carregando dados&hellip;</div>
+    <div class="agora" id="agora" hidden></div>
 
     <footer>
       <span>Dados p&uacute;blicos da CPRM/SGB, Open-Meteo, INMET, RainViewer e NOAA. Site est&aacute;tico, atualizado diariamente.</span>
@@ -439,7 +440,10 @@
 (function () {
   "use strict";
 
-  const { escaparHtml, token } = window.ORCA;
+  const {
+    escaparHtml, token, fetchComTimeout,
+    buscarChuvaOpenMeteo, chuvaAcumulada, referenciaObservada,
+  } = window.ORCA;
 
   let UF = "sp";
   let ufsDisponiveis = ["sp"];
@@ -840,16 +844,6 @@
   // RealEarth, que deixou de responder e levou a camada de raios sem um aviso.
   const TIMEOUT_CAMADA_VIVA_MS = 8000;
 
-  async function fetchComTimeout(url, ms = TIMEOUT_IBGE_MS) {
-    const controlador = new AbortController();
-    const idTimeout = setTimeout(() => controlador.abort(), ms);
-    try {
-      return await fetch(url, { signal: controlador.signal });
-    } finally {
-      clearTimeout(idTimeout);
-    }
-  }
-
   function malhaMunicipiosUrl() {
     return `https://servicodados.ibge.gov.br/api/v3/malhas/estados/${UF.toUpperCase()}` +
       `?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio`;
@@ -866,7 +860,7 @@
       const ufAlvo = UF;
       const minhaPromessa = (async () => {
         try {
-          const resp = await fetchComTimeout(malhaMunicipiosUrl());
+          const resp = await fetchComTimeout(malhaMunicipiosUrl(), TIMEOUT_IBGE_MS);
           if (resp.ok) {
             const dados = await resp.json();
             if (ufAlvo === UF) {
@@ -907,7 +901,7 @@
       const ufAlvo = UF;
       const minhaPromessa = (async () => {
         try {
-          const resp = await fetchComTimeout(nomesMunicipiosUrl());
+          const resp = await fetchComTimeout(nomesMunicipiosUrl(), TIMEOUT_IBGE_MS);
           if (resp.ok) {
             const lista = await resp.json();
             const indice = new Map();
@@ -1711,6 +1705,107 @@
     return { filtrados, emAtencao, alertaPrevisto };
   }
 
+  /* ------------------------------------------------- chuva do município agora
+
+     "Atualizar agora" busca a chuva do município direto da Open-Meteo, no
+     navegador. É UM ponto -- o centro dos setores daquele município --, porque
+     a UF inteira não cabe na quota de um visitante: SP são ~900 pontos de
+     grade, com 4 dias de histórico e 72h de previsão cada.
+
+     O valor vive num bloco próprio e NÃO entra na régua, nos contadores, nas
+     tabelas nem nos pins: aqueles seguem a exportação diária, que consulta o
+     ponto de grade do setor, e não o centro do município. São pontos
+     diferentes, então dois números para a mesma coisa confundiriam. O bloco
+     diz de onde vem o seu. */
+
+  let buscandoAgora = false;
+  let consultaAgora = null;   // { nome, serie, referenciaMs }
+
+  function centroideMunicipio(nome) {
+    if (!setoresGeoJSON) return null;
+    const feicoes = setoresGeoJSON.features.filter(f => f.properties.munic === nome);
+    if (!feicoes.length) return null;
+    const limites = L.geoJSON({ type: "FeatureCollection", features: feicoes }).getBounds();
+    if (!limites.isValid()) return null;
+    const centro = limites.getCenter();
+    return [centro.lat, centro.lng];
+  }
+
+  function botaoAgora(rotulo) {
+    return `<button type="button" id="btnAgora" class="botao-exportar">${rotulo}</button>`;
+  }
+
+  function escreverAgora(html) {
+    document.getElementById("agora").innerHTML = html;
+  }
+
+  /* Chamada por `renderizarTudo`, então cobre troca de município, de janela e
+     de limiar sem precisar de um gatilho em cada um. Trocar a janela recalcula
+     a série que já está na mão: não refaz requisição. */
+  function sincronizarAgora() {
+    const bloco = document.getElementById("agora");
+    bloco.hidden = !estado.municipio;
+    if (!estado.municipio) { consultaAgora = null; return; }
+    if (buscandoAgora) return;
+    if (consultaAgora && consultaAgora.nome === estado.municipio) {
+      const acumulado = chuvaAcumulada(consultaAgora.serie, consultaAgora.referenciaMs, estado.janela);
+      escreverAgora(
+        `<b>${formatarMm(acumulado)} mm</b> em ${estado.janela}h no centro de ` +
+        `${escaparHtml(estado.municipio)} · observação até ` +
+        `${carimbo(new Date(consultaAgora.referenciaMs).toISOString())} ${botaoAgora("Atualizar")}` +
+        `<div class="agora-nota">Consultado agora, no seu navegador. O mapa e as tabelas seguem a ` +
+        `exportação diária, que usa o ponto de grade de cada setor.</div>`
+      );
+      return;
+    }
+    consultaAgora = null;
+    escreverAgora(
+      `${botaoAgora("Atualizar agora")}` +
+      `<span class="agora-nota">chuva do centro de ${escaparHtml(estado.municipio)}, ` +
+      `direto da Open-Meteo</span>`
+    );
+  }
+
+  async function atualizarAgora() {
+    if (buscandoAgora || !estado.municipio) return;
+    const nome = estado.municipio;
+    const centro = centroideMunicipio(nome);
+    if (!centro) {
+      escreverAgora(`<span class="agora-erro">Nenhum setor com geometria neste município.</span>`);
+      return;
+    }
+
+    buscandoAgora = true;
+    escreverAgora(`<span class="agora-nota">Consultando a Open-Meteo&hellip;</span>`);
+    try {
+      const serie = await buscarChuvaOpenMeteo(centro[0], centro[1]);
+      // Trocar de município no meio da busca descarta o resultado: ele não é
+      // deste recorte.
+      if (estado.municipio !== nome) return;
+      const referenciaMs = referenciaObservada(serie, Date.now());
+      consultaAgora = { nome, serie, referenciaMs };
+      // Desliga a flag ANTES de renderizar: `sincronizarAgora` tem um guard
+      // `if (buscandoAgora) return`, para a troca de janela não apagar o
+      // "Consultando…" no meio da busca -- e esse guard engoliria o resultado.
+      buscandoAgora = false;
+      sincronizarAgora();
+    } catch (erro) {
+      if (estado.municipio !== nome) return;
+      // Falha aqui não toca em nada do painel: o dado do cron continua na tela.
+      escreverAgora(
+        `<span class="agora-erro">${escaparHtml(erro.message || "Open-Meteo indisponível.")}</span> ` +
+        `${botaoAgora("Tentar de novo")}`
+      );
+    } finally {
+      buscandoAgora = false;
+    }
+  }
+
+  // Delegado no `document`: o botão é reescrito a cada render do bloco.
+  document.addEventListener("click", ev => {
+    if (ev.target.closest("#btnAgora")) atualizarAgora();
+  });
+
   function renderizarTudo() {
     const { filtrados, emAtencao, alertaPrevisto } = calcularRecorte(estado.municipio);
 
@@ -1719,6 +1814,7 @@
     renderizarMapa(filtrados, emAtencao, alertaPrevisto);
     renderizarTabela(emAtencao, alertaPrevisto);
     if (!estado.municipio) renderizarListaMunicipios();
+    sincronizarAgora();
     agendarRenderizarSetoresCompletoEstado();
   }
 
