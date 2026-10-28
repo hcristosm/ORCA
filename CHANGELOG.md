@@ -12,8 +12,13 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-28
+
 ### FEATURES
 - feat(dashboard): botão "Atualizar agora" por município: busca a chuva de UM ponto (o centro dos setores daquele município) direto da Open-Meteo, no navegador, e mostra o acumulado na janela ativa com a hora da última observação. Trocar a janela recalcula a série que já está na mão, sem nova requisição. O valor fica em bloco próprio e não entra na régua, nos contadores, nas tabelas nem nos pins: aqueles seguem a exportação diária, que consulta o ponto de grade do setor. A UF inteira ao vivo não cabe na quota de um visitante (SP são ~900 pontos de grade com 4 dias de histórico e 72h de previsão)
+
+### FIXES
+- fix(dashboard): abaixo de 1081px a `.coluna-contexto` vira `display: contents` e o `.selo` tem `order: 3`, para a procedência descer ao fim da grade; o bloco do "Atualizar agora" ficava com o `order` padrão e subia 1.532px acima do selo. Entra na mesma regra. O `.botao-exportar` é botão-texto, sem borda, então "Atualizar" colava na frase: ganha o separador `·` do selo
 
 ### REFACTOR
 - refactor(dashboard): `fetchComTimeout`, `buscarChuvaOpenMeteo`, `chuvaAcumulada` e `referenciaObservada` passam a morar em `comum.js` (`window.ORCA`), em vez de cópias no `index.html` e em `areas-customizadas.js`. "Minhas áreas" ganha de graça o timeout de 8s que as camadas do mapa já tinham
