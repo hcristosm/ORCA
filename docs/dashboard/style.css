@@ -1085,7 +1085,9 @@ footer {
   /* Empilhado, a sidebar vira itens soltos da grade para que a procedência dos
      dados e o rodapé desçam para o fim, em vez de separar os KPIs do mapa. */
   .coluna-contexto { display: contents; }
-  .selo, footer { order: 3; }
+  /* `.agora` acompanha o selo: sem o mesmo `order` ele subiria para o topo
+     da grade, longe da procedência. O empate cai na ordem do DOM. */
+  .selo, .agora, footer { order: 3; }
   footer { margin-top: var(--s4); }
 }
 
