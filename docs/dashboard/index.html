@@ -1176,7 +1176,11 @@
           // sobre o basemap neutralizado em cinza (ver style.css).
           return `${dados.host}${ultimo.path}/256/{z}/{x}/{y}/6/1_1.png`;
         })
-        .catch(e => { console.warn("RainViewer indisponível, camada de radar omitida:", e); return null; });
+        .catch(e => { console.warn("RainViewer indisponível, camada de radar omitida:", e); return null; })
+        // Só o sucesso fica em cache. Guardar a falha congelava a camada como
+        // ausente até o usuário recarregar a página; assim a próxima montagem do
+        // mapa (troca de UF, Voltar/Avançar) tenta de novo e a camada volta sozinha.
+        .then(r => { if (!r) promessaRadarRainViewer = null; return r; });
     }
     return promessaRadarRainViewer;
   }
@@ -1196,14 +1200,18 @@
         .then(r => r.json())
         .then(dados => {
           const times = dados[0] && dados[0].times;
-          if (!times || !times.length) return null;
+          if (!times || !times.length) { console.warn("RealEarth respondeu sem quadros de GLM, camada de raios omitida"); return null; }
           const ultimo = times[times.length - 1];
-          if (!/^\d{8}\.\d{6}$/.test(ultimo)) return null;  // vai na URL do tile: sem string quase válida
+          // Vai na URL do tile: sem string quase válida.
+          if (!/^\d{8}\.\d{6}$/.test(ultimo)) { console.warn("Quadro de GLM com formato inesperado:", ultimo); return null; }
           const [data, hhmmss] = ultimo.split(".");  // "AAAAMMDD.HHMMSS", UTC
           const quadro = new Date(Date.UTC(+data.slice(0, 4), +data.slice(4, 6) - 1, +data.slice(6, 8),
             +hhmmss.slice(0, 2), +hhmmss.slice(2, 4)));
           // `!(<=)` e não `>`: quadro inválido dá NaN, e NaN > x é false.
-          if (!(Date.now() - quadro <= GLM_IDADE_MAXIMA_MS)) return null;
+          if (!(Date.now() - quadro <= GLM_IDADE_MAXIMA_MS)) {
+            console.warn("Último quadro de GLM mais velho que o limite, camada de raios omitida:", ultimo);
+            return null;
+          }
           return {
             // Data/hora fixas na URL: o produto muda a cada minuto e, sem elas,
             // tiles do mesmo mapa podem vir de quadros diferentes.
@@ -1211,7 +1219,10 @@
             hora: quadro.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
           };
         })
-        .catch(e => { console.warn("RealEarth indisponível, camada de raios omitida:", e); return null; });
+        .catch(e => { console.warn("RealEarth indisponível, camada de raios omitida:", e); return null; })
+        // Idem ao radar: cacheia o sucesso, nunca a falha -- vale para os quatro
+        // caminhos que devolvem null (rede, sem quadros, formato, quadro velho).
+        .then(r => { if (!r) promessaRaiosGlm = null; return r; });
     }
     return promessaRaiosGlm;
   }
@@ -1590,10 +1601,23 @@
     controleCamadas = L.control.layers(null, overlays, { position: "topright", collapsed: false }).addTo(mapa);
 
     const mapaDesteInit = mapa;
+
+    // Camada viva que não veio sumia do controle sem deixar rastro: quem procura
+    // a caixa de raios não distinguia "fonte fora do ar" de "dashboard quebrado"
+    // -- o aviso ficava só no console. Anuncia a ausência no próprio controle.
+    function anunciarCamadaAusente(nome) {
+      const caixa = controleCamadas && controleCamadas.getContainer();
+      if (!caixa) return;
+      const aviso = L.DomUtil.create("div", "camada-ausente", caixa);
+      aviso.textContent = `${nome}: fonte sem dado agora`;
+      aviso.title = "A fonte externa não respondeu ou não tem quadro recente. Detalhes no console.";
+    }
+
     carregarRadarRainViewer().then(urlTemplate => {
       // `mapa` pode já ter sido recriado (troca de UF, Voltar/Avançar) antes
       // da RainViewer responder; nesse caso o controle antigo não existe mais.
-      if (!urlTemplate || mapa !== mapaDesteInit) return;
+      if (mapa !== mapaDesteInit) return;
+      if (!urlTemplate) return anunciarCamadaAusente("Chuva agora (radar)");
       // maxNativeZoom: a RainViewer devolve uma tile "Zoom Level Not Supported" (200 OK,
       // mas é uma imagem de aviso) acima do zoom 7 (antes era 12); sem o teto o
       // Leaflet pediria essas tiles como se fossem dado real. Acima de 7 ele amplia a
@@ -1605,7 +1629,8 @@
     });
 
     carregarRaiosGlm().then(raios => {
-      if (!raios || mapa !== mapaDesteInit) return;
+      if (mapa !== mapaDesteInit) return;
+      if (!raios) return anunciarCamadaAusente("Raios (GLM)");
       // maxNativeZoom 5, não o 7 que o produto anuncia: nos zooms 6 e 7 o RealEarth
       // devolve boa parte dos tiles como "Size limit exceeded" (200 OK, quadrado preto
       // com texto). No 5 o pixel tem ~4,9 km, mais fino que os ~8 km do GLM: acima

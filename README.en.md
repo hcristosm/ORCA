@@ -472,6 +472,11 @@ is manual.
   The rest of the panel does not depend on these sources. The lightning layer is
   also hidden when the most recent frame is more than 30 minutes old. It shows
   total lightning (cloud and ground), not the point of impact.
+  When one of these layers does not arrive, the layer control says
+  "<layer>: fonte sem dado agora" in place of the checkbox: disappearing with no
+  explanation made a source outage look like a broken dashboard. The failure is
+  not cached -- only the success is -- so the layer comes back by itself on the
+  next map build (change of state, Back/Forward), with no page reload.
 - **There is no authentication and no multi-user support.** ORCA is a local and
   portfolio tool.
 - **The dashboard does not update on demand.** It shows the last export, which

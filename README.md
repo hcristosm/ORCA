@@ -463,6 +463,11 @@ dele é manual.
   com o HTML do portal. O resto do painel não depende dessas fontes. A camada de
   raios é omitida também quando o quadro mais recente tem mais de 30 minutos.
   Ela mostra raio total (nuvem e solo), não ponto de impacto.
+  Quando uma dessas camadas não vem, o controle de camadas diz
+  "<camada>: fonte sem dado agora" no lugar da caixa de seleção: sumir sem
+  explicação fazia a queda da fonte parecer defeito do dashboard. A falha não
+  fica em cache — só o sucesso —, então a camada volta sozinha na próxima
+  montagem do mapa (trocar de UF, Voltar/Avançar), sem recarregar a página.
 - **Não há autenticação nem multiusuário.** O ORCA é ferramenta local e de
   portfólio.
 - **O dashboard não atualiza sob demanda.** Ele mostra a última exportação, que

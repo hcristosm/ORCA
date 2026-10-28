@@ -1071,6 +1071,13 @@ footer {
   color: var(--tinta);
   border-radius: var(--raio);
 }
+.camada-ausente {
+  margin-top: var(--s2);
+  padding-top: var(--s2);
+  border-top: 1px solid var(--fio-cor);
+  color: var(--tinta-fraca);
+  font-size: var(--micro);
+}
 .leaflet-control-attribution {
   background: var(--superficie);
   color: var(--tinta-fraca);

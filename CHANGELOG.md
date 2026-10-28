@@ -15,6 +15,10 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 ### FEATURES
 - feat(dashboard): seletor "Critério" no cabeçalho, ao lado da Janela, com os limiares da literatura que antes só existiam como botões dentro da aba Tutorial (Santos 80mm/72h, Tamoios 100mm/72h, PPDC-SP 120mm/72h, Rio 125mm/24h, BH 70mm/72h). As opções nascem dos próprios botões da tabela, então não há uma segunda lista para sair de sincronia; pares repetidos aparecem uma vez só. Mexer no slider ou na janela à mão volta o seletor para "Personalizado"
 
+### FIXES
+- fix(dashboard): camada viva que falhava ficava em cache como ausente pelo resto da sessão, então a caixa só voltava recarregando a página. Agora só o sucesso é cacheado: a próxima montagem do mapa (troca de UF, Voltar/Avançar) tenta de novo e a camada volta sozinha quando a fonte se restabelece
+- fix(dashboard): camada viva que não vinha (raios do GLM, radar da RainViewer) sumia do controle de camadas sem deixar rastro na tela -- o aviso ficava só no console, então faltava a caixa de seleção e nada dizia por quê. O controle passa a mostrar "<camada>: fonte sem dado agora" no lugar da caixa. Os dois caminhos silenciosos do GLM (resposta 200 sem quadros e quadro mais velho que o limite) também passam a avisar no console
+
 ### CHORE
 - docs(dashboard): reescreve a aba Tutorial no estilo ASD-STE100 aplicado a ~80% (média de 9,6 palavras por frase), mantendo a tabela de critérios, os botões, as notas de fonte e as referências
 
