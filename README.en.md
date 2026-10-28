@@ -517,18 +517,6 @@ direction when the result does not match the reality of the data.
 I prefer to make this clear. If you find something strange in the code, this is
 probably the reason. An issue is welcome.
 
-## About the language of this text
-
-This README follows, in large part, the ASD-STE100 standard (Simplified
-Technical English): short sentences, the active voice, the present tense, one
-idea per sentence, and the same term for the same thing. "Sector", "threshold",
-"run" and "state" have one meaning each in all of the text.
-
-The standard is not applied to the letter. The "About" and "How this was built"
-sections keep a personal voice. The objective is a text that is easy to read,
-also for a reader whose first language is not English and for an AI agent, and
-that does not sound robotic. If you edit this file, keep the same style.
-
 ## Contributing
 
 Issues, PRs and suggestions are welcome. See the
