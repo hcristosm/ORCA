@@ -12,6 +12,12 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+### FEATURES
+- feat(dashboard): seletor "Critério" no cabeçalho, ao lado da Janela, com os limiares da literatura que antes só existiam como botões dentro da aba Tutorial (Santos 80mm/72h, Tamoios 100mm/72h, PPDC-SP 120mm/72h, Rio 125mm/24h, BH 70mm/72h). As opções nascem dos próprios botões da tabela, então não há uma segunda lista para sair de sincronia; pares repetidos aparecem uma vez só. Mexer no slider ou na janela à mão volta o seletor para "Personalizado"
+
+### CHORE
+- docs(dashboard): reescreve a aba Tutorial no estilo ASD-STE100 aplicado a ~80% (média de 9,6 palavras por frase), mantendo a tabela de critérios, os botões, as notas de fonte e as referências
+
 ## [2.4.0] - 2026-10-28
 
 ### FEATURES

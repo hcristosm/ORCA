@@ -76,6 +76,11 @@
         </div>
       </div>
 
+      <div class="campo campo-criterio">
+        <label for="criterioSelect">Crit&eacute;rio</label>
+        <select id="criterioSelect"></select>
+      </div>
+
       <div class="campo">
         <label><svg class="icone"><use href="icons/sprite.svg#icon-clock"></use></svg>Janela</label>
         <div class="toggle-janela" id="janelaToggle">
@@ -279,38 +284,39 @@
       <span class="rotulo-inst">n&atilde;o &eacute; alerta oficial</span>
     </div>
     <p class="areas-intro">
-      O ORCA cruza os setores de risco geol&oacute;gico mapeados pelo Servi&ccedil;o Geol&oacute;gico do Brasil
-      (CPRM/SGB) com a chuva dos &uacute;ltimos dias. A pergunta que ele responde &eacute; simples: <em>em quais
-      setores j&aacute; choveu mais do que um valor que eu considero perigoso?</em> Esse valor &eacute; o limiar,
-      e quem escolhe &eacute; voc&ecirc;, na r&eacute;gua.
+      O ORCA cruza duas informa&ccedil;&otilde;es: os setores de risco geol&oacute;gico mapeados pelo Servi&ccedil;o
+      Geol&oacute;gico do Brasil (CPRM/SGB) e a chuva dos &uacute;ltimos dias. Ele responde uma pergunta:
+      <em>em quais setores j&aacute; choveu mais do que um valor que eu considero perigoso?</em> Esse
+      valor &eacute; o limiar. Voc&ecirc; escolhe o limiar na r&eacute;gua.
     </p>
 
     <h3>1. O que a r&eacute;gua mostra</h3>
     <ul>
-      <li><b>Cada setor tem um n&uacute;mero:</b> a chuva acumulada nas &uacute;ltimas 24h ou 72h, conforme o
-        bot&atilde;o <b>Janela</b> no topo. A chuva vem da Open-Meteo, consultada num ponto compartilhado
-        pelos setores vizinhos, e &eacute; atualizada uma vez por dia.</li>
-      <li><b>As barrinhas</b> s&atilde;o um histograma: cada uma junta os setores com chuva parecida, e a
-        altura diz quantos s&atilde;o. A altura cresce pela raiz quadrada, para que um pico de centenas de
-        setores n&atilde;o esconda os poucos que choveram muito. A faixa sombreada vai do zero at&eacute; a maior
-        chuva do recorte.</li>
-      <li><b>A linha vertical &eacute; o limiar.</b> Arraste de 0 a 300mm, em passos de 5mm. Tudo que fica
-        &agrave; direita dela est&aacute; <b>em aten&ccedil;&atilde;o</b>: o setor ganha cor cheia no mapa, entra na tabela
+      <li><b>Cada setor tem um n&uacute;mero:</b> a chuva acumulada nas &uacute;ltimas 24h ou 72h. O bot&atilde;o
+        <b>Janela</b>, no topo, escolhe a janela. A chuva vem da Open-Meteo. O ORCA consulta um ponto
+        compartilhado pelos setores vizinhos e atualiza o dado uma vez por dia.</li>
+      <li><b>As barrinhas</b> s&atilde;o um histograma. Cada barra junta os setores com chuva parecida, e a
+        altura diz quantos s&atilde;o. A altura cresce pela raiz quadrada, para um pico de centenas de
+        setores n&atilde;o esconder os poucos que choveram muito. A faixa sombreada vai de zero at&eacute; a
+        maior chuva do recorte.</li>
+      <li><b>A linha vertical &eacute; o limiar.</b> Arraste-a de 0 a 300mm, em passos de 5mm. Todo setor
+        &agrave; direita dela fica <b>em aten&ccedil;&atilde;o</b>: ele ganha cor cheia no mapa e entra na tabela
         &ldquo;Setores em aten&ccedil;&atilde;o&rdquo; e nos contadores. O padr&atilde;o &eacute; 100mm em 72h.</li>
-      <li><b>No mapa, trama e cor dizem coisas diferentes.</b> A trama (hachura) &eacute; o grau de risco do
-        setor (alto ou muito alto), e n&atilde;o muda com a chuva. A cor cheia s&oacute; aparece quando o setor
-        passa do limiar.</li>
-      <li><b>Alerta previsto</b> lista os setores que ainda est&atilde;o abaixo do limiar, mas que v&atilde;o
-        cruz&aacute;-lo nas pr&oacute;ximas 72h se a previs&atilde;o da Open-Meteo se confirmar. O c&aacute;lculo projeta o
-        acumulado de 72h de 3 em 3 horas e usa sempre a janela de 72h, mesmo com a de 24h
-        selecionada. No mapa, o pin fica tracejado.</li>
+      <li><b>No mapa, a trama e a cor dizem coisas diferentes.</b> A trama (hachura) &eacute; o grau de
+        risco do setor, alto ou muito alto, e n&atilde;o muda com a chuva. A cor cheia aparece s&oacute; quando
+        o setor passa do limiar.</li>
+      <li><b>Alerta previsto</b> lista os setores abaixo do limiar que devem cruz&aacute;-lo nas pr&oacute;ximas
+        72h, se a previs&atilde;o da Open-Meteo se confirmar. O c&aacute;lculo projeta o acumulado de 72h de 3 em
+        3 horas. Ele usa sempre a janela de 72h, mesmo com a de 24h selecionada. No mapa, o pin fica
+        tracejado.</li>
     </ul>
 
     <h3>2. Qual limiar usar</h3>
     <p>
-      N&atilde;o existe um n&uacute;mero &uacute;nico. Cada &oacute;rg&atilde;o calibrou o seu com os pluvi&ocirc;metros e o hist&oacute;rico
-      de escorregamentos da pr&oacute;pria regi&atilde;o. A tabela re&uacute;ne crit&eacute;rios p&uacute;blicos e diz se d&aacute;
-      para reproduzi-los na r&eacute;gua, que s&oacute; conhece acumulados de 24h e 72h.
+      N&atilde;o existe um n&uacute;mero &uacute;nico. Cada &oacute;rg&atilde;o calibra o seu limiar com os pluvi&ocirc;metros e o
+      hist&oacute;rico de escorregamentos da pr&oacute;pria regi&atilde;o. A tabela re&uacute;ne crit&eacute;rios p&uacute;blicos e diz se a
+      r&eacute;gua reproduz cada um. A r&eacute;gua conhece s&oacute; os acumulados de 24h e 72h. O seletor
+      <b>Crit&eacute;rio</b>, no topo da p&aacute;gina, aplica os que cabem.
     </p>
     <div class="tutorial-tabela">
       <table>
@@ -320,50 +326,50 @@
         <tbody>
           <tr>
             <td><b>Defesa Civil de Santos</b><br>PPDC municipal, desde dez/2017 <sup>[1]</sup></td>
-            <td>Estado de <b>aten&ccedil;&atilde;o</b> quando o acumulado de 72h passa de <b>80mm</b> (antes era 100mm).
-              Alerta e alerta m&aacute;ximo exigem, al&eacute;m disso, previs&atilde;o de piora ou escorregamentos
-              j&aacute; acontecendo.</td>
-            <td><button type="button" class="botao-exportar" data-janela="72" data-limiar="80">Usar 80mm/72h</button></td>
+            <td>Santos entra em estado de <b>aten&ccedil;&atilde;o</b> quando o acumulado de 72h passa de <b>80mm</b>.
+              O valor anterior era 100mm. Os n&iacute;veis de alerta e de alerta m&aacute;ximo exigem tamb&eacute;m
+              previs&atilde;o de piora, ou escorregamentos j&aacute; em curso.</td>
+            <td><button type="button" class="botao-exportar" data-janela="72" data-limiar="80" data-rotulo="Santos">Usar 80mm/72h</button></td>
           </tr>
           <tr>
             <td><b>Concession&aacute;ria Tamoios</b><br>Serra Antiga, SP-099 <sup>[2]</sup></td>
-            <td>Interdi&ccedil;&atilde;o preventiva da pista quando os pluvi&ocirc;metros da rodovia somam <b>100mm em at&eacute;
-              72h</b>, pelo risco de queda de barreiras. O protocolo &eacute; acompanhado pela Artesp e pelas
-              defesas civis.</td>
-            <td><button type="button" class="botao-exportar" data-janela="72" data-limiar="100">Usar 100mm/72h</button><br>&Eacute; o padr&atilde;o do ORCA.</td>
+            <td>A concession&aacute;ria interdita a pista por preven&ccedil;&atilde;o quando os pluvi&ocirc;metros da rodovia somam
+              <b>100mm em at&eacute; 72h</b>, pelo risco de queda de barreiras. A Artesp e as defesas civis
+              acompanham o protocolo.</td>
+            <td><button type="button" class="botao-exportar" data-janela="72" data-limiar="100" data-rotulo="Tamoios">Usar 100mm/72h</button><br>&Eacute; o padr&atilde;o do ORCA.</td>
           </tr>
           <tr>
             <td><b>PPDC do Estado de S&atilde;o Paulo</b><br>Plano Preventivo de Defesa Civil <sup>[3]</sup></td>
-            <td>Acumulados cr&iacute;ticos de 72h por regi&atilde;o: Litoral Norte <b>120mm</b>; Baixada Santista,
-              ABCD e Vale do Para&iacute;ba <b>100mm</b>; Serra da Mantiqueira, Campinas e Sorocaba <b>80mm</b>.
-              O pr&oacute;prio estudo sugere baixar a faixa para 60&ndash;100mm. O PPDC tamb&eacute;m usa o
-              Coeficiente de Ciclo M&oacute;vel, que o ORCA n&atilde;o calcula.</td>
-            <td><button type="button" class="botao-exportar" data-janela="72" data-limiar="120">Usar 120mm/72h</button>
-              <button type="button" class="botao-exportar" data-janela="72" data-limiar="100">Usar 100mm/72h</button>
-              <button type="button" class="botao-exportar" data-janela="72" data-limiar="80">Usar 80mm/72h</button></td>
+            <td>O plano usa acumulados cr&iacute;ticos de 72h por regi&atilde;o: Litoral Norte <b>120mm</b>; Baixada
+              Santista, ABCD e Vale do Para&iacute;ba <b>100mm</b>; Serra da Mantiqueira, Campinas e Sorocaba
+              <b>80mm</b>. O pr&oacute;prio estudo sugere baixar a faixa para 60&ndash;100mm. O PPDC usa tamb&eacute;m
+              o Coeficiente de Ciclo M&oacute;vel, que o ORCA n&atilde;o calcula.</td>
+            <td><button type="button" class="botao-exportar" data-janela="72" data-limiar="120" data-rotulo="PPDC-SP">Usar 120mm/72h</button>
+              <button type="button" class="botao-exportar" data-janela="72" data-limiar="100" data-rotulo="Tamoios">Usar 100mm/72h</button>
+              <button type="button" class="botao-exportar" data-janela="72" data-limiar="80" data-rotulo="Santos">Usar 80mm/72h</button></td>
           </tr>
           <tr>
             <td><b>Defesa Civil do Rio de Janeiro</b><br>sirenes nas comunidades, crit&eacute;rios de 2019 <sup>[4]</sup></td>
-            <td>A sirene toca com qualquer um destes: <b>40mm em 1h</b>; <b>125mm em 24h</b> com a chuva
-              ainda caindo (&ge; 6mm/h); ou <b>200mm em 96h</b> com &ge; 40mm nas &uacute;ltimas 24h e chuva
-              ainda caindo. A GEO-Rio, pelo Alerta Rio, publica tamb&eacute;m a probabilidade de
-              escorregamento por zona da cidade, em quatro n&iacute;veis.</td>
-            <td><button type="button" class="botao-exportar" data-janela="24" data-limiar="125">Usar 125mm/24h</button><br>S&oacute; em parte: o ORCA n&atilde;o mede chuva de 1h nem acumulado de 96h.</td>
+            <td>A sirene toca com qualquer um destes: <b>40mm em 1h</b>; <b>125mm em 24h</b> com chuva ainda
+              em curso (&ge; 6mm/h); ou <b>200mm em 96h</b>, com &ge; 40mm nas &uacute;ltimas 24h e chuva ainda
+              em curso. A GEO-Rio publica tamb&eacute;m, pelo Alerta Rio, a probabilidade de escorregamento
+              por zona da cidade, em quatro n&iacute;veis.</td>
+            <td><button type="button" class="botao-exportar" data-janela="24" data-limiar="125" data-rotulo="Rio">Usar 125mm/24h</button><br>S&oacute; em parte: o ORCA n&atilde;o mede chuva de 1h nem acumulado de 96h.</td>
           </tr>
           <tr>
             <td><b>Defesa Civil de Petr&oacute;polis</b><br>plano de conting&ecirc;ncia <sup>[5]</sup></td>
-            <td>Sirenes tocam com <b>45mm em 1h</b> e previs&atilde;o de chuva moderada a muito forte.</td>
+            <td>As sirenes tocam com <b>45mm em 1h</b> e previs&atilde;o de chuva moderada a muito forte.</td>
             <td>N&atilde;o d&aacute;: &eacute; crit&eacute;rio de intensidade em 1h.</td>
           </tr>
           <tr>
             <td><b>Defesa Civil de Belo Horizonte</b> <sup>[6]</sup></td>
-            <td>Alerta de risco geol&oacute;gico <b>forte</b> com mais de <b>70mm em 72h</b>, pelo solo encharcado.
-              Fonte jornal&iacute;stica, n&atilde;o a norma.</td>
-            <td><button type="button" class="botao-exportar" data-janela="72" data-limiar="70">Usar 70mm/72h</button></td>
+            <td>A cidade declara alerta de risco geol&oacute;gico <b>forte</b> com mais de <b>70mm em 72h</b>, pelo
+              solo encharcado. A fonte &eacute; jornal&iacute;stica, n&atilde;o a norma.</td>
+            <td><button type="button" class="botao-exportar" data-janela="72" data-limiar="70" data-rotulo="BH">Usar 70mm/72h</button></td>
           </tr>
           <tr>
             <td><b>Cubat&atilde;o / Serra do Mar</b><br>Tatizana et al., 1987 <sup>[7]</sup></td>
-            <td>Curva que combina o acumulado de 84h com a intensidade hor&aacute;ria. Foi a base do PPDC de
+            <td>A curva combina o acumulado de 84h com a intensidade hor&aacute;ria. Ela foi a base do PPDC de
               Cubat&atilde;o.</td>
             <td>N&atilde;o d&aacute;: pede intensidade hor&aacute;ria.</td>
           </tr>
@@ -371,38 +377,38 @@
       </table>
     </div>
     <p class="nota-tutorial">
-      Crit&eacute;rios mudam (Santos baixou de 100 para 80mm em 2017). Antes de usar um deles para decidir
-      algo, confira a vers&atilde;o em vigor com o &oacute;rg&atilde;o respons&aacute;vel.
+      Os crit&eacute;rios mudam: Santos baixou de 100 para 80mm em 2017. Confirme a vers&atilde;o em vigor com o
+      &oacute;rg&atilde;o respons&aacute;vel antes de usar um crit&eacute;rio para decidir algo.
     </p>
 
     <h3>3. Por que acumulado, e por que 72h</h3>
     <ul>
-      <li><b>O solo guarda a chuva.</b> Guidicini &amp; Iwasa (1977), estudando a Serra do Mar, mostraram que
-        o mesmo epis&oacute;dio de chuva derruba ou n&atilde;o uma encosta conforme o quanto j&aacute; choveu antes. Solo
-        encharcado precisa de menos chuva para romper <sup>[8]</sup>. Por isso os
+      <li><b>O solo guarda a chuva.</b> Guidicini &amp; Iwasa (1977) estudaram a Serra do Mar e mostraram
+        o seguinte: o mesmo epis&oacute;dio de chuva derruba ou n&atilde;o uma encosta, conforme o quanto j&aacute;
+        choveu antes. O solo encharcado precisa de menos chuva para romper <sup>[8]</sup>. Por isso os
         sistemas brasileiros olham acumulados de 24, 48 ou 72h, e n&atilde;o s&oacute; a chuva do dia
         <sup>[9]</sup>.</li>
-      <li><b>A intensidade &eacute; o gatilho.</b> Tatizana et al. (1987) em Cubat&atilde;o, e estudos do Cemaden
-        depois, apontam que os escorregamentos rasos costumam disparar num pico de chuva forte sobre um
-        solo j&aacute; &uacute;mido. Em Jaragu&aacute; do Sul (SC), 80% dos eventos longos com deslizamento tiveram pico de
-        pelo menos ~20mm em 1h <sup>[9]</sup>. O acumulado diz que o terreno est&aacute;
-        pronto; a intensidade diz quando ele cede.</li>
-      <li><b>Limiar &eacute; um piso estat&iacute;stico, n&atilde;o uma linha de corte.</b> Na literatura internacional
-        (Caine, 1980; Guzzetti et al., 2008), limiar &eacute; a chuva m&iacute;nima acima da qual escorregamentos
-        passam a acontecer numa regi&atilde;o <sup>[10], [11]</sup>. Abaixo dele ainda pode
-        haver ruptura, sobretudo em talude de corte e aterro; acima dele, muitas encostas ficam de p&eacute;.</li>
+      <li><b>A intensidade &eacute; o gatilho.</b> Tatizana et al. (1987), em Cubat&atilde;o, e estudos
+        posteriores do Cemaden apontam o mesmo: o escorregamento raso dispara num pico de chuva forte
+        sobre solo j&aacute; &uacute;mido. Em Jaragu&aacute; do Sul (SC), 80% dos eventos longos com deslizamento tiveram
+        pico de ao menos ~20mm em 1h <sup>[9]</sup>. O acumulado diz que o terreno est&aacute; pronto. A
+        intensidade diz quando ele cede.</li>
+      <li><b>O limiar &eacute; um piso estat&iacute;stico, n&atilde;o uma linha de corte.</b> Na literatura internacional
+        (Caine, 1980; Guzzetti et al., 2008), o limiar &eacute; a chuva m&iacute;nima acima da qual os
+        escorregamentos passam a acontecer numa regi&atilde;o <sup>[10], [11]</sup>. Abaixo dele ainda h&aacute;
+        ruptura, sobretudo em talude de corte e em aterro. Acima dele, muitas encostas ficam de p&eacute;.</li>
     </ul>
 
     <h3>4. Os limites do ORCA</h3>
     <ul>
-      <li><b>Chuva modelada, n&atilde;o medida.</b> Os crit&eacute;rios acima foram calibrados com pluvi&ocirc;metro. A
-        Open-Meteo estima a chuva por coordenada e tende a suavizar temporais localizados: um setor que
-        aparece com 70mm pode ter recebido bem mais.</li>
-      <li><b>S&oacute; 24h e 72h.</b> N&atilde;o h&aacute; chuva hor&aacute;ria nem 96h na r&eacute;gua, ent&atilde;o os crit&eacute;rios de
-        intensidade ficam de fora.</li>
-      <li><b>Chuva n&atilde;o &eacute; o n&iacute;vel de alerta.</b> Os n&iacute;veis oficiais combinam chuva com vistoria de
-        campo, previs&atilde;o e ocorr&ecirc;ncias registradas. Passar do limiar no ORCA &eacute; motivo para olhar com
-        aten&ccedil;&atilde;o, n&atilde;o um alerta. Em emerg&ecirc;ncia, ligue <b>199</b> (Defesa Civil) e acompanhe o
+      <li><b>A chuva &eacute; modelada, n&atilde;o medida.</b> Os crit&eacute;rios acima foram calibrados com
+        pluvi&ocirc;metro. A Open-Meteo estima a chuva por coordenada e tende a suavizar o temporal
+        localizado: um setor com 70mm na tela pode ter recebido bem mais.</li>
+      <li><b>A r&eacute;gua tem s&oacute; 24h e 72h.</b> N&atilde;o h&aacute; chuva hor&aacute;ria nem acumulado de 96h, ent&atilde;o os
+        crit&eacute;rios de intensidade ficam de fora.</li>
+      <li><b>A chuva n&atilde;o &eacute; o n&iacute;vel de alerta.</b> Os n&iacute;veis oficiais combinam a chuva com vistoria
+        de campo, previs&atilde;o e ocorr&ecirc;ncias registradas. Passar do limiar no ORCA &eacute; motivo para olhar
+        com aten&ccedil;&atilde;o, n&atilde;o um alerta. Em emerg&ecirc;ncia, ligue <b>199</b> (Defesa Civil) e acompanhe o
         Cemaden e a Defesa Civil do seu munic&iacute;pio.</li>
     </ul>
 
@@ -1806,6 +1812,39 @@
     if (ev.target.closest("#btnAgora")) atualizarAgora();
   });
 
+  /* ------------------------------------------------ critérios da literatura
+
+     As opções nascem dos botões da aba Tutorial, para não existir uma segunda
+     lista que saia de sincronia com a tabela. Pares repetidos (o PPDC-SP usa
+     também 100 e 80) ficam com o rótulo do primeiro, então cada combinação de
+     janela e limiar aparece uma vez só. */
+
+  function montarCriterios() {
+    const select = document.getElementById("criterioSelect");
+    const vistos = new Set();
+    const opcoes = ['<option value="">Personalizado</option>'];
+    document.querySelectorAll("#vistaTutorial button[data-rotulo]").forEach(b => {
+      const chave = `${b.dataset.janela}|${b.dataset.limiar}`;
+      if (vistos.has(chave)) return;
+      vistos.add(chave);
+      const padrao = chave === "72|100" ? " (padrão do ORCA)" : "";
+      opcoes.push(
+        `<option value="${chave}">${escaparHtml(b.dataset.rotulo)} · ` +
+        `${b.dataset.limiar}mm/${b.dataset.janela}h${padrao}</option>`
+      );
+    });
+    select.innerHTML = opcoes.join("");
+    sincronizarCriterio();
+  }
+
+  /* Mexer no slider ou na janela à mão cai em "Personalizado": o select mostra
+     onde a régua está, não a última escolha. */
+  function sincronizarCriterio() {
+    const select = document.getElementById("criterioSelect");
+    const chave = `${estado.janela}|${estado.limiar}`;
+    select.value = [...select.options].some(o => o.value === chave) ? chave : "";
+  }
+
   function renderizarTudo() {
     const { filtrados, emAtencao, alertaPrevisto } = calcularRecorte(estado.municipio);
 
@@ -1815,6 +1854,7 @@
     renderizarTabela(emAtencao, alertaPrevisto);
     if (!estado.municipio) renderizarListaMunicipios();
     sincronizarAgora();
+    sincronizarCriterio();
     agendarRenderizarSetoresCompletoEstado();
   }
 
@@ -2358,20 +2398,29 @@
     else window.ORCA_atualizarTemaAreas?.();
   });
 
-  // Botões do tutorial: aciona os próprios controles, assim a régua e a janela
-  // seguem passando por um caminho só.
+  /* Aciona os próprios controles, assim a régua e a janela seguem passando por
+     um caminho só. Usado pelos botões da aba Tutorial e pelo select do topo. */
+  function aplicarCriterio(janela, limiar, irParaMapa) {
+    document.querySelector(`#janelaToggle button[data-janela="${janela}"]`).click();
+    const slider = document.getElementById("limiarSlider");
+    slider.value = limiar;
+    slider.dispatchEvent(new Event("input"));
+    if (irParaMapa) document.querySelector('#abas button[data-vista="vistaMapa"]').click();
+  }
+
   document.getElementById("vistaTutorial").addEventListener("click", ev => {
     const botao = ev.target.closest("button[data-limiar]");
-    if (!botao) return;
-    document.querySelector(`#janelaToggle button[data-janela="${botao.dataset.janela}"]`).click();
-    const slider = document.getElementById("limiarSlider");
-    slider.value = botao.dataset.limiar;
-    slider.dispatchEvent(new Event("input"));
-    document.querySelector('#abas button[data-vista="vistaMapa"]').click();
+    if (botao) aplicarCriterio(botao.dataset.janela, botao.dataset.limiar, true);
+  });
+
+  document.getElementById("criterioSelect").addEventListener("change", ev => {
+    const [janela, limiar] = ev.target.value.split("|");
+    if (limiar) aplicarCriterio(janela, limiar, false);
   });
 
   aplicarTema(temaAtual());
   montarTicks();
+  montarCriterios();
   document.getElementById("botaoTema").addEventListener("click", alternarTema);
   configurarBuscaMunicipios();
   configurarNavegacao();
