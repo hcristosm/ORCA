@@ -508,17 +508,6 @@ testo e corrijo o rumo quando o resultado não bate com a realidade do dado.
 Achei melhor deixar isso claro do que fingir o contrário. Se você encontrar algo
 estranho no código, provavelmente é isso. Um issue é bem-vindo.
 
-## Sobre a linguagem deste texto
-
-Este README segue, em boa parte, o estilo da norma ASD-STE100 (Simplified
-Technical English): frases curtas, voz ativa, tempo presente, uma ideia por
-frase e o mesmo termo sempre para a mesma coisa. "Setor", "limiar", "run" e
-"UF" significam uma coisa só em todo o texto.
-
-A norma não é aplicada ao pé da letra. As seções "Sobre" e "Sobre como isso foi
-feito" mantêm voz pessoal. O objetivo é um texto fácil de ler, inclusive para
-quem não tem o português como primeira língua e para um agente de IA, sem soar
-robótico. Se você editar este arquivo, mantenha o mesmo estilo.
 
 ## Contribuindo
 
