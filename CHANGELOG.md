@@ -14,6 +14,9 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ### FEATURES
 - feat(dashboard): seletor "Critério" no cabeçalho, ao lado da Janela, com os limiares da literatura que antes só existiam como botões dentro da aba Tutorial (Santos 80mm/72h, Tamoios 100mm/72h, PPDC-SP 120mm/72h, Rio 125mm/24h, BH 70mm/72h). As opções nascem dos próprios botões da tabela, então não há uma segunda lista para sair de sincronia; pares repetidos aparecem uma vez só. Mexer no slider ou na janela à mão volta o seletor para "Personalizado"
+- feat(dashboard): limiar e janela vão no link (`#/<uf>/<município>?l=80&j=72`), então o link compartilhado abre com a mesma régua. Mexer no limiar ou na janela atualiza a URL com replaceState, sem encher o Voltar; Voltar/Avançar restauram o critério de cada entrada. Valor inválido na URL é ignorado ou ajustado pelo slider (0–300, passo 5)
+- feat(dashboard): sem link (atalho do app instalado, endereço digitado), o dashboard reabre na última UF, município e critério, guardados no localStorage
+- feat(dashboard): aba aberta há mais de 30 min recarrega sozinha depois de 5 min sem interação, e a URL devolve UF, município e critério. Não recarrega sem rede (sonda `ufs_disponiveis.json` antes) nem com áreas em "Minhas áreas", que se perderiam
 
 ### FIXES
 - fix(dashboard): camada viva que falhava ficava em cache como ausente pelo resto da sessão, então a caixa só voltava recarregando a página. Agora só o sucesso é cacheado: a próxima montagem do mapa (troca de UF, Voltar/Avançar) tenta de novo e a camada volta sozinha quando a fonte se restabelece

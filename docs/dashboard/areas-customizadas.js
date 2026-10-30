@@ -278,6 +278,7 @@
   }
 
   window.ORCA_atualizarTemaAreas = renderizarMapaAreas;
+  window.ORCA_temAreas = () => areas.length > 0;
 
   document.getElementById("cardsAreas").addEventListener("click", ev => {
     const remover = ev.target.closest("button[data-remover]");

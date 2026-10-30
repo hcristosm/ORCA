@@ -95,8 +95,16 @@ como qualquer programa.
   "Usar Xmm/Yh". O botão aplica a janela e o limiar, e volta ao mapa.
 - Busca município em todo o Brasil, não só na UF selecionada. Se você escolher
   uma cidade de outro estado, o dashboard troca a UF sozinho.
-- Guarda a navegação na URL (`#/<uf>/<município>`). Você usa Voltar e Avançar do
-  navegador, compartilha o link e clica na trilha.
+- Guarda a navegação na URL (`#/<uf>/<município>?l=<limiar>&j=<janela>`). Você
+  usa Voltar e Avançar do navegador, compartilha o link e clica na trilha. O link
+  leva o limiar e a janela, então abre com a mesma régua de quem mandou. Mexer no
+  limiar ou na janela não cria entrada no Voltar.
+- Reabre onde você parou. Sem link (atalho do app instalado, endereço digitado),
+  o dashboard volta à última UF, município e critério.
+- Recarrega sozinho a aba aberta há mais de 30 minutos, quando ninguém mexe nela
+  há 5 minutos. Assim uma tela de monitoramento não fica com a chuva e o radar de
+  horas atrás. Ele não recarrega sem rede nem com áreas em "Minhas áreas", que se
+  perderiam.
 
 **Monitoramento ao vivo**
 

@@ -470,7 +470,17 @@
     }
     // Link compartilhado/recarga: a URL manda na UF e no município iniciais. Um
     // município que não exista na UF é descartado em carregarDados(), já com os setores.
+    // Sem link (atalho do app instalado, endereço digitado), reabre onde a última visita parou.
+    if (!location.hash) {
+      try {
+        const salvo = localStorage.getItem(CHAVE_ULTIMA_VISITA);
+        if (salvo && salvo.startsWith("#/")) history.replaceState(null, "", salvo);
+      } catch (e) {
+        // armazenamento ou history bloqueados: abre no padrão.
+      }
+    }
     const daUrl = lerNavegacaoDaUrl();
+    if (daUrl) restaurarCriterio(daUrl);
     if (daUrl && ufsDisponiveis.includes(daUrl.uf)) {
       UF = daUrl.uf;
       slugMunicipioPendente = daUrl.slugMunicipio;
@@ -555,21 +565,47 @@
     return normalizarNome(nome).replace(/ /g, "-");
   }
 
+  // `#/<uf>/<slug>?l=<limiar>&j=<janela>`: o critério vai junto para o link
+  // compartilhado abrir com a mesma régua de quem mandou.
   function lerNavegacaoDaUrl() {
-    const partes = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+    const [caminho, consulta] = location.hash.replace(/^#\/?/, "").split("?");
+    const partes = caminho.split("/").filter(Boolean);
     if (!partes.length) return null;
+    const params = new URLSearchParams(consulta);
+    const criterio = { limiar: params.get("l"), janela: params.get("j") };
     try {
-      return { uf: partes[0].toLowerCase(), slugMunicipio: decodeURIComponent(partes[1] || "").toLowerCase() };
+      return { uf: partes[0].toLowerCase(), slugMunicipio: decodeURIComponent(partes[1] || "").toLowerCase(), ...criterio };
     } catch (e) {
-      return { uf: partes[0].toLowerCase(), slugMunicipio: "" };
+      return { uf: partes[0].toLowerCase(), slugMunicipio: "", ...criterio };
     }
+  }
+
+  // Critério vindo da URL sem renderizar: quem chama renderiza. Janela fora de
+  // 24/72 é ignorada; o limiar passa pelo slider, que o prende em 0–300 no passo
+  // de 5. Devolve se algo mudou.
+  function restaurarCriterio(alvo) {
+    const antes = `${estado.janela}|${estado.limiar}`;
+    if (alvo.janela === "24" || alvo.janela === "72") {
+      estado.janela = Number(alvo.janela);
+      document.querySelectorAll("#janelaToggle button").forEach(b =>
+        b.classList.toggle("ativo", b.dataset.janela === alvo.janela));
+    }
+    if (alvo.limiar && Number.isFinite(Number(alvo.limiar))) {
+      const slider = document.getElementById("limiarSlider");
+      slider.value = alvo.limiar;
+      estado.limiar = Number(slider.value);
+    }
+    sincronizarCriterio();
+    return antes !== `${estado.janela}|${estado.limiar}`;
   }
 
   function hashAtual() {
     // Enquanto um município vindo da URL aguarda os setores, ele ainda faz parte do estado.
     const slug = estado.municipio ? slugMunicipio(estado.municipio) : slugMunicipioPendente;
-    return `#/${UF}` + (slug ? `/${slug}` : "");
+    return `#/${UF}` + (slug ? `/${slug}` : "") + `?l=${estado.limiar}&j=${estado.janela}`;
   }
+
+  const CHAVE_ULTIMA_VISITA = "orca-ultima-visita";
 
   function sincronizarNavegacao(modo) {
     const hash = hashAtual();
@@ -580,6 +616,11 @@
       } catch (e) {
         // history indisponível (sandbox/iframe): a navegação na tela continua funcionando.
       }
+    }
+    try {
+      localStorage.setItem(CHAVE_ULTIMA_VISITA, hash);
+    } catch (e) {
+      // sem persistência: a próxima visita sem link abre no padrão.
     }
     renderizarTrilha();
   }
@@ -613,6 +654,9 @@
     });
     window.addEventListener("popstate", () => {
       const alvo = lerNavegacaoDaUrl();
+      // Limiar e janela não criam entrada no histórico, mas cada entrada guarda o
+      // critério de quando foi criada: aplicar antes, senão a URL não bate com a tela.
+      const mudouCriterio = alvo ? restaurarCriterio(alvo) : false;
       const uf = alvo && ufsDisponiveis.includes(alvo.uf) ? alvo.uf : ufsDisponiveis[0];
       const slug = alvo ? alvo.slugMunicipio : "";
       if (uf !== UF) {
@@ -631,7 +675,13 @@
       else if (!nome && estado.municipio) {
         document.getElementById("buscaMunicipio").value = "";
         limparMunicipio();
-      } else sincronizarNavegacao("replace");
+      } else {
+        if (mudouCriterio) {
+          renderizarTudo();
+          if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
+        }
+        sincronizarNavegacao("replace");
+      }
     });
   }
 
@@ -2375,11 +2425,14 @@
     document.querySelectorAll("#janelaToggle button").forEach(b => b.classList.toggle("ativo", b === btn));
     renderizarTudo();
     if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
+    sincronizarNavegacao("replace");
   });
 
+  // "replace", não "push": arrastar o slider encheria o Voltar de posições da régua.
   document.getElementById("limiarSlider").addEventListener("input", ev => {
     estado.limiar = Number(ev.target.value);
     renderizarTudo();
+    sincronizarNavegacao("replace");
   });
 
   document.getElementById("listaMunicipios").addEventListener("click", ev => {
@@ -2450,6 +2503,30 @@
   configurarBuscaMunicipios();
   configurarNavegacao();
   ligarFiltrosAvisos();
+
+  /* Aba aberta por horas (tela de sala de monitoramento, aba esquecida) mostrava
+     a chuva e as camadas vivas de quando abriu. Recarrega com o dado passado de
+     30 min -- a idade em que o quadro de raios já é recusado -- mas só com
+     ninguém mexendo há 5 min, e a URL devolve UF, município e critério. Não é por
+     foco da aba: uma tela de monitoramento nunca perde o foco. */
+  const RECARGA_APOS_MS = 30 * 60 * 1000;
+  const OCIOSO_APOS_MS = 5 * 60 * 1000;
+  const carregadaEm = Date.now();
+  let ultimaInteracao = carregadaEm;
+  ["pointerdown", "pointermove", "keydown", "wheel"].forEach(tipo =>
+    window.addEventListener(tipo, () => { ultimaInteracao = Date.now(); }, { capture: true, passive: true }));
+  setInterval(async () => {
+    const agora = Date.now();
+    if (agora - carregadaEm < RECARGA_APOS_MS || agora - ultimaInteracao < OCIOSO_APOS_MS) return;
+    // shortcut: recarregar apagaria as áreas enviadas, então a aba com áreas não se atualiza; resolve com áreas persistidas.
+    if (window.ORCA_temAreas?.()) return;
+    // Recarregar sem rede trocaria o painel pela página de erro do navegador.
+    try {
+      if ((await fetchComTimeout(`data/ufs_disponiveis.json?t=${agora}`)).ok) location.reload();
+    } catch (e) {
+      // fora do ar agora: fica com o que está na tela e tenta no próximo minuto.
+    }
+  }, 60 * 1000);
 
   carregarUfsDisponiveis().then(carregarDados);
 })();

@@ -96,9 +96,19 @@ remove any other program.
   threshold, then returns to the map.
 - It finds municipalities in all of Brazil, not only in the selected state. If
   you select a city in another state, the dashboard changes the state for you.
-- It keeps the navigation in the URL (`#/<state>/<municipality>`). You use the
-  Back and Forward buttons of the browser, you share the link and you click the
-  breadcrumb.
+- It keeps the navigation in the URL
+  (`#/<state>/<municipality>?l=<threshold>&j=<window>`). You use the Back and
+  Forward buttons of the browser, you share the link and you click the
+  breadcrumb. The link carries the threshold and the window, so it opens with
+  the same ruler as the sender. A change of threshold or window does not add a
+  Back entry.
+- It opens where you stopped. With no link (installed app shortcut, typed
+  address), the dashboard goes back to the last state, municipality and
+  criterion.
+- It reloads a tab that is open for more than 30 minutes, when nobody uses it
+  for 5 minutes. Thus a monitoring screen does not show the rainfall and the
+  radar of hours ago. It does not reload with no network or with areas in
+  "Minhas áreas", because these would be lost.
 
 **Live monitoring**
 
