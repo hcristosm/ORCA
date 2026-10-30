@@ -1160,16 +1160,16 @@
   let promessaRadarRainViewer = null;
 
   // Radar RainViewer é overlay opcional (mostra chuva em andamento, sem
-  // relação com os dados de setor/série): busca uma vez por sessão e, se a
-  // API estiver fora do ar, some do controle de camadas em vez de quebrar o
-  // mapa -- coerente com "funcionar sem paus" (ver CLAUDE.md).
+  // relação com os dados de setor/série): cacheia só o sucesso e, se a API
+  // estiver fora do ar, o controle de camadas anuncia a ausência em vez de o
+  // mapa quebrar -- coerente com "funcionar sem paus" (ver CLAUDE.md).
   function carregarRadarRainViewer() {
     if (!promessaRadarRainViewer) {
       promessaRadarRainViewer = fetchComTimeout(RAINVIEWER_API_URL, TIMEOUT_CAMADA_VIVA_MS)
         .then(r => r.json())
         .then(dados => {
           const frames = dados.radar && dados.radar.past;
-          if (!frames || !frames.length) return null;
+          if (!frames || !frames.length) { console.warn("RainViewer respondeu sem quadros de radar, camada de radar omitida"); return null; }
           const ultimo = frames[frames.length - 1];
           // Esquema de cor 6 = paleta clássica de radar (verde/amarelo/vermelho);
           // o esquema 2 (padrão da RainViewer) é um azul apagado, quase invisível
