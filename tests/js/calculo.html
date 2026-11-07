@@ -17,8 +17,12 @@
 <ol id="casos"></ol>
 <p id="resultado">rodando…</p>
 
-<script src="../../docs/dashboard/comum.js"></script>
-<script src="../../docs/dashboard/calculo.js"></script>
+<script>
+  // Sempre a versão do disco: o http.server do Python deixa o navegador cachear.
+  for (const arquivo of ["comum.js", "calculo.js"]) {
+    document.write(`<script src="../../docs/dashboard/${arquivo}?t=${Date.now()}"><\/script>`);
+  }
+</script>
 <script>
 (function () {
   "use strict";
@@ -43,6 +47,24 @@
   teste("ponto fora mede até o vértice", () => perto(C().distanciaPontoPoligonoPx({x:13,y:14}, quadrado), 5, 1e-9));
   const comFuro = [quadrado[0], [{x:3,y:3},{x:7,y:3},{x:7,y:7},{x:3,y:7}]];
   teste("ponto no furo fica fora", () => perto(C().distanciaPontoPoligonoPx({x:5,y:5}, comFuro), 2, 1e-9));
+
+  /* ---------------------------------- Open-Meteo, vários pontos (Tarefa 5) */
+  const S = (...args) => window.ORCA.seriesDaRespostaOpenMeteo(...args);
+  const horaria = valores => ({ hourly: { time: valores.map((_, i) => `2026-11-07T0${i}:00`), precipitation: valores } });
+  teste("objeto único vira lista de uma série", () => {
+    const r = S(horaria([1.5]), 1);
+    igual(r.length, 1);
+    igual(r[0][0].chuvaMm, 1.5);
+  });
+  teste("lista na ordem pedida", () => {
+    const r = S([horaria([1]), horaria([2])], 2);
+    igual(r[0][0].chuvaMm, 1);
+    igual(r[1][0].chuvaMm, 2);
+  });
+  teste("item sem hourly vira null", () => igual(S([horaria([1]), {}], 2)[1], null));
+  teste("quantidade errada lança", () => lanca(() => S([horaria([1])], 2)));
+  teste("precipitação não numérica vira null", () => igual(S(horaria([null]), 1)[0][0].chuvaMm, null));
+  teste("hora sem fuso é lida como UTC", () => igual(S(horaria([1]), 1)[0][0].dataHoraMs, Date.UTC(2026, 10, 7, 0)));
 
   window.addEventListener("load", () => {
     const lista = document.getElementById("casos");
