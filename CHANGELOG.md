@@ -13,6 +13,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 ## [Unreleased]
 
 ### FEATURES
+- feat(dashboard): casca do celular (abaixo de 768 px). Barra fina com busca e botão de ajustes no topo; abas Perto, Mapa, Alertas e Mais embaixo; mapa ocupando a tela; gaveta com Estado, Critério, Janela, régua do limiar e camadas como interruptores. Os controles existentes são movidos, não clonados, e voltam ao lugar no desktop, que fica idêntico. A aba vai no link (`v=`); link antigo com município abre no Mapa, e o app aberto sem link abre em Perto. Fechar a gaveta pelo Voltar do Android não desfaz o critério escolhido nela
 - feat(dashboard): seletor "Critério" no cabeçalho, ao lado da Janela, com os limiares da literatura que antes só existiam como botões dentro da aba Tutorial (Santos 80mm/72h, Tamoios 100mm/72h, PPDC-SP 120mm/72h, Rio 125mm/24h, BH 70mm/72h). As opções nascem dos próprios botões da tabela, então não há uma segunda lista para sair de sincronia; pares repetidos aparecem uma vez só. Mexer no slider ou na janela à mão volta o seletor para "Personalizado"
 - feat(dashboard): limiar e janela vão no link (`#/<uf>/<município>?l=80&j=72`), então o link compartilhado abre com a mesma régua. Mexer no limiar ou na janela atualiza a URL com replaceState, sem encher o Voltar; Voltar/Avançar restauram o critério de cada entrada. Valor inválido na URL é ignorado ou ajustado pelo slider (0–300, passo 5)
 - feat(dashboard): sem link (atalho do app instalado, endereço digitado), o dashboard reabre na última UF, município e critério, guardados no localStorage

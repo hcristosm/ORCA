@@ -1214,3 +1214,225 @@ footer {
   font-size: var(--micro);
   color: var(--tinta-media);
 }
+
+/* ===================================================== casca do celular */
+/* Barra fina, abas embaixo, gaveta de ajustes e vistas Perto/Mais. Fora do
+   celular tudo isto some e o layout de desktop fica intacto (ver movel.js). */
+
+.barra-movel, .abas-movel, .gaveta, .gaveta-veu, .vista-movel { display: none; }
+
+@media (max-width: 767px) {
+  :root { --altura-barra: 60px; --altura-abas: 56px; }
+
+  .faceplate { display: none; }
+  body { padding-bottom: calc(var(--altura-abas) + env(safe-area-inset-bottom)); }
+
+  /* -------- barra fina */
+  .barra-movel {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    position: sticky;
+    top: 0;
+    z-index: 600;
+    height: var(--altura-barra);
+    padding: 0 var(--s3);
+    background: var(--superficie);
+    border-bottom: var(--fio) solid var(--fio-cor);
+  }
+  .barra-marca { font-family: var(--font-cond); font-size: var(--step-2); letter-spacing: 0.04em; }
+  .barra-marca[hidden] { display: none; }
+  .barra-busca { flex: 1; min-width: 0; }
+  .barra-busca .busca input { width: 100%; height: 44px; font-size: 16px; }
+  .barra-botao {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    color: var(--tinta-media);
+    background: var(--base);
+    border: var(--fio) solid var(--fio-cor);
+    border-radius: var(--raio);
+    cursor: pointer;
+  }
+  .barra-botao[hidden] { display: none; }
+  .barra-botao .icone { width: 20px; height: 20px; }
+
+  /* -------- abas embaixo */
+  .abas-movel {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 600;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--superficie);
+    border-top: var(--fio) solid var(--fio-cor);
+  }
+  .abas-movel button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: var(--altura-abas);
+    font-family: var(--font-ui);
+    font-size: var(--micro);
+    color: var(--tinta-media);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .abas-movel button .icone { width: 22px; height: 22px; }
+  .abas-movel button.ativo { color: var(--agua); font-weight: 600; }
+
+  /* -------- vistas */
+  body[data-vista-movel] main { padding: var(--s3); }
+  body[data-vista-movel="perto"] #vistaPerto,
+  body[data-vista-movel="mais"] #vistaMais { display: block; }
+  .vista-movel[hidden] { display: none !important; }
+  body[data-vista-movel="perto"] #vistaMapa,
+  body[data-vista-movel="mais"]:not([data-sub-mais]) #vistaMapa { display: none; }
+
+  /* Mapa: só o mapa, na altura que sobra entre a barra e as abas. */
+  body[data-vista-movel="mapa"] main { padding: 0; }
+  body[data-vista-movel="mapa"] .shell { gap: 0; }
+  body[data-vista-movel="mapa"] .shell > :not(.coluna-mapa),
+  body[data-vista-movel="mapa"] .coluna-contexto > * { display: none; }
+  body[data-vista-movel="mapa"] #mapa {
+    height: calc(100dvh - var(--altura-barra) - var(--altura-abas) - env(safe-area-inset-bottom));
+    min-height: 320px;
+    border: 0;
+    border-radius: 0;
+  }
+  /* "Tela cheia" não faz sentido: o mapa já ocupa a tela. */
+  body[data-vista-movel] .toolbar-mapa button[data-acao="cheio"] { display: none; }
+  body[data-vista-movel] #mapa .leaflet-control-zoom { display: none; }
+
+  /* Alertas: contadores, tabelas, avisos e municípios; o mapa fica na aba Mapa. */
+  body[data-vista-movel="alertas"] .coluna-mapa { display: none; }
+
+  /* -------- Mais */
+  .lista-mais { display: flex; flex-direction: column; }
+  .lista-mais button,
+  .lista-mais a {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    min-height: 56px;
+    padding: 0 var(--s4);
+    font-family: var(--font-ui);
+    font-size: var(--step-1);
+    color: var(--tinta);
+    text-align: left;
+    text-decoration: none;
+    background: var(--superficie);
+    border: var(--fio) solid var(--fio-cor);
+    border-bottom-width: 0;
+    cursor: pointer;
+  }
+  .lista-mais > :first-child { border-radius: var(--raio) var(--raio) 0 0; }
+  .lista-mais > :last-child { border-bottom-width: var(--fio); border-radius: 0 0 var(--raio) var(--raio); }
+  .lista-mais .icone { width: 20px; height: 20px; color: var(--tinta-media); }
+  .vista-movel-provisorio { color: var(--tinta-fraca); text-align: center; padding: var(--s6) 0; }
+
+  /* -------- gaveta de ajustes */
+  .gaveta-veu {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 700;
+    background: rgba(20, 25, 26, 0.45);
+  }
+  .gaveta {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 710;
+    max-height: calc(100dvh - 48px);
+    padding: 0 var(--s4) calc(var(--s4) + env(safe-area-inset-bottom));
+    background: var(--superficie);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+    transition: transform var(--transicao);
+  }
+  .gaveta-veu[hidden], .gaveta[hidden] { display: none; }
+  body.gaveta-aberta { overflow: hidden; }
+  .gaveta-alca { display: grid; place-items: center; height: 24px; touch-action: none; cursor: grab; }
+  .gaveta-alca span { width: 40px; height: 4px; border-radius: 2px; background: var(--fio-cor); }
+  .gaveta-cabecalho { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--s2); }
+  .gaveta-cabecalho h2 {
+    margin: 0;
+    font-family: var(--font-cond);
+    font-size: var(--step-1);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .gaveta-corpo { overflow-y: auto; display: flex; flex-direction: column; gap: var(--s4); padding-bottom: var(--s2); }
+  .gaveta-corpo .campo select { width: 100%; height: 48px; max-width: none; font-size: 16px; }
+  .gaveta-corpo .toggle-janela { display: grid; grid-template-columns: 1fr 1fr; }
+  .gaveta-corpo .toggle-janela button { height: 48px; }
+  .gaveta-corpo .bloco-regua { border: 0; background: none; }
+  .gaveta-corpo #limiarSlider { min-height: 44px; }
+  .gaveta-camadas h3 {
+    margin: 0 0 var(--s1);
+    font-family: var(--font-cond);
+    font-size: var(--micro);
+    font-weight: 600;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--tinta-fraca);
+  }
+  /* #gavetaCamadas: o leaflet.css carrega depois e pintaria o texto de #333. */
+  #gavetaCamadas .leaflet-control-layers { color: var(--tinta); }
+  .gaveta-camadas .leaflet-control-layers {
+    position: static;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: none;
+    font-size: var(--step-1);
+  }
+  .gaveta-camadas .leaflet-control-layers label {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    border-top: var(--fio) solid var(--fio-cor);
+  }
+  .gaveta-camadas .leaflet-control-layers label > span,
+  .gaveta-camadas .leaflet-control-layers label > div { display: flex; align-items: center; gap: var(--s3); width: 100%; }
+  /* Caixinha vira interruptor: só aparência; o <input> continua sendo o checkbox do Leaflet. */
+  .gaveta-camadas input[type="checkbox"] {
+    appearance: none;
+    order: 2;
+    margin-left: auto;
+    width: 44px;
+    height: 26px;
+    border-radius: 13px;
+    background: var(--fio-cor);
+    position: relative;
+    cursor: pointer;
+    flex: none;
+  }
+  .gaveta-camadas input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--superficie);
+    transition: left var(--transicao);
+  }
+  .gaveta-camadas input[type="checkbox"]:checked { background: var(--agua); }
+  .gaveta-camadas input[type="checkbox"]:checked::after { left: 21px; }
+  .gaveta-camadas .leaflet-control-layers-separator { display: none; }
+}

@@ -106,7 +106,35 @@
   </div>
 </header>
 
+<!-- Celular (< 768 px): barra fina no topo e abas embaixo. Fora do celular o CSS
+     esconde tudo isto e o cabeçalho acima volta a mandar. Ver movel.js. -->
+<header class="barra-movel" id="barraMovel">
+  <button type="button" class="barra-botao" id="barraVoltar" aria-label="Voltar ao estado" hidden>
+    <svg class="icone"><use href="icons/sprite.svg#icon-corner-up-left"></use></svg></button>
+  <b class="barra-marca" id="barraMarca">ORCA</b>
+  <div class="barra-busca" id="barraBusca"></div>
+  <button type="button" class="barra-botao" id="barraAjustes" aria-label="Ajustes" aria-controls="gaveta" aria-expanded="false">
+    <svg class="icone"><use href="icons/sprite.svg#icon-sliders"></use></svg></button>
+</header>
+
 <main id="vistas">
+
+<div class="vista-movel" id="vistaPerto" hidden>
+  <p class="vista-movel-provisorio">Em breve.</p>
+</div>
+
+<div class="vista-movel" id="vistaMais" hidden>
+  <nav class="lista-mais" aria-label="Mais op&ccedil;&otilde;es">
+    <button type="button" data-mais="vistaAreas">
+      <svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>Minhas &aacute;reas</button>
+    <button type="button" data-mais="vistaTutorial">
+      <svg class="icone"><use href="icons/sprite.svg#icon-info"></use></svg>Tutorial</button>
+    <button type="button" data-mais="tema">
+      <svg class="icone"><use href="icons/sprite.svg#icon-moon"></use></svg>Alternar tema claro/escuro</button>
+    <a href="https://github.com/hcristosm/ORCA#readme">
+      <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg>Sobre o projeto</a>
+  </nav>
+</div>
 
 <div class="shell" id="vistaMapa">
 
@@ -118,7 +146,7 @@
       <ol class="trilha" id="trilha"></ol>
     </nav>
 
-    <section class="bloco">
+    <section class="bloco bloco-contadores">
       <div class="bloco-cabecalho">
         <h2 id="tituloRecorte">Estado inteiro</h2>
         <span class="contagem" id="contagemRecorte"></span>
@@ -128,7 +156,7 @@
     </section>
 
     <!-- A r&eacute;gua: onde o estado est&aacute;, em rela&ccedil;&atilde;o &agrave; linha que voc&ecirc; desenhou. -->
-    <section class="bloco">
+    <section class="bloco bloco-regua">
       <div class="regua">
         <div class="regua-cabecalho">
           <h1 class="regua-titulo" id="reguaTitulo">Chuva acumulada por setor de risco</h1>
@@ -431,6 +459,28 @@
 
 </main>
 
+<div class="gaveta-veu" id="gavetaVeu" hidden></div>
+<div class="gaveta" id="gaveta" role="dialog" aria-modal="true" aria-labelledby="gavetaTitulo" hidden>
+  <div class="gaveta-alca" id="gavetaAlca"><span></span></div>
+  <div class="gaveta-cabecalho">
+    <h2 id="gavetaTitulo">Ajustes</h2>
+    <button type="button" class="barra-botao" id="gavetaFechar" aria-label="Fechar ajustes">
+      <svg class="icone"><use href="icons/sprite.svg#icon-x"></use></svg></button>
+  </div>
+  <div class="gaveta-corpo" id="gavetaCorpo"></div>
+</div>
+
+<nav class="abas-movel" id="abasMovel" aria-label="Se&ccedil;&otilde;es">
+  <button type="button" data-vista-movel="perto">
+    <svg class="icone"><use href="icons/sprite.svg#icon-crosshair"></use></svg>Perto</button>
+  <button type="button" data-vista-movel="mapa">
+    <svg class="icone"><use href="icons/sprite.svg#icon-map-pin"></use></svg>Mapa</button>
+  <button type="button" data-vista-movel="alertas">
+    <svg class="icone"><use href="icons/sprite.svg#icon-triangle-alert"></use></svg>Alertas</button>
+  <button type="button" data-vista-movel="mais">
+    <svg class="icone"><use href="icons/sprite.svg#icon-menu"></use></svg>Mais</button>
+</nav>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -441,6 +491,7 @@
 <script src="comum.js"></script>
 <script src="relatorio.js"></script>
 <script src="areas-customizadas.js"></script>
+<script src="movel.js"></script>
 
 <script>
 (function () {
@@ -602,7 +653,10 @@
   function hashAtual() {
     // Enquanto um município vindo da URL aguarda os setores, ele ainda faz parte do estado.
     const slug = estado.municipio ? slugMunicipio(estado.municipio) : slugMunicipioPendente;
-    return `#/${UF}` + (slug ? `/${slug}` : "") + `?l=${estado.limiar}&j=${estado.janela}`;
+    // `v` (aba do celular) é de movel.js: preservar, senão cada navegação a apagaria.
+    const v = new URLSearchParams(location.hash.split("?")[1] || "").get("v");
+    return `#/${UF}` + (slug ? `/${slug}` : "") + `?l=${estado.limiar}&j=${estado.janela}` +
+      (v ? `&v=${encodeURIComponent(v)}` : "");
   }
 
   const CHAVE_ULTIMA_VISITA = "orca-ultima-visita";
@@ -1721,6 +1775,7 @@
     mapa.on("overlayremove", ev => {
       if (ev.name === "Setores do estado inteiro") { camadaSetoresTodos.clearLayers(); atualizarLegenda(); }
     });
+    document.dispatchEvent(new CustomEvent("orca:mapa-criado"));
   }
 
   // Toolbar do mapa: as três ações que se quer no mapa, no mapa — voltar ao
@@ -1931,6 +1986,9 @@
     const select = document.getElementById("criterioSelect");
     const chave = `${estado.janela}|${estado.limiar}`;
     select.value = [...select.options].some(o => o.value === chave) ? chave : "";
+    document.dispatchEvent(new CustomEvent("orca:criterio", {
+      detail: { janela: estado.janela, limiar: estado.limiar },
+    }));
   }
 
   function renderizarTudo() {
@@ -2540,6 +2598,15 @@
       // fora do ar agora: fica com o que está na tela e tenta no próximo minuto.
     }
   }, 60 * 1000);
+
+  /* Ganchos para os scripts do celular (movel.js, perto.js): o painel continua
+     dono do estado; eles só leem o critério e pedem ações. */
+  window.ORCA_painel = Object.assign(window.ORCA_painel || {}, {
+    criterio: () => ({ janela: estado.janela, limiar: estado.limiar }),
+    mapaMudouDeTamanho: () => mapa?.invalidateSize(),
+    controleCamadas: () => controleCamadas,
+    sincronizarUrl: () => sincronizarNavegacao("replace"),
+  });
 
   carregarUfsDisponiveis().then(carregarDados);
 })();
