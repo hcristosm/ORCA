@@ -1,0 +1,20 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-07T15:00:00+00:00",
+  "total_setores": 22,
+  "total_municipios": 1,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-07T15:16:39.569270+00:00",
+  "cprm": {
+    "ingerido_em": "2026-11-01T12:21:23.606159+00:00",
+    "setor_mais_recente": "2022-08-10"
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-07T15:00:00+00:00",
+    "consultado_em": "2026-11-07T15:16:39.569270+00:00"
+  },
+  "municipios": [
+    "BRASÍLIA"
+  ]
+}
