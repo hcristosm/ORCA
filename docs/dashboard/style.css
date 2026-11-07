@@ -1337,7 +1337,6 @@ footer {
   .lista-mais > :first-child { border-radius: var(--raio) var(--raio) 0 0; }
   .lista-mais > :last-child { border-bottom-width: var(--fio); border-radius: 0 0 var(--raio) var(--raio); }
   .lista-mais .icone { width: 20px; height: 20px; color: var(--tinta-media); }
-  .vista-movel-provisorio { color: var(--tinta-fraca); text-align: center; padding: var(--s6) 0; }
 
   /* -------- gaveta de ajustes */
   .gaveta-veu {
@@ -1515,4 +1514,127 @@ footer {
   }
   .cartao-acoes a.primario { color: #fff; background: var(--agua); border-color: var(--agua); }
   .cartao-aviso { margin: var(--s2) 0 0; font-size: var(--step-0); color: var(--tinta-media); word-break: break-all; }
+}
+
+/* ------------------------------------------------ Perto de mim (celular) */
+@media (max-width: 767px) {
+  .perto-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s3); }
+  .perto-topo h2 {
+    margin: 0;
+    font-family: var(--font-cond);
+    font-size: var(--step-2);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .perto-aviso {
+    margin: 0 0 var(--s3);
+    padding: var(--s2) var(--s3);
+    font-size: var(--step-0);
+    color: var(--tinta-media);
+    background: var(--superficie-2);
+    border-radius: var(--raio);
+  }
+  .perto-aviso[hidden] { display: none; }
+
+  .perto-veredito {
+    padding: var(--s4);
+    border-radius: 8px;
+    border: var(--fio) solid var(--fio-cor);
+    background: var(--superficie);
+    color: var(--tinta);
+  }
+  .perto-veredito small {
+    display: block;
+    font-size: var(--micro);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .perto-veredito strong { display: block; margin: 2px 0 var(--s2); font-size: 24px; line-height: 1.2; }
+  .perto-veredito p { margin: 0; font-size: var(--step-0); }
+  .perto-veredito .perto-nota { margin-top: var(--s2); font-size: 13px; opacity: 0.9; }
+  .perto-veredito.iminente { background: var(--sinal); border-color: var(--sinal); color: #fff; }
+  .perto-veredito.previsto { background: var(--sinal-fraco); border-color: var(--sinal-fraco); color: #fff; }
+  .perto-veredito.sem-dado { background: var(--superficie-2); color: var(--tinta-media); }
+  .perto-veredito.convite p { margin-bottom: var(--s3); }
+  .perto-carregando { color: var(--tinta-fraca); }
+
+  .perto-botao {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 48px;
+    margin-top: var(--s3);
+    font-family: var(--font-ui);
+    font-size: var(--step-1);
+    font-weight: 600;
+    color: #fff;
+    background: var(--agua);
+    border: 0;
+    border-radius: var(--raio);
+    cursor: pointer;
+  }
+
+  .perto-barra { position: relative; height: 10px; margin: var(--s3) 0 var(--s1); border-radius: 5px; background: rgba(127, 127, 127, 0.3); }
+  .perto-barra i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; }
+  .perto-barra i.barra-agora { background: currentColor; }
+  .perto-barra i.barra-previsto { background: repeating-linear-gradient(45deg, currentColor 0 3px, transparent 3px 6px); opacity: 0.8; }
+  .perto-barra .limiar { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: currentColor; }
+  .perto-barra-rotulos { display: flex; justify-content: space-between; gap: var(--s2); font-family: var(--font-mono); font-size: var(--micro); }
+
+  .perto-lista { margin-top: var(--s4); }
+  .perto-lista[hidden] { display: none; }
+  .perto-secao {
+    display: flex;
+    justify-content: space-between;
+    margin: 0 0 var(--s2);
+    font-family: var(--font-cond);
+    font-size: var(--micro);
+    font-weight: 600;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--tinta-fraca);
+  }
+  .perto-itens { list-style: none; margin: 0; padding: 0; }
+  .perto-item {
+    display: grid;
+    grid-template-columns: 6px minmax(0, 1fr) auto;
+    gap: var(--s3);
+    align-items: center;
+    width: 100%;
+    min-height: 64px;
+    padding: var(--s2) var(--s3) var(--s2) 0;
+    font-family: var(--font-ui);
+    text-align: left;
+    color: var(--tinta);
+    background: var(--superficie);
+    border: var(--fio) solid var(--fio-cor);
+    border-bottom-width: 0;
+    cursor: pointer;
+  }
+  .perto-itens li:first-child .perto-item { border-radius: var(--raio) var(--raio) 0 0; }
+  .perto-itens li:last-child .perto-item { border-bottom-width: var(--fio); border-radius: 0 0 var(--raio) var(--raio); }
+  .perto-itens li:only-child .perto-item { border-radius: var(--raio); }
+  .perto-item .faixa { align-self: stretch; background: var(--fio-cor); }
+  .perto-item.iminente .faixa { background: var(--sinal); }
+  .perto-item.previsto .faixa { background: var(--sinal-fraco); }
+  .perto-item .texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .perto-item .texto b { font-size: var(--step-0); overflow-wrap: anywhere; }
+  .perto-item .texto span { font-size: 13px; color: var(--tinta-media); }
+  .perto-item .texto .nota { font-size: var(--micro); color: var(--tinta-fraca); }
+  .perto-item .onde { font-family: var(--font-mono); font-size: 13px; text-align: right; color: var(--tinta-media); max-width: 9ch; }
+  .perto-item .tag {
+    display: inline-block;
+    padding: 0 5px;
+    font-size: var(--micro);
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #fff;
+    border-radius: 2px;
+  }
+  .perto-item .tag.iminente { background: var(--sinal); }
+  .perto-item .tag.previsto { background: var(--sinal-fraco); }
+  .perto-vazio { margin: 0; padding: var(--s3); font-size: var(--step-0); color: var(--tinta-media); background: var(--superficie); border: var(--fio) solid var(--fio-cor); border-radius: var(--raio); }
+  .perto-vazio[hidden] { display: none; }
 }

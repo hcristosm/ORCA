@@ -120,7 +120,18 @@
 <main id="vistas">
 
 <div class="vista-movel" id="vistaPerto" hidden>
-  <p class="vista-movel-provisorio">Em breve.</p>
+  <div class="perto-topo">
+    <h2>Perto de mim</h2>
+    <button type="button" class="barra-botao" id="pertoLocalizar" aria-label="Consultar de novo pela minha localiza&ccedil;&atilde;o">
+      <svg class="icone"><use href="icons/sprite.svg#icon-crosshair"></use></svg></button>
+  </div>
+  <p class="perto-aviso" id="pertoAviso" hidden></p>
+  <section class="perto-veredito" id="pertoVeredito" aria-live="polite"></section>
+  <section class="perto-lista" id="pertoListaBloco" hidden>
+    <h3 class="perto-secao"><span>Setores oficiais perto</span><span id="pertoContagem"></span></h3>
+    <ul class="perto-itens" id="pertoLista"></ul>
+    <p class="perto-vazio" id="pertoVazio" hidden></p>
+  </section>
 </div>
 
 <div class="vista-movel" id="vistaMais" hidden>
@@ -494,6 +505,7 @@
 <script src="relatorio.js"></script>
 <script src="areas-customizadas.js"></script>
 <script src="movel.js"></script>
+<script src="perto.js"></script>
 
 <script>
 (function () {
@@ -593,6 +605,18 @@
   // carregar fica pendente e abre no fim de carregarDados().
   let setorAberto = "";
   let setorPendente = "";
+  // Município escolhido na BUSCA (não por link, histórico ou lista do "Perto de
+  // mim"): a tela Perto usa o centro dele como ponto quando não há GPS.
+  let anunciarMunicipioAoCarregar = false;
+
+  function anunciarMunicipioBuscado() {
+    if (!estado.municipio) return;
+    const centro = centroideMunicipio(estado.municipio);
+    if (!centro) return;
+    document.dispatchEvent(new CustomEvent("orca:municipio", {
+      detail: { uf: UF, nome: estado.municipio, lat: centro[0], lon: centro[1] },
+    }));
+  }
 
   // Índice da busca nacional: [{uf, nome}] montado a partir do campo `municipios`
   // de cada meta_<uf>.json publicado. Carregado sob demanda (1o foco na busca).
@@ -879,6 +903,10 @@
     renderizarTudo();
     if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
     setorAberto = "";
+    if (anunciarMunicipioAoCarregar) {
+      anunciarMunicipioAoCarregar = false;
+      anunciarMunicipioBuscado();
+    }
     if (setorPendente) {
       const pendente = setorPendente;
       setorPendente = "";
@@ -1128,10 +1156,12 @@
       lista.innerHTML = "";
       if (uf === UF) {
         selecionarMunicipio(nome);
+        anunciarMunicipioBuscado();
         return;
       }
       // Município de outra UF: troca o estado e deixa o município pendente até os
       // setores chegarem (mesmo caminho da navegação por link/histórico).
+      anunciarMunicipioAoCarregar = true;
       trocarUf(uf, slugMunicipio(nome));
       input.value = nome;
       sincronizarNavegacao("push");
