@@ -762,6 +762,12 @@ td.mm { color: var(--sinal); font-weight: 500; }
   border: var(--fio) solid var(--tinta-fraca);
 }
 .legenda .nota { color: var(--tinta-fraca); display: block; margin-top: var(--s2); max-width: 210px; }
+/* Botão de recolher: só existe para o celular (ver bloco "celular"). */
+.legenda .legenda-alternar { display: none; }
+
+/* Isola o empilhamento do Leaflet: os controles dele (z-index 1000) ficam
+   presos ao mapa e não sobem sobre o cabeçalho fixo (z-index 500). */
+#mapa, #mapaAreas { isolation: isolate; }
 
 /* --------------------------------------------------------------- abas */
 
@@ -1109,6 +1115,47 @@ footer {
   .contadores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .contador .valor { font-size: var(--step-3); }
   .regua-leitura { gap: var(--s3); font-size: var(--micro); }
+}
+
+/* ------------------------------------------------------------- celular */
+/* Alvo de toque mínimo de 44 px em tudo o que se toca no celular. */
+@media (max-width: 767px) {
+  .faceplate select,
+  .faceplate input,
+  .botao-tema,
+  .abas button,
+  .toggle-janela button,
+  .filtros-avisos select { min-height: 44px; }
+  .botao-tema, .toggle-janela button { min-width: 44px; }
+  .campo-municipio { flex: 1 1 100%; }
+  /* O leaflet.css carrega depois deste arquivo: o #mapa ganha na especificidade. */
+  #mapa .leaflet-control-zoom a,
+  .toolbar-mapa button { width: 44px; height: 44px; line-height: 44px; }
+  /* O alvo da camada é a linha inteira (o <label>), não a caixinha. */
+  #mapa .leaflet-control-layers label { display: flex; align-items: center; min-height: 44px; }
+  #mapa .leaflet-control-layers label > span,
+  #mapa .leaflet-control-layers label > div { display: flex; align-items: center; gap: var(--s2); }
+  #mapa .leaflet-control-layers input { width: 20px; height: 20px; margin: 0; }
+  /* Fixo, o cabeçalho ocupava um terço da tela por cima do mapa. */
+  .faceplate { position: static; }
+  .botao-exportar,
+  .botao-exportar-linha { min-height: 44px; min-width: 44px; justify-content: center; }
+  footer a { display: inline-block; padding: 15px 0; }
+
+  .legenda { padding: 0; }
+  .legenda .legenda-alternar {
+    display: flex;
+    min-height: 44px;
+    padding: 0 var(--s3);
+    font-family: var(--font-cond);
+    font-weight: 600;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--tinta-media);
+  }
+  .legenda .legenda-conteudo { padding: 0 var(--s3) var(--s3); }
+  .legenda.recolhida .legenda-conteudo { display: none; }
+  .legenda button[data-filtro] { min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

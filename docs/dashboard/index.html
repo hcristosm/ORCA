@@ -1633,14 +1633,27 @@
 
     const legenda = L.control({ position: "bottomleft" });
     legenda.onAdd = function () {
-      legendaDiv = L.DomUtil.create("div", "legenda");
+      // No celular a legenda nasce recolhida: aberta, cobria ~38% do mapa.
+      const recolhida = window.matchMedia("(max-width: 767px)").matches;
+      const caixa = L.DomUtil.create("div", "legenda" + (recolhida ? " recolhida" : ""));
+      caixa.innerHTML =
+        `<button type="button" class="legenda-alternar" aria-expanded="${!recolhida}">Legenda</button>` +
+        `<div class="legenda-conteudo"></div>`;
+      legendaDiv = caixa.querySelector(".legenda-conteudo");
       legendaDiv.innerHTML = conteudoLegenda();
-      L.DomEvent.disableClickPropagation(legendaDiv);
-      legendaDiv.addEventListener("click", ev => {
+      L.DomEvent.disableClickPropagation(caixa);
+      L.DomEvent.disableScrollPropagation(caixa);
+      caixa.addEventListener("click", ev => {
+        const alternar = ev.target.closest("button.legenda-alternar");
+        if (alternar) {
+          const fechada = caixa.classList.toggle("recolhida");
+          alternar.setAttribute("aria-expanded", String(!fechada));
+          return;
+        }
         const botao = ev.target.closest("button[data-filtro]");
         if (botao) alternarFiltro(botao.dataset.filtro);
       });
-      return legendaDiv;
+      return caixa;
     };
     legenda.addTo(mapa);
 

@@ -19,6 +19,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 - feat(dashboard): aba aberta há mais de 30 min recarrega sozinha depois de 5 min sem interação, e a URL devolve UF, município e critério. Não recarrega sem rede (sonda `ufs_disponiveis.json` antes) nem com áreas em "Minhas áreas", que se perderiam
 
 ### FIXES
+- fix(dashboard): no celular, os controles do Leaflet flutuavam sobre o cabeçalho, a busca de município ficava com 48 px ("Bus") e 27 controles tinham menos de 44 px de toque. O mapa isola o próprio empilhamento, o cabeçalho deixa de ser fixo abaixo de 768 px, todo controle tocável passa a ter 44 px e a legenda nasce recolhida num botão "Legenda" (aberta, cobria ~38% do mapa). Desktop inalterado
 - fix(dashboard): camada viva que falhava ficava em cache como ausente pelo resto da sessão, então a caixa só voltava recarregando a página. Agora só o sucesso é cacheado: a próxima montagem do mapa (troca de UF, Voltar/Avançar) tenta de novo e a camada volta sozinha quando a fonte se restabelece
 - fix(dashboard): camada viva que não vinha (raios do GLM, radar da RainViewer) sumia do controle de camadas sem deixar rastro na tela -- o aviso ficava só no console, então faltava a caixa de seleção e nada dizia por quê. O controle passa a mostrar "<camada>: fonte sem dado agora" no lugar da caixa. Os dois caminhos silenciosos do GLM (resposta 200 sem quadros e quadro mais velho que o limite) também passam a avisar no console
 
