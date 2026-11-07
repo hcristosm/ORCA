@@ -136,3 +136,11 @@ def test_cli_indexar_setores(tmp_path: Path):
     vazio.mkdir()
     resultado = runner.invoke(app, ["indexar-setores", "--dados", str(vazio)])
     assert resultado.exit_code == 1
+
+
+def test_indice_geometria_malformada_nao_derruba_as_outras(tmp_path: Path):
+    malformada = {"type": "Polygon", "coordinates": "x"}
+    _escrever_uf(tmp_path, "rj", [_feicao("RJ_1", -42.5, -22.3), _feicao("RJ_2", 0, 0, geometria=malformada)])
+    _ufs(tmp_path, ["rj"])
+
+    assert gerar_indice_setores(tmp_path) == 1
