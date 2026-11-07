@@ -294,6 +294,7 @@
       noCelular = MQ.matches;
       if (noCelular) entrarNoCelular();
       else sairDoCelular();
+      window.ORCA_painel?.modoMudou?.();
     };
     MQ.addEventListener("change", sincronizarModo);
     window.addEventListener("resize", sincronizarModo);

@@ -536,10 +536,21 @@
     // Link compartilhado/recarga: a URL manda na UF e no município iniciais. Um
     // município que não exista na UF é descartado em carregarDados(), já com os setores.
     // Sem link (atalho do app instalado, endereço digitado), reabre onde a última visita parou.
-    if (!location.hash) {
+    // Sem UF no hash (nenhum link). No celular o hash já traz `v=` (a aba que
+    // movel.js escolheu ao abrir), então "sem UF" e não "sem hash": senão a
+    // última visita nunca voltava e o critério da pessoa se perdia a cada abertura.
+    if (!lerNavegacaoDaUrl()) {
       try {
         const salvo = localStorage.getItem(CHAVE_ULTIMA_VISITA);
-        if (salvo && salvo.startsWith("#/")) history.replaceState(null, "", salvo);
+        if (salvo && salvo.startsWith("#/")) {
+          const vAtual = new URLSearchParams(location.hash.split("?")[1] || "").get("v");
+          const [caminho, consulta] = salvo.slice(1).split("?");
+          const params = new URLSearchParams(consulta || "");
+          // A aba é a que movel.js decidiu agora, não a da visita anterior.
+          if (vAtual) params.set("v", vAtual);
+          else params.delete("v");
+          history.replaceState(null, "", `#${caminho}?${params}`);
+        }
       } catch (e) {
         // armazenamento ou history bloqueados: abre no padrão.
       }
@@ -567,6 +578,8 @@
   // Troca a UF carregada. `slugMunicipio`, se informado, é selecionado assim que os
   // setores da nova UF chegarem (navegação pelo histórico ou por link).
   function trocarUf(novaUf, slugMunicipio = "") {
+    // O cartão aberto é de um setor da UF que está saindo.
+    fecharCartaoSetor(false);
     UF = novaUf;
     document.getElementById("ufSelect").value = novaUf;
     slugMunicipioPendente = slugMunicipio;
@@ -902,7 +915,7 @@
     inicializarMapa();
     renderizarTudo();
     if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
-    setorAberto = "";
+    fecharCartaoSetor(false);
     if (anunciarMunicipioAoCarregar) {
       anunciarMunicipioAoCarregar = false;
       anunciarMunicipioBuscado();
@@ -2880,6 +2893,12 @@
     mapaMudouDeTamanho: () => mapa?.invalidateSize(),
     controleCamadas: () => controleCamadas,
     sincronizarUrl: () => sincronizarNavegacao("replace"),
+    // Troca celular <-> desktop: tooltip (desktop) e toque/cartão (celular) são
+    // decididos no render da camada; sem refazê-la, o setor ficava mudo.
+    modoMudou: () => {
+      if (!ehCelular()) fecharCartaoSetor();
+      if (setoresGeoJSON && mapa) renderizarTudo();
+    },
     abrirSetor,
     posicaoAparelho: (lat, lon) => {
       posicaoDoAparelho = [lat, lon];

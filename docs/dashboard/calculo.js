@@ -127,9 +127,13 @@
   }
 
   /* Regras, em ordem: sem observado → sem-dado; observado ≥ limiar → iminente;
-     primeiro ponto da trajetória ≥ limiar → previsto; senão, sem-alerta. */
+     primeiro ponto da trajetória ≥ limiar → previsto; senão, sem-alerta.
+
+     O 1º ponto da trajetória é "agora" (a hora observada, que é numérica): só
+     os pontos SEGUINTES dizem se há previsão. Contar o de agora fazia previsão
+     ausente aparecer como "Sem alerta" com pico = o próprio observado. */
   function veredito({ observadoMm, trajetoria: pontos, limiar }) {
-    const numericos = (pontos || []).filter(([, mm]) => typeof mm === "number");
+    const numericos = (pontos || []).slice(1).filter(([, mm]) => typeof mm === "number");
     const picoMm = numericos.length ? Math.max(...numericos.map(([, mm]) => mm)) : null;
     const base = { quandoMs: null, picoMm, previsaoIndisponivel: numericos.length === 0 };
     if (typeof observadoMm !== "number") return { ...base, estado: "sem-dado" };
@@ -139,8 +143,17 @@
     return { ...base, estado: "sem-alerta" };
   }
 
+  /* A falha da consulta parece "sem rede"? fetch rejeita com TypeError quando
+     não há conexão, e fetchComTimeout aborta (AbortError) quando ela é lenta
+     demais; HTTP de erro com rede é outra coisa (a API caiu, não o aparelho). */
+  function pareceSemRede(erro, online) {
+    if (online === false) return true;
+    return Boolean(erro) && (erro instanceof TypeError || erro.name === "AbortError");
+  }
+
   window.ORCA = Object.assign(window.ORCA || {}, {
     calculo: Object.assign((window.ORCA && window.ORCA.calculo) || {}, {
+      pareceSemRede,
       distanciaPontoPoligonoPx,
       distanciaKm,
       direcaoCardinal,

@@ -23,11 +23,14 @@
 
   let ponto = null;            // { lat, lon, rotulo, origem: "gps" | "municipio", precisaoM }
   let estadoGps = "nunca";     // "nunca" | "pedindo" | "ok" | "negado"
+  // Resultado da última consulta TERMINADA, gravado de uma vez: ponto,
+  // próximos e séries sempre do mesmo lugar (ver `pedido` em consultar).
+  let pontoConsultado = null;
   let proximos = [];           // saída de setoresProximos
   let seriePonto = null;       // série horária do ponto, ou null
   let seriesSetores = [];      // uma por próximo, ou null
   let consultadoEm = 0;
-  let consultando = false;
+  let pedido = 0;              // a consulta mais nova vence; as antigas são descartadas
 
   /* ------------------------------------------------------------ utilitários */
 
@@ -113,39 +116,50 @@
     } catch (e) {
       console.warn("Localização indisponível:", e);
       estadoGps = "negado";
-      if (ponto) await consultar();
-      else desenhar();
+      if (ponto && ponto.origem === "municipio") { await consultar(); return; }
+      if (consultadoEm && pontoConsultado) {
+        // Não reconsulta a posição antiga como se fosse a de agora: a pessoa pode
+        // ter andado. Mantém o resultado na tela e diz de quando ele é.
+        desenhar(montarModelo());
+        aviso(`Não deu para atualizar a sua localização. Resultado de ${dataHoraBrasilia(consultadoEm)}, ` +
+          "do lugar onde você estava. Toque em ◎ para tentar de novo.");
+        return;
+      }
+      desenhar();
     }
   }
 
   async function consultar() {
-    if (!ponto || consultando) return;
-    consultando = true;
+    if (!ponto) return;
+    // Captura local: outra busca pode trocar `ponto` enquanto esperamos a rede.
+    const meuPedido = ++pedido;
+    const alvo = ponto;
     desenharVeredito({ carregando: "Consultando a chuva…" });
     await carregarIndice();
-    proximos = indice ? calc().setoresProximos(indice, ponto.lat, ponto.lon) : [];
+    const meusProximos = indice ? calc().setoresProximos(indice, alvo.lat, alvo.lon) : [];
 
-    let falhouChuva = false;
+    let erroChuva = null;
+    let series = null;
     try {
-      const series = await buscarChuvaVariosPontos([
-        { lat: ponto.lat, lon: ponto.lon },
-        ...proximos.map(p => ({ lat: p.setor.lat, lon: p.setor.lon })),
+      series = await buscarChuvaVariosPontos([
+        { lat: alvo.lat, lon: alvo.lon },
+        ...meusProximos.map(p => ({ lat: p.setor.lat, lon: p.setor.lon })),
       ]);
-      seriePonto = series[0];
-      seriesSetores = series.slice(1);
     } catch (e) {
       console.warn("Open-Meteo indisponível para Perto de mim:", e);
-      falhouChuva = true;
-      seriePonto = null;
-      seriesSetores = proximos.map(() => null);
+      erroChuva = e;
     }
-    consultando = false;
+    if (meuPedido !== pedido) return;  // uma consulta mais nova já assumiu
 
-    // Sem índice E sem chuva quase sempre é sem rede: a última consulta guardada
-    // diz mais do que dois avisos de erro.
-    const semRede = falhouChuva && erroIndice;
+    // "Sem rede" pela natureza da falha: o índice vem do cache do service
+    // worker e não serve de sinal. Sem rede, a última consulta boa diz mais.
+    const semRede = Boolean(erroChuva) && calc().pareceSemRede(erroChuva, navigator.onLine);
     if (semRede && mostrarUltimo("Sem conexão")) return;
 
+    pontoConsultado = alvo;
+    proximos = meusProximos;
+    seriePonto = series ? series[0] : null;
+    seriesSetores = series ? series.slice(1) : meusProximos.map(() => null);
     consultadoEm = Date.now();
     const modelo = montarModelo();
     desenhar(modelo);
@@ -166,6 +180,7 @@
   }
 
   function montarModelo() {
+    const lugar = pontoConsultado;
     const { janela, limiar } = criterio();
     const v = seriePonto
       ? analisar(seriePonto, janela, limiar)
@@ -191,11 +206,12 @@
     });
 
     return {
-      rotulo: ponto.rotulo, origem: ponto.origem, precisaoM: ponto.precisaoM,
+      rotulo: lugar.rotulo, origem: lugar.origem, precisaoM: lugar.precisaoM,
       janela, limiar, consultadoEm,
       ponto: { estado: v.estado, observadoMm: v.observadoMm, picoMm: v.picoMm, quandoMs: v.quandoMs,
                previsaoIndisponivel: v.previsaoIndisponivel, refMs: v.refMs },
-      foraDeSetor: !proximos.some(p => p.dentro),
+      // Sem índice não dá para saber se o ponto está num setor: não afirmar nada.
+      foraDeSetor: !erroIndice && !proximos.some(p => p.dentro),
       listaIndisponivel: erroIndice,
       itens,
     };
@@ -234,7 +250,7 @@
       const h = Math.max(0, Math.round((m.ponto.quandoMs - Date.now()) / 3600000));
       return `Alerta previsto · em ~${h}h`;
     },
-    "sem-alerta": () => "Sem alerta",
+    "sem-alerta": m => (m.ponto.previsaoIndisponivel ? "Sem alerta agora · sem previsão" : "Sem alerta"),
     "sem-dado": () => "Sem dado agora",
   };
 
@@ -362,7 +378,7 @@
       if (ev.detail.vista === "perto") entrar();
     });
     document.addEventListener("orca:criterio", () => {
-      if (consultadoEm && ponto) desenhar(montarModelo());
+      if (consultadoEm && pontoConsultado) desenhar(montarModelo());
     });
     document.addEventListener("orca:municipio", ev => {
       if (window.ORCA.movel?.vistaAtual() !== "perto") return;

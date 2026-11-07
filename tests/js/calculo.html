@@ -149,6 +149,28 @@
     igual(v.picoMm, null);
   });
 
+  /* ------------------------------------------- achados da revisão final */
+  // I-5: no fluxo real o 1º ponto da trajetória é a própria hora observada
+  // (numérico); só ele não pode contar como "há previsão".
+  teste("I-5: trajetória só com o ponto de agora é previsão indisponível", () => {
+    const v = C().veredito({ observadoMm: 10, trajetoria: [[0, 10], [1, null], [2, null]], limiar: 100 });
+    igual(v.estado, "sem-alerta");
+    igual(v.previsaoIndisponivel, true);
+    igual(v.picoMm, null);
+  });
+  teste("I-5: pico previsto ignora o ponto de agora", () =>
+    igual(C().veredito({ observadoMm: 30, trajetoria: [[0, 30], [1, 20], [2, 25]], limiar: 100 }).picoMm, 25));
+  // I-1: "sem rede" pela natureza da falha, não pelo índice (que o SW guarda).
+  teste("I-1: falha de rede (TypeError) parece sem rede", () =>
+    igual(C().pareceSemRede(new TypeError("Failed to fetch"), true), true));
+  teste("I-1: tempo esgotado (AbortError) parece sem rede", () => {
+    const e = new Error("aborted"); e.name = "AbortError";
+    igual(C().pareceSemRede(e, true), true);
+  });
+  teste("I-1: navegador offline parece sem rede", () => igual(C().pareceSemRede(new Error("x"), false), true));
+  teste("I-1: HTTP de erro com rede não é sem rede", () =>
+    igual(C().pareceSemRede(new Error("Open-Meteo respondeu 500."), true), false));
+
   window.addEventListener("load", () => {
     const lista = document.getElementById("casos");
     const falhas = [];
