@@ -2866,7 +2866,8 @@
     if (window.ORCA_temAreas?.()) return;
     // Recarregar sem rede trocaria o painel pela página de erro do navegador.
     try {
-      if ((await fetchComTimeout(`data/ufs_disponiveis.json?t=${agora}`)).ok) location.reload();
+      // `sonda`: o service worker deixa passar direto, sem responder do cache.
+      if ((await fetchComTimeout(`data/ufs_disponiveis.json?sonda=${agora}`)).ok) location.reload();
     } catch (e) {
       // fora do ar agora: fica com o que está na tela e tenta no próximo minuto.
     }
@@ -2888,6 +2889,12 @@
   ligarCartaoSetor();
 
   carregarUfsDisponiveis().then(carregarDados);
+
+  // PWA: abre sem sinal com a casca e os últimos dados (ver sw.js). Falhar aqui
+  // não afeta nada além do modo sem rede.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(e => console.warn("Service worker não registrado:", e));
+  }
 })();
 </script>
 </body>
