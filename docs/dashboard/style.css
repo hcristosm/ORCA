@@ -1436,3 +1436,83 @@ footer {
   .gaveta-camadas input[type="checkbox"]:checked::after { left: 21px; }
   .gaveta-camadas .leaflet-control-layers-separator { display: none; }
 }
+
+/* ------------------------------------------------ cartão do setor (celular) */
+.cartao-setor { display: none; }
+
+@media (max-width: 767px) {
+  .coluna-mapa { position: relative; }
+  .cartao-setor {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 650;
+    padding: 0 var(--s4) var(--s4);
+    background: var(--superficie);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+    transition: transform var(--transicao);
+  }
+  .cartao-setor[hidden] { display: none; }
+  .cartao-alca { display: grid; place-items: center; height: 24px; touch-action: none; cursor: grab; }
+  .cartao-alca span { width: 40px; height: 4px; border-radius: 2px; background: var(--fio-cor); }
+  .cartao-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s3); }
+  .cartao-topo h3 { margin: 0; font-size: var(--step-2); }
+  .cartao-meta { margin: 2px 0 var(--s3); font-size: var(--step-0); color: var(--tinta-media); }
+  .cartao-fechar {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin: -6px -10px 0 0;
+    color: var(--tinta-media);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .cartao-fechar .icone { width: 20px; height: 20px; }
+  .cartao-numeros { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+  .cartao-numeros > div { border: var(--fio) solid var(--fio-cor); border-radius: var(--raio); padding: var(--s2) var(--s3); }
+  .cartao-numeros small {
+    display: block;
+    font-size: var(--micro);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--tinta-fraca);
+  }
+  .cartao-numeros b { font-family: var(--font-mono); font-size: var(--step-2); font-weight: 500; }
+  .cartao-resposta {
+    margin: var(--s3) 0 0;
+    padding: var(--s2) var(--s3);
+    font-size: var(--step-0);
+    border-left: 4px solid var(--fio-cor);
+    background: var(--superficie-2);
+    border-radius: 0 var(--raio) var(--raio) 0;
+  }
+  .cartao-resposta.acima { border-left-color: var(--sinal); }
+  .cartao-resposta.previsto { border-left-color: var(--sinal-fraco); }
+  .cartao-resposta.sem-dado { border-left-color: var(--tinta-fraca); color: var(--tinta-media); }
+  .cartao-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); margin-top: var(--s3); }
+  .cartao-acoes button,
+  .cartao-acoes a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    min-height: 44px;
+    font-family: var(--font-ui);
+    font-size: var(--step-0);
+    font-weight: 600;
+    color: var(--tinta);
+    text-decoration: none;
+    background: var(--base);
+    border: var(--fio) solid var(--fio-cor);
+    border-radius: var(--raio);
+    cursor: pointer;
+  }
+  .cartao-acoes a.primario { color: #fff; background: var(--agua); border-color: var(--agua); }
+  .cartao-aviso { margin: var(--s2) 0 0; font-size: var(--step-0); color: var(--tinta-media); word-break: break-all; }
+}

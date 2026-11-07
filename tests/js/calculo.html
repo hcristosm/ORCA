@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Testes de JS do ORCA</title>
+<!-- Sem Node no projeto: estes testes rodam no navegador. Na raiz do repo:
+       python3 -m http.server 8001
+     e abra http://localhost:8001/tests/js/calculo.html. A página termina com
+     "PASSOU n/n" ou "FALHOU: <nomes>". -->
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; }
+  .ok { color: #2d6a3e; } .falha { color: #b3261e; font-weight: 600; }
+  #resultado { font-size: 20px; font-weight: 700; margin-top: 16px; }
+</style>
+</head>
+<body>
+<ol id="casos"></ol>
+<p id="resultado">rodando…</p>
+
+<script src="../../docs/dashboard/comum.js"></script>
+<script src="../../docs/dashboard/calculo.js"></script>
+<script>
+(function () {
+  "use strict";
+  const casos = [];
+  function teste(nome, fn) { casos.push({ nome, fn }); }
+  function igual(a, b) {
+    if (a !== b) throw new Error(`esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
+  }
+  function perto(a, b, tol) {
+    if (typeof a !== "number" || Math.abs(a - b) > tol) throw new Error(`esperava ${b} ± ${tol}, veio ${a}`);
+  }
+  function lanca(fn) {
+    try { fn(); } catch (e) { return; }
+    throw new Error("esperava exceção, não lançou");
+  }
+  const C = () => window.ORCA && window.ORCA.calculo;
+
+  /* ---------------------------------------------- geometria do toque (Tarefa 3) */
+  const quadrado = [[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}]];
+  teste("ponto dentro do polígono dá 0", () => igual(C().distanciaPontoPoligonoPx({x:5,y:5}, quadrado), 0));
+  teste("ponto fora mede até a aresta", () => perto(C().distanciaPontoPoligonoPx({x:13,y:5}, quadrado), 3, 1e-9));
+  teste("ponto fora mede até o vértice", () => perto(C().distanciaPontoPoligonoPx({x:13,y:14}, quadrado), 5, 1e-9));
+  const comFuro = [quadrado[0], [{x:3,y:3},{x:7,y:3},{x:7,y:7},{x:3,y:7}]];
+  teste("ponto no furo fica fora", () => perto(C().distanciaPontoPoligonoPx({x:5,y:5}, comFuro), 2, 1e-9));
+
+  window.addEventListener("load", () => {
+    const lista = document.getElementById("casos");
+    const falhas = [];
+    for (const c of casos) {
+      const li = document.createElement("li");
+      try {
+        c.fn();
+        li.className = "ok";
+        li.textContent = `ok — ${c.nome}`;
+      } catch (e) {
+        falhas.push(c.nome);
+        li.className = "falha";
+        li.textContent = `FALHA — ${c.nome}: ${e.message}`;
+      }
+      lista.append(li);
+    }
+    const texto = falhas.length ? `FALHOU: ${falhas.join("; ")}` : `PASSOU ${casos.length}/${casos.length}`;
+    document.getElementById("resultado").textContent = texto;
+    document.getElementById("resultado").className = falhas.length ? "falha" : "ok";
+    console.log(texto);
+  });
+})();
+</script>
+</body>
+</html>

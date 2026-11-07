@@ -190,6 +190,7 @@
 
   <div class="coluna coluna-mapa">
     <div id="mapa"></div>
+    <div class="cartao-setor" id="cartaoSetor" role="dialog" aria-label="Setor selecionado" hidden></div>
   </div>
 
   <div class="coluna coluna-painel">
@@ -489,6 +490,7 @@
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"
         integrity="sha384-4a+9x4ql6wch9epMfqnC3bSjASMJDDqpSuVblbNd6thkfnwdBucHgePPyl0exaFY" crossorigin="anonymous"></script>
 <script src="comum.js"></script>
+<script src="calculo.js"></script>
 <script src="relatorio.js"></script>
 <script src="areas-customizadas.js"></script>
 <script src="movel.js"></script>
@@ -535,6 +537,7 @@
     if (daUrl && ufsDisponiveis.includes(daUrl.uf)) {
       UF = daUrl.uf;
       slugMunicipioPendente = daUrl.slugMunicipio;
+      setorPendente = daUrl.setor;
     }
     if (!ufsDisponiveis.includes(UF)) UF = ufsDisponiveis[0];
 
@@ -586,6 +589,10 @@
   // coincide, sincronizarNavegacao() não grava entrada nova (sem loop).
   let slugMunicipioPendente = "";
   let ufCarregada = null;
+  // Cartão do setor (celular): o aberto vai no link (`s=`); o pedido antes de a UF
+  // carregar fica pendente e abre no fim de carregarDados().
+  let setorAberto = "";
+  let setorPendente = "";
 
   // Índice da busca nacional: [{uf, nome}] montado a partir do campo `municipios`
   // de cada meta_<uf>.json publicado. Carregado sob demanda (1o foco na busca).
@@ -623,7 +630,7 @@
     const partes = caminho.split("/").filter(Boolean);
     if (!partes.length) return null;
     const params = new URLSearchParams(consulta);
-    const criterio = { limiar: params.get("l"), janela: params.get("j") };
+    const criterio = { limiar: params.get("l"), janela: params.get("j"), setor: params.get("s") || "" };
     try {
       return { uf: partes[0].toLowerCase(), slugMunicipio: decodeURIComponent(partes[1] || "").toLowerCase(), ...criterio };
     } catch (e) {
@@ -656,6 +663,7 @@
     // `v` (aba do celular) é de movel.js: preservar, senão cada navegação a apagaria.
     const v = new URLSearchParams(location.hash.split("?")[1] || "").get("v");
     return `#/${UF}` + (slug ? `/${slug}` : "") + `?l=${estado.limiar}&j=${estado.janela}` +
+      (setorAberto ? `&s=${encodeURIComponent(setorAberto)}` : "") +
       (v ? `&v=${encodeURIComponent(v)}` : "");
   }
 
@@ -870,6 +878,12 @@
     inicializarMapa();
     renderizarTudo();
     if (estado.municipio) atualizarGraficoParaMunicipio(estado.municipio);
+    setorAberto = "";
+    if (setorPendente) {
+      const pendente = setorPendente;
+      setorPendente = "";
+      abrirCartaoSetor(pendente, { enquadrar: true });
+    }
     sincronizarNavegacao("replace");
 
     // Malha/nomes do IBGE não bloqueiam o primeiro render (cards/tabela/mapa já saem
@@ -1196,6 +1210,7 @@
   // ser registrados no boot (uma vez só, ver configurarBuscaMunicipios), ou seja,
   // já respondem antes da primeira carga terminar.
   function selecionarMunicipio(nome) {
+    if (nome !== estado.municipio) fecharCartaoSetor(false);
     estado.municipio = nome;
     const input = document.getElementById("buscaMunicipio");
     if (input.value !== nome) input.value = nome;
@@ -1206,6 +1221,7 @@
   }
 
   function limparMunicipio() {
+    fecharCartaoSetor(false);
     const tinhaMunicipio = Boolean(estado.municipio);
     estado.municipio = "";
     slugMunicipioPendente = "";
@@ -1609,6 +1625,15 @@
       onEachFeature: (f, camada) => {
         camadasAvisoPorId[Number(f.properties.id)] = camada;
         camada.bindPopup(popupAvisoInmet(f.properties), { maxWidth: 340 });
+        // Celular: o aviso cobre meio estado e engolia o toque num setor de 2 px.
+        // Setor a até RAIO_TOQUE_PX do dedo ganha do popup do aviso.
+        camada.on("click", ev => {
+          if (!ehCelular()) return;
+          const num = setorMaisProximoDoToque(ev.containerPoint, RAIO_TOQUE_PX);
+          if (!num) { fecharCartaoSetor(); return; }
+          camada.closePopup();
+          abrirCartaoSetor(num);
+        });
       },
     });
     controleCamadas.addOverlay(camadaAvisosInmet, `Avisos INMET (${features.length})`);
@@ -1775,7 +1800,221 @@
     mapa.on("overlayremove", ev => {
       if (ev.name === "Setores do estado inteiro") { camadaSetoresTodos.clearLayers(); atualizarLegenda(); }
     });
+    // Celular: o toque seleciona o setor mais próximo do dedo (até 24 px), mesmo
+    // que o polígono tenha 2 px na tela. Tocar longe de setor fecha o cartão.
+    mapa.on("click", ev => {
+      if (!ehCelular()) return;
+      const num = setorMaisProximoDoToque(ev.containerPoint, RAIO_TOQUE_PX);
+      if (num) abrirCartaoSetor(num);
+      else fecharCartaoSetor();
+    });
+    marcadorAparelho = null;
+    desenharPosicaoAparelho();
+
     document.dispatchEvent(new CustomEvent("orca:mapa-criado"));
+  }
+
+  /* --------------------------------------------- cartão do setor (celular) */
+
+  const RAIO_TOQUE_PX = 24;
+  let posicaoDoAparelho = null;
+  let marcadorAparelho = null;
+  let destaqueSetor = null;
+
+  function ehCelular() {
+    return Boolean(window.ORCA.movel?.ehCelular());
+  }
+
+  // Anéis de um polígono do Leaflet (Polygon ou MultiPolygon) como listas de LatLng.
+  function aneisDe(latlngs) {
+    if (!Array.isArray(latlngs) || !latlngs.length) return [];
+    if (latlngs[0] instanceof L.LatLng) return [latlngs];
+    return latlngs.flatMap(aneisDe);
+  }
+
+  function setorMaisProximoDoToque(pontoTela, raioPx) {
+    if (!camadaSetores) return null;
+    let melhor = null;
+    let menor = Infinity;
+    const visitar = camada => {
+      if (camada.eachLayer && !camada.feature) { camada.eachLayer(visitar); return; }
+      if (!camada.feature || !camada.getLatLngs) return;
+      const caixa = camada.getBounds();
+      const no = mapa.latLngToContainerPoint(caixa.getNorthWest());
+      const se = mapa.latLngToContainerPoint(caixa.getSouthEast());
+      if (pontoTela.x < no.x - raioPx || pontoTela.x > se.x + raioPx ||
+          pontoTela.y < no.y - raioPx || pontoTela.y > se.y + raioPx) return;
+      const aneis = aneisDe(camada.getLatLngs()).map(anel => anel.map(ll => mapa.latLngToContainerPoint(ll)));
+      const d = window.ORCA.calculo.distanciaPontoPoligonoPx(pontoTela, aneis);
+      if (d < menor) { menor = d; melhor = camada.feature.properties.num_setor; }
+    };
+    camadaSetores.eachLayer(visitar);
+    return menor <= raioPx ? melhor : null;
+  }
+
+  function featureDoSetor(num) {
+    return setoresGeoJSON?.features.find(f => f.properties.num_setor === num) || null;
+  }
+
+  function formatarDistancia(metros) {
+    if (metros < 1000) return `${Math.round(metros)} m`;
+    return `${(metros / 1000).toFixed(1).replace(".", ",")} km`;
+  }
+
+  /* Estado e frase-resposta do setor no critério atual. */
+  function respostaDoSetor(p) {
+    const campo = estado.janela === 24 ? "chuva_24h" : "chuva_72h";
+    const chuva = p[campo];
+    const trajetoria = previsao ? previsao[p.num_setor] : null;
+    if (typeof chuva !== "number") {
+      return { classe: "sem-dado", frase: "Sem dado de chuva para este setor agora.", chuva };
+    }
+    if (chuva >= estado.limiar) {
+      return { classe: "acima", frase: `Acima do limiar: ${formatarMm(chuva)} mm em ${estado.janela}h.`, chuva };
+    }
+    if (!trajetoria) {
+      return { classe: "abaixo", frase: "Abaixo do limiar. Previsão indisponível para este setor.", chuva };
+    }
+    const quando = primeiroPontoQueCruza(trajetoria, estado.limiar);
+    if (quando) {
+      const horas = Math.max(0, Math.round((Date.parse(quando) - Date.now()) / 3600000));
+      return {
+        classe: "previsto",
+        frase: `Passa do limiar por volta de ${formatarBrasilia(new Date(quando))} (em ~${horas}h).`,
+        chuva,
+      };
+    }
+    return { classe: "abaixo", frase: "Abaixo do limiar e sem previsão de passar nas próximas 72h.", chuva };
+  }
+
+  function abrirCartaoSetor(num, { enquadrar = false } = {}) {
+    const feature = featureDoSetor(num);
+    const cartao = document.getElementById("cartaoSetor");
+    if (!feature || !cartao) return;
+    const p = feature.properties;
+    const centro = L.geoJSON(feature).getBounds().getCenter();
+    const r = respostaDoSetor(p);
+    const distancia = posicaoDoAparelho
+      ? ` · a ${formatarDistancia(L.latLng(posicaoDoAparelho).distanceTo(centro))} de você` : "";
+    const rota = `https://www.google.com/maps/dir/?api=1&destination=${centro.lat.toFixed(6)},${centro.lng.toFixed(6)}`;
+    cartao.innerHTML =
+      `<div class="cartao-alca" data-alca><span></span></div>` +
+      `<div class="cartao-topo"><div>` +
+        `<h3>${escaparHtml(p.munic)}</h3>` +
+        `<p class="cartao-meta"><span class="mono">${escaparHtml(p.num_setor)}</span> · Grau ${escaparHtml(rotuloGrau(p.grau_risco))}${distancia}</p>` +
+      `</div><button type="button" class="cartao-fechar" data-fechar aria-label="Fechar">` +
+        `<svg class="icone"><use href="icons/sprite.svg#icon-x"></use></svg></button></div>` +
+      `<div class="cartao-numeros">` +
+        `<div><small>Chuva ${estado.janela}h</small><b>${typeof r.chuva === "number" ? formatarMm(r.chuva) + " mm" : "—"}</b></div>` +
+        `<div><small>Limiar</small><b>${estado.limiar} mm</b></div>` +
+      `</div>` +
+      `<p class="cartao-resposta ${r.classe}">${escaparHtml(r.frase)}</p>` +
+      `<div class="cartao-acoes">` +
+        `<button type="button" data-compartilhar><svg class="icone"><use href="icons/sprite.svg#icon-share-2"></use></svg>Compartilhar</button>` +
+        `<a class="primario" href="${rota}" target="_blank" rel="noopener"><svg class="icone"><use href="icons/sprite.svg#icon-navigation"></use></svg>Rota até aqui</a>` +
+      `</div>` +
+      `<p class="cartao-aviso" data-aviso hidden></p>`;
+    cartao.hidden = false;
+    setorAberto = num;
+
+    if (destaqueSetor) mapa.removeLayer(destaqueSetor);
+    destaqueSetor = L.geoJSON(feature, {
+      interactive: false,
+      style: { color: token("--agua"), weight: 3, fill: false },
+    }).addTo(mapa);
+    if (enquadrar) mapa.fitBounds(destaqueSetor.getBounds(), { maxZoom: 16, padding: [48, 48] });
+    sincronizarNavegacao("replace");
+  }
+
+  function fecharCartaoSetor(sincronizar = true) {
+    const cartao = document.getElementById("cartaoSetor");
+    if (cartao) { cartao.hidden = true; cartao.style.transform = ""; }
+    if (destaqueSetor && mapa) { mapa.removeLayer(destaqueSetor); }
+    destaqueSetor = null;
+    if (!setorAberto) return;
+    setorAberto = "";
+    if (sincronizar) sincronizarNavegacao("replace");
+  }
+
+  async function compartilharSetor(cartao) {
+    const url = location.href;
+    const aviso = cartao.querySelector("[data-aviso]");
+    const mostrar = texto => {
+      aviso.textContent = texto;
+      aviso.hidden = false;
+      setTimeout(() => { aviso.hidden = true; }, 4000);
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `ORCA — setor ${setorAberto}`, url });
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      mostrar("Link copiado.");
+    } catch (e) {
+      mostrar(`Copie o link: ${url}`);
+    }
+  }
+
+  function ligarCartaoSetor() {
+    const cartao = document.getElementById("cartaoSetor");
+    cartao.addEventListener("click", ev => {
+      if (ev.target.closest("[data-fechar]")) fecharCartaoSetor();
+      else if (ev.target.closest("[data-compartilhar]")) compartilharSetor(cartao);
+    });
+    // Arrastar a alça para baixo fecha, como a gaveta.
+    let inicioY = null;
+    cartao.addEventListener("pointerdown", ev => {
+      if (!ev.target.closest("[data-alca]")) return;
+      inicioY = ev.clientY;
+      cartao.setPointerCapture(ev.pointerId);
+    });
+    cartao.addEventListener("pointermove", ev => {
+      if (inicioY !== null) cartao.style.transform = `translateY(${Math.max(0, ev.clientY - inicioY)}px)`;
+    });
+    const soltar = ev => {
+      if (inicioY === null) return;
+      const dy = ev.clientY - inicioY;
+      inicioY = null;
+      cartao.style.transform = "";
+      if (dy > 80) fecharCartaoSetor();
+    };
+    cartao.addEventListener("pointerup", soltar);
+    cartao.addEventListener("pointercancel", soltar);
+    L.DomEvent.disableClickPropagation(cartao);
+  }
+
+  function desenharPosicaoAparelho() {
+    if (!mapa || !posicaoDoAparelho) return;
+    if (marcadorAparelho) marcadorAparelho.setLatLng(posicaoDoAparelho);
+    else {
+      marcadorAparelho = L.circleMarker(posicaoDoAparelho, {
+        radius: 8, weight: 3, color: "#ffffff", fillColor: token("--agua"), fillOpacity: 1, interactive: false,
+      }).addTo(mapa);
+    }
+  }
+
+  /* Pedido de fora (lista do "Perto de mim"): troca UF e município se preciso,
+     enquadra o setor e abre o cartão. Com a UF ainda carregando, fica pendente. */
+  function abrirSetor(uf, munic, num) {
+    const slug = slugMunicipio(munic);
+    if (uf !== UF) {
+      setorPendente = num;
+      trocarUf(uf, slug);
+      sincronizarNavegacao("push");
+      return;
+    }
+    if (ufCarregada !== UF) {
+      setorPendente = num;
+      slugMunicipioPendente = slug;
+      return;
+    }
+    if (munic !== estado.municipio) selecionarMunicipio(munic);
+    abrirCartaoSetor(num, { enquadrar: true });
   }
 
   // Toolbar do mapa: as três ações que se quer no mapa, no mapa — voltar ao
@@ -2002,6 +2241,8 @@
     sincronizarAgora();
     sincronizarCriterio();
     agendarRenderizarSetoresCompletoEstado();
+    // Critério mudou com o cartão aberto: a resposta dele muda junto.
+    if (setorAberto) abrirCartaoSetor(setorAberto);
   }
 
   /* -------------------------------------------------------------- a régua */
@@ -2205,7 +2446,8 @@
         iconSize: [20, 20],
         iconAnchor: [10, 20],
       }),
-    }).bindTooltip(html);
+    });
+    if (!ehCelular()) pin.bindTooltip(html);
     // No recorte estadual o polígono do setor tem poucos pixels: o pin é o que
     // dá onde clicar para descer ao município.
     if (!estado.municipio) pin.on("click", () => selecionarMunicipio(feature.properties.munic));
@@ -2252,7 +2494,8 @@
         const emAtencaoAgora = codigosAtencao.has(p.num_setor);
         const previstoAgora = codigosPrevisto.has(p.num_setor);
         const html = tooltipSetor(p, quandoPorSetor.get(p.num_setor));
-        layer.bindTooltip(html);
+        // No celular o toque abre o cartão do setor; tooltip de hover só atrapalharia.
+        if (!ehCelular()) layer.bindTooltip(html);
         if (emAtencaoAgora || previstoAgora) pins.push(pinSetor(feature, !emAtencaoAgora, html));
       },
     });
@@ -2606,7 +2849,13 @@
     mapaMudouDeTamanho: () => mapa?.invalidateSize(),
     controleCamadas: () => controleCamadas,
     sincronizarUrl: () => sincronizarNavegacao("replace"),
+    abrirSetor,
+    posicaoAparelho: (lat, lon) => {
+      posicaoDoAparelho = [lat, lon];
+      desenharPosicaoAparelho();
+    },
   });
+  ligarCartaoSetor();
 
   carregarUfsDisponiveis().then(carregarDados);
 })();
