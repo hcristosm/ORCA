@@ -36,3 +36,8 @@ def caminho_manifesto_cprm(uf: str, data_dir: Path = DATA_DIR) -> Path:
 
 def caminho_cache_openmeteo(data_dir: Path = DATA_DIR) -> Path:
     return data_dir / "cache" / "openmeteo.sqlite"
+
+
+def caminho_indice_setores(dashboard_dir: Path = DASHBOARD_DATA_DIR) -> Path:
+    """Índice nacional leve de setores, usado pela tela "Perto de mim" do celular."""
+    return dashboard_dir / "setores_pontos.json"

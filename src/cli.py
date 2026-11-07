@@ -13,6 +13,7 @@ Comandos por UF, de uso manual/pontual:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
@@ -25,6 +26,7 @@ from src.config import (
     caminho_setores,
 )
 from src.export.dashboard_data import exportar_dashboard
+from src.export.indice_setores import gerar_indice_setores
 from src.export.nacional import ORCAMENTO_ALVO_PADRAO, exportar_nacional
 from src.ingest.cprm import ingerir_uf as ingerir_cprm
 from src.storage_cache_openmeteo import CacheOpenMeteo
@@ -109,6 +111,26 @@ def atualizar_nacional_cmd(
         typer.echo(f"Falha na exportação do dashboard: {', '.join(ufs_com_falha)}", err=True)
     if not resultados:
         raise typer.Exit(code=1)
+
+
+@app.command("indexar-setores")
+def indexar_setores_cmd(
+    dados: Path = typer.Option(
+        DASHBOARD_DATA_DIR, "--dados", help="Diretório de dados do dashboard (docs/dashboard/data)"
+    ),
+) -> None:
+    """Gera o índice nacional leve de setores para a tela "Perto de mim" do celular.
+
+    Roda depois da mescla com o gh-pages. Sai com 1 quando não há
+    `ufs_disponiveis.json` legível: o workflow marca o passo com
+    `continue-on-error`, então a falha fica visível sem bloquear a publicação.
+    """
+    total = gerar_indice_setores(dados)
+    if total is None:
+        typer.echo(f"Índice de setores não gerado: sem ufs_disponiveis.json legível em {dados}.", err=True)
+        raise typer.Exit(code=1)
+    n_ufs = len(json.loads((dados / "ufs_disponiveis.json").read_text()))
+    typer.echo(f"Índice de setores: {total} setores de {n_ufs} UF(s).")
 
 
 @app.command("ingerir-setores")
