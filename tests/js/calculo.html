@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Testes de JS do ORCA</title>
+<!-- Sem Node no projeto: estes testes rodam no navegador. Na raiz do repo:
+       python3 -m http.server 8001
+     e abra http://localhost:8001/tests/js/calculo.html. A página termina com
+     "PASSOU n/n" ou "FALHOU: <nomes>". -->
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; }
+  .ok { color: #2d6a3e; } .falha { color: #b3261e; font-weight: 600; }
+  #resultado { font-size: 20px; font-weight: 700; margin-top: 16px; }
+</style>
+</head>
+<body>
+<ol id="casos"></ol>
+<p id="resultado">rodando…</p>
+
+<script>
+  // Sempre a versão do disco: o http.server do Python deixa o navegador cachear.
+  for (const arquivo of ["comum.js", "calculo.js"]) {
+    document.write(`<script src="../../docs/dashboard/${arquivo}?t=${Date.now()}"><\/script>`);
+  }
+</script>
+<script>
+(function () {
+  "use strict";
+  const casos = [];
+  function teste(nome, fn) { casos.push({ nome, fn }); }
+  function igual(a, b) {
+    if (a !== b) throw new Error(`esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
+  }
+  function perto(a, b, tol) {
+    if (typeof a !== "number" || Math.abs(a - b) > tol) throw new Error(`esperava ${b} ± ${tol}, veio ${a}`);
+  }
+  function lanca(fn) {
+    try { fn(); } catch (e) { return; }
+    throw new Error("esperava exceção, não lançou");
+  }
+  const C = () => window.ORCA && window.ORCA.calculo;
+
+  /* ---------------------------------------------- geometria do toque (Tarefa 3) */
+  const quadrado = [[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}]];
+  teste("ponto dentro do polígono dá 0", () => igual(C().distanciaPontoPoligonoPx({x:5,y:5}, quadrado), 0));
+  teste("ponto fora mede até a aresta", () => perto(C().distanciaPontoPoligonoPx({x:13,y:5}, quadrado), 3, 1e-9));
+  teste("ponto fora mede até o vértice", () => perto(C().distanciaPontoPoligonoPx({x:13,y:14}, quadrado), 5, 1e-9));
+  const comFuro = [quadrado[0], [{x:3,y:3},{x:7,y:3},{x:7,y:7},{x:3,y:7}]];
+  teste("ponto no furo fica fora", () => perto(C().distanciaPontoPoligonoPx({x:5,y:5}, comFuro), 2, 1e-9));
+
+  /* ---------------------------------- Open-Meteo, vários pontos (Tarefa 5) */
+  const S = (...args) => window.ORCA.seriesDaRespostaOpenMeteo(...args);
+  const horaria = valores => ({ hourly: { time: valores.map((_, i) => `2026-11-07T0${i}:00`), precipitation: valores } });
+  teste("objeto único vira lista de uma série", () => {
+    const r = S(horaria([1.5]), 1);
+    igual(r.length, 1);
+    igual(r[0][0].chuvaMm, 1.5);
+  });
+  teste("lista na ordem pedida", () => {
+    const r = S([horaria([1]), horaria([2])], 2);
+    igual(r[0][0].chuvaMm, 1);
+    igual(r[1][0].chuvaMm, 2);
+  });
+  teste("item sem hourly vira null", () => igual(S([horaria([1]), {}], 2)[1], null));
+  teste("quantidade errada lança", () => lanca(() => S([horaria([1])], 2)));
+  teste("precipitação não numérica vira null", () => igual(S(horaria([null]), 1)[0][0].chuvaMm, null));
+  teste("hora sem fuso é lida como UTC", () => igual(S(horaria([1]), 1)[0][0].dataHoraMs, Date.UTC(2026, 10, 7, 0)));
+
+  /* ------------------------------ veredito e setores próximos (Tarefa 6) */
+  teste("distanciaKm de 0,1° de latitude", () => perto(C().distanciaKm(-22.9, -43.2, -23.0, -43.2), 11.12, 0.01));
+  teste("direção norte", () => igual(C().direcaoCardinal(0, 0, 1, 0), "N"));
+  teste("direção leste", () => igual(C().direcaoCardinal(0, 0, 0, 1), "L"));
+  teste("direção sudoeste", () => igual(C().direcaoCardinal(0, 0, -1, -1), "SO"));
+
+  const CAMPOS = ["num_setor","uf","munic","grau_risco","lat","lon","oeste","sul","leste","norte","chuva_24h","chuva_72h"];
+  const exemploIndice = {
+    versao: 1, campos: CAMPOS,
+    setores: [["RJ_NF_SR_064_CPRM","rj","NOVA FRIBURGO","Muito alto",-22.28123,-42.53311,-42.5345,-22.2826,-42.5318,-22.2799,8.9,17.8]],
+  };
+  teste("lerIndice com versão desconhecida lança", () => lanca(() => C().lerIndice({ ...exemploIndice, versao: 2 })));
+  teste("lerIndice sem um campo esperado lança", () => lanca(() => C().lerIndice({ ...exemploIndice, campos: CAMPOS.slice(1) })));
+  teste("lerIndice monta pelo nome do campo, não pela posição", () => {
+    const trocado = { versao: 1, campos: ["uf", "num_setor", ...CAMPOS.slice(2)],
+      setores: [["rj", "X_1", "C", "Alto", 0, 0, 0, 0, 0, 0, null, 1]] };
+    igual(C().lerIndice(trocado)[0].num_setor, "X_1");
+  });
+  teste("lerIndice devolve caixa de 4 números", () => {
+    const s = C().lerIndice(exemploIndice)[0];
+    igual(s.caixa.length, 4);
+    igual(s.caixa[0], -42.5345);
+    igual(s.chuva_72h, 17.8);
+  });
+
+  const KM_POR_GRAU = 111.195;
+  const setorAoNorte = (num, km, caixa) => ({
+    num_setor: num, uf: "rj", munic: "C", grau_risco: "Alto", lat: km / KM_POR_GRAU, lon: 0,
+    caixa: caixa || [-0.0001, km / KM_POR_GRAU - 0.0001, 0.0001, km / KM_POR_GRAU + 0.0001],
+    chuva_24h: null, chuva_72h: null,
+  });
+  const setores = [setorAoNorte("A", 3), setorAoNorte("B", 12), setorAoNorte("C", 0.5), setorAoNorte("D", 15)];
+  teste("setoresProximos filtra pelo raio e ordena pela distância", () => {
+    const r = C().setoresProximos(setores, 0, 0, { raioKm: 10 });
+    igual(r.map(x => x.setor.num_setor).join(","), "C,A");
+    perto(r[0].distanciaKm, 0.5, 0.01);
+    igual(r[0].direcao, "N");
+    igual(r[0].dentro, false);
+  });
+  teste("setor grande com centroide longe mas caixa sobre o ponto entra primeiro", () => {
+    const grande = setorAoNorte("G", 15, [-0.2, -0.01, 0.2, 0.3]);
+    const r = C().setoresProximos([...setores, grande], 0, 0, { raioKm: 10 });
+    igual(r[0].setor.num_setor, "G");
+    igual(r[0].dentro, true);
+  });
+  teste("setoresProximos respeita max", () => igual(C().setoresProximos(setores, 0, 0, { raioKm: 10, max: 1 }).length, 1));
+
+  const HORA = 3600000;
+  const T0 = Date.UTC(2026, 10, 1, 0);
+  // Série horária de 1 mm/h nas horas 1..n (a hora h acumula a chuva de (h-1, h]).
+  const serieDe = n => Array.from({ length: n }, (_, i) => ({ dataHoraMs: T0 + (i + 1) * HORA, chuvaMm: 1 }));
+  teste("trajetoria soma a janela em cada passo", () => {
+    const t = C().trajetoria(serieDe(96), T0 + 48 * HORA, 72);
+    igual(t.length, 25);
+    igual(t[0][0], T0 + 48 * HORA);
+    igual(t[0][1], 48);
+    igual(t[8][1], 72);
+  });
+  teste("trajetoria além do fim da série é null, não zero", () => {
+    const t = C().trajetoria(serieDe(60), T0 + 48 * HORA, 72);
+    igual(t[4][1], 60);
+    igual(t[5][1], null);
+    igual(t[24][1], null);
+  });
+  teste("trajetoria com janela de 24h", () => igual(C().trajetoria(serieDe(96), T0 + 48 * HORA, 24)[0][1], 24));
+
+  teste("veredito sem observado é sem-dado, mesmo com previsão alta", () =>
+    igual(C().veredito({ observadoMm: null, trajetoria: [[1, 500]], limiar: 100 }).estado, "sem-dado"));
+  teste("veredito acima do limiar é iminente", () =>
+    igual(C().veredito({ observadoMm: 120, trajetoria: [], limiar: 100 }).estado, "iminente"));
+  teste("veredito que cruza na previsão é previsto, com a hora", () => {
+    const v = C().veredito({ observadoMm: 80, trajetoria: [[10, 80], [20, 101]], limiar: 100 });
+    igual(v.estado, "previsto");
+    igual(v.quandoMs, 20);
+    igual(v.picoMm, 101);
+  });
+  teste("veredito com previsão toda null é sem-alerta com aviso", () => {
+    const v = C().veredito({ observadoMm: 10, trajetoria: [[10, null], [20, null]], limiar: 100 });
+    igual(v.estado, "sem-alerta");
+    igual(v.previsaoIndisponivel, true);
+    igual(v.picoMm, null);
+  });
+
+  /* ------------------------------------------- achados da revisão final */
+  // I-5: no fluxo real o 1º ponto da trajetória é a própria hora observada
+  // (numérico); só ele não pode contar como "há previsão".
+  teste("I-5: trajetória só com o ponto de agora é previsão indisponível", () => {
+    const v = C().veredito({ observadoMm: 10, trajetoria: [[0, 10], [1, null], [2, null]], limiar: 100 });
+    igual(v.estado, "sem-alerta");
+    igual(v.previsaoIndisponivel, true);
+    igual(v.picoMm, null);
+  });
+  teste("I-5: pico previsto ignora o ponto de agora", () =>
+    igual(C().veredito({ observadoMm: 30, trajetoria: [[0, 30], [1, 20], [2, 25]], limiar: 100 }).picoMm, 25));
+  // I-1: "sem rede" pela natureza da falha, não pelo índice (que o SW guarda).
+  teste("I-1: falha de rede (TypeError) parece sem rede", () =>
+    igual(C().pareceSemRede(new TypeError("Failed to fetch"), true), true));
+  teste("I-1: tempo esgotado (AbortError) parece sem rede", () => {
+    const e = new Error("aborted"); e.name = "AbortError";
+    igual(C().pareceSemRede(e, true), true);
+  });
+  teste("I-1: navegador offline parece sem rede", () => igual(C().pareceSemRede(new Error("x"), false), true));
+  teste("I-1: HTTP de erro com rede não é sem rede", () =>
+    igual(C().pareceSemRede(new Error("Open-Meteo respondeu 500."), true), false));
+
+  window.addEventListener("load", () => {
+    const lista = document.getElementById("casos");
+    const falhas = [];
+    for (const c of casos) {
+      const li = document.createElement("li");
+      try {
+        c.fn();
+        li.className = "ok";
+        li.textContent = `ok — ${c.nome}`;
+      } catch (e) {
+        falhas.push(c.nome);
+        li.className = "falha";
+        li.textContent = `FALHA — ${c.nome}: ${e.message}`;
+      }
+      lista.append(li);
+    }
+    const texto = falhas.length ? `FALHOU: ${falhas.join("; ")}` : `PASSOU ${casos.length}/${casos.length}`;
+    document.getElementById("resultado").textContent = texto;
+    document.getElementById("resultado").className = falhas.length ? "falha" : "ok";
+    console.log(texto);
+  });
+})();
+</script>
+</body>
+</html>

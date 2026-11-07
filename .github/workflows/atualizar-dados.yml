@@ -175,6 +175,16 @@ jobs:
             --escopo data \
             --pedidas "$UFS_PEDIDAS"
 
+      - name: Gerar índice de setores ("Perto de mim")
+        # Índice nacional leve (setores_pontos.json) para a tela do celular.
+        # Roda DEPOIS da mescla para cobrir também as UFs preservadas da véspera.
+        # Falhar aqui não pode impedir a publicação: o front trata índice ausente,
+        # e o `continue-on-error` deixa a falha visível no run sem bloquear nada.
+        # Não toca em ufs_disponiveis.json nem na guarda abaixo.
+        if: "!cancelled()"
+        continue-on-error: true
+        run: python -m src.cli indexar-setores --dados docs/dashboard/data
+
       - name: Conferir antes de publicar
         id: conferir
         # Invariante da spec: nenhuma publicação destrói dado bom. O deploy

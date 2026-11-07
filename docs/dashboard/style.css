@@ -762,6 +762,12 @@ td.mm { color: var(--sinal); font-weight: 500; }
   border: var(--fio) solid var(--tinta-fraca);
 }
 .legenda .nota { color: var(--tinta-fraca); display: block; margin-top: var(--s2); max-width: 210px; }
+/* Botão de recolher: só existe para o celular (ver bloco "celular"). */
+.legenda .legenda-alternar { display: none; }
+
+/* Isola o empilhamento do Leaflet: os controles dele (z-index 1000) ficam
+   presos ao mapa e não sobem sobre o cabeçalho fixo (z-index 500). */
+#mapa, #mapaAreas { isolation: isolate; }
 
 /* --------------------------------------------------------------- abas */
 
@@ -1111,6 +1117,47 @@ footer {
   .regua-leitura { gap: var(--s3); font-size: var(--micro); }
 }
 
+/* ------------------------------------------------------------- celular */
+/* Alvo de toque mínimo de 44 px em tudo o que se toca no celular. */
+@media (max-width: 767px) {
+  .faceplate select,
+  .faceplate input,
+  .botao-tema,
+  .abas button,
+  .toggle-janela button,
+  .filtros-avisos select { min-height: 44px; }
+  .botao-tema, .toggle-janela button { min-width: 44px; }
+  .campo-municipio { flex: 1 1 100%; }
+  /* O leaflet.css carrega depois deste arquivo: o #mapa ganha na especificidade. */
+  #mapa .leaflet-control-zoom a,
+  .toolbar-mapa button { width: 44px; height: 44px; line-height: 44px; }
+  /* O alvo da camada é a linha inteira (o <label>), não a caixinha. */
+  #mapa .leaflet-control-layers label { display: flex; align-items: center; min-height: 44px; }
+  #mapa .leaflet-control-layers label > span,
+  #mapa .leaflet-control-layers label > div { display: flex; align-items: center; gap: var(--s2); }
+  #mapa .leaflet-control-layers input { width: 20px; height: 20px; margin: 0; }
+  /* Fixo, o cabeçalho ocupava um terço da tela por cima do mapa. */
+  .faceplate { position: static; }
+  .botao-exportar,
+  .botao-exportar-linha { min-height: 44px; min-width: 44px; justify-content: center; }
+  footer a { display: inline-block; padding: 15px 0; }
+
+  .legenda { padding: 0; }
+  .legenda .legenda-alternar {
+    display: flex;
+    min-height: 44px;
+    padding: 0 var(--s3);
+    font-family: var(--font-cond);
+    font-weight: 600;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--tinta-media);
+  }
+  .legenda .legenda-conteudo { padding: 0 var(--s3) var(--s3); }
+  .legenda.recolhida .legenda-conteudo { display: none; }
+  .legenda button[data-filtro] { min-height: 44px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
@@ -1166,4 +1213,428 @@ footer {
   font-family: var(--font-mono);
   font-size: var(--micro);
   color: var(--tinta-media);
+}
+
+/* ===================================================== casca do celular */
+/* Barra fina, abas embaixo, gaveta de ajustes e vistas Perto/Mais. Fora do
+   celular tudo isto some e o layout de desktop fica intacto (ver movel.js). */
+
+.barra-movel, .abas-movel, .gaveta, .gaveta-veu, .vista-movel { display: none; }
+
+@media (max-width: 767px) {
+  :root { --altura-barra: 60px; --altura-abas: 56px; }
+
+  .faceplate { display: none; }
+  body { padding-bottom: calc(var(--altura-abas) + env(safe-area-inset-bottom)); }
+
+  /* -------- barra fina */
+  .barra-movel {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    position: sticky;
+    top: 0;
+    z-index: 600;
+    height: var(--altura-barra);
+    padding: 0 var(--s3);
+    background: var(--superficie);
+    border-bottom: var(--fio) solid var(--fio-cor);
+  }
+  .barra-marca { font-family: var(--font-cond); font-size: var(--step-2); letter-spacing: 0.04em; }
+  .barra-marca[hidden] { display: none; }
+  .barra-busca { flex: 1; min-width: 0; }
+  .barra-busca .busca input { width: 100%; height: 44px; font-size: 16px; }
+  .barra-botao {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    color: var(--tinta-media);
+    background: var(--base);
+    border: var(--fio) solid var(--fio-cor);
+    border-radius: var(--raio);
+    cursor: pointer;
+  }
+  .barra-botao[hidden] { display: none; }
+  .barra-botao .icone { width: 20px; height: 20px; }
+
+  /* -------- abas embaixo */
+  .abas-movel {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 600;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--superficie);
+    border-top: var(--fio) solid var(--fio-cor);
+  }
+  .abas-movel button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: var(--altura-abas);
+    font-family: var(--font-ui);
+    font-size: var(--micro);
+    color: var(--tinta-media);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .abas-movel button .icone { width: 22px; height: 22px; }
+  .abas-movel button.ativo { color: var(--agua); font-weight: 600; }
+
+  /* -------- vistas */
+  body[data-vista-movel] main { padding: var(--s3); }
+  body[data-vista-movel="perto"] #vistaPerto,
+  body[data-vista-movel="mais"] #vistaMais { display: block; }
+  .vista-movel[hidden] { display: none !important; }
+  body[data-vista-movel="perto"] #vistaMapa,
+  body[data-vista-movel="mais"]:not([data-sub-mais]) #vistaMapa { display: none; }
+
+  /* Mapa: só o mapa, na altura que sobra entre a barra e as abas. */
+  body[data-vista-movel="mapa"] main { padding: 0; }
+  body[data-vista-movel="mapa"] .shell { gap: 0; }
+  body[data-vista-movel="mapa"] .shell > :not(.coluna-mapa),
+  body[data-vista-movel="mapa"] .coluna-contexto > * { display: none; }
+  body[data-vista-movel="mapa"] #mapa {
+    height: calc(100dvh - var(--altura-barra) - var(--altura-abas) - env(safe-area-inset-bottom));
+    min-height: 320px;
+    border: 0;
+    border-radius: 0;
+  }
+  /* "Tela cheia" não faz sentido: o mapa já ocupa a tela. */
+  body[data-vista-movel] .toolbar-mapa button[data-acao="cheio"] { display: none; }
+  body[data-vista-movel] #mapa .leaflet-control-zoom { display: none; }
+
+  /* Alertas: contadores, tabelas, avisos e municípios; o mapa fica na aba Mapa. */
+  body[data-vista-movel="alertas"] .coluna-mapa { display: none; }
+
+  /* -------- Mais */
+  .lista-mais { display: flex; flex-direction: column; }
+  .lista-mais button,
+  .lista-mais a {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    min-height: 56px;
+    padding: 0 var(--s4);
+    font-family: var(--font-ui);
+    font-size: var(--step-1);
+    color: var(--tinta);
+    text-align: left;
+    text-decoration: none;
+    background: var(--superficie);
+    border: var(--fio) solid var(--fio-cor);
+    border-bottom-width: 0;
+    cursor: pointer;
+  }
+  .lista-mais > :first-child { border-radius: var(--raio) var(--raio) 0 0; }
+  .lista-mais > :last-child { border-bottom-width: var(--fio); border-radius: 0 0 var(--raio) var(--raio); }
+  .lista-mais .icone { width: 20px; height: 20px; color: var(--tinta-media); }
+
+  /* -------- gaveta de ajustes */
+  .gaveta-veu {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 700;
+    background: rgba(20, 25, 26, 0.45);
+  }
+  .gaveta {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 710;
+    max-height: calc(100dvh - 48px);
+    padding: 0 var(--s4) calc(var(--s4) + env(safe-area-inset-bottom));
+    background: var(--superficie);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+    transition: transform var(--transicao);
+  }
+  .gaveta-veu[hidden], .gaveta[hidden] { display: none; }
+  body.gaveta-aberta { overflow: hidden; }
+  .gaveta-alca { display: grid; place-items: center; height: 24px; touch-action: none; cursor: grab; }
+  .gaveta-alca span { width: 40px; height: 4px; border-radius: 2px; background: var(--fio-cor); }
+  .gaveta-cabecalho { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--s2); }
+  .gaveta-cabecalho h2 {
+    margin: 0;
+    font-family: var(--font-cond);
+    font-size: var(--step-1);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .gaveta-corpo { overflow-y: auto; display: flex; flex-direction: column; gap: var(--s4); padding-bottom: var(--s2); }
+  .gaveta-corpo .campo select { width: 100%; height: 48px; max-width: none; font-size: 16px; }
+  .gaveta-corpo .toggle-janela { display: grid; grid-template-columns: 1fr 1fr; }
+  .gaveta-corpo .toggle-janela button { height: 48px; }
+  .gaveta-corpo .bloco-regua { border: 0; background: none; }
+  .gaveta-corpo #limiarSlider { min-height: 44px; }
+  .gaveta-camadas h3 {
+    margin: 0 0 var(--s1);
+    font-family: var(--font-cond);
+    font-size: var(--micro);
+    font-weight: 600;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--tinta-fraca);
+  }
+  /* #gavetaCamadas: o leaflet.css carrega depois e pintaria o texto de #333. */
+  #gavetaCamadas .leaflet-control-layers { color: var(--tinta); }
+  .gaveta-camadas .leaflet-control-layers {
+    position: static;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: none;
+    font-size: var(--step-1);
+  }
+  .gaveta-camadas .leaflet-control-layers label {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    border-top: var(--fio) solid var(--fio-cor);
+  }
+  .gaveta-camadas .leaflet-control-layers label > span,
+  .gaveta-camadas .leaflet-control-layers label > div { display: flex; align-items: center; gap: var(--s3); width: 100%; }
+  /* Caixinha vira interruptor: só aparência; o <input> continua sendo o checkbox do Leaflet. */
+  .gaveta-camadas input[type="checkbox"] {
+    appearance: none;
+    order: 2;
+    margin-left: auto;
+    width: 44px;
+    height: 26px;
+    border-radius: 13px;
+    background: var(--fio-cor);
+    position: relative;
+    cursor: pointer;
+    flex: none;
+  }
+  .gaveta-camadas input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--superficie);
+    transition: left var(--transicao);
+  }
+  .gaveta-camadas input[type="checkbox"]:checked { background: var(--agua); }
+  .gaveta-camadas input[type="checkbox"]:checked::after { left: 21px; }
+  .gaveta-camadas .leaflet-control-layers-separator { display: none; }
+}
+
+/* ------------------------------------------------ cartão do setor (celular) */
+.cartao-setor { display: none; }
+
+@media (max-width: 767px) {
+  .coluna-mapa { position: relative; }
+  .cartao-setor {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 650;
+    padding: 0 var(--s4) var(--s4);
+    background: var(--superficie);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+    transition: transform var(--transicao);
+  }
+  .cartao-setor[hidden] { display: none; }
+  .cartao-alca { display: grid; place-items: center; height: 24px; touch-action: none; cursor: grab; }
+  .cartao-alca span { width: 40px; height: 4px; border-radius: 2px; background: var(--fio-cor); }
+  .cartao-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s3); }
+  .cartao-topo h3 { margin: 0; font-size: var(--step-2); }
+  .cartao-meta { margin: 2px 0 var(--s3); font-size: var(--step-0); color: var(--tinta-media); }
+  .cartao-fechar {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin: -6px -10px 0 0;
+    color: var(--tinta-media);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .cartao-fechar .icone { width: 20px; height: 20px; }
+  .cartao-numeros { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+  .cartao-numeros > div { border: var(--fio) solid var(--fio-cor); border-radius: var(--raio); padding: var(--s2) var(--s3); }
+  .cartao-numeros small {
+    display: block;
+    font-size: var(--micro);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--tinta-fraca);
+  }
+  .cartao-numeros b { font-family: var(--font-mono); font-size: var(--step-2); font-weight: 500; }
+  .cartao-resposta {
+    margin: var(--s3) 0 0;
+    padding: var(--s2) var(--s3);
+    font-size: var(--step-0);
+    border-left: 4px solid var(--fio-cor);
+    background: var(--superficie-2);
+    border-radius: 0 var(--raio) var(--raio) 0;
+  }
+  .cartao-resposta.acima { border-left-color: var(--sinal); }
+  .cartao-resposta.previsto { border-left-color: var(--sinal-fraco); }
+  .cartao-resposta.sem-dado { border-left-color: var(--tinta-fraca); color: var(--tinta-media); }
+  .cartao-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); margin-top: var(--s3); }
+  .cartao-acoes button,
+  .cartao-acoes a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    min-height: 44px;
+    font-family: var(--font-ui);
+    font-size: var(--step-0);
+    font-weight: 600;
+    color: var(--tinta);
+    text-decoration: none;
+    background: var(--base);
+    border: var(--fio) solid var(--fio-cor);
+    border-radius: var(--raio);
+    cursor: pointer;
+  }
+  .cartao-acoes a.primario { color: #fff; background: var(--agua); border-color: var(--agua); }
+  .cartao-aviso { margin: var(--s2) 0 0; font-size: var(--step-0); color: var(--tinta-media); word-break: break-all; }
+}
+
+/* ------------------------------------------------ Perto de mim (celular) */
+@media (max-width: 767px) {
+  .perto-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s3); }
+  .perto-topo h2 {
+    margin: 0;
+    font-family: var(--font-cond);
+    font-size: var(--step-2);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .perto-aviso {
+    margin: 0 0 var(--s3);
+    padding: var(--s2) var(--s3);
+    font-size: var(--step-0);
+    color: var(--tinta-media);
+    background: var(--superficie-2);
+    border-radius: var(--raio);
+  }
+  .perto-aviso[hidden] { display: none; }
+
+  .perto-veredito {
+    padding: var(--s4);
+    border-radius: 8px;
+    border: var(--fio) solid var(--fio-cor);
+    background: var(--superficie);
+    color: var(--tinta);
+  }
+  .perto-veredito small {
+    display: block;
+    font-size: var(--micro);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .perto-veredito strong { display: block; margin: 2px 0 var(--s2); font-size: 24px; line-height: 1.2; }
+  .perto-veredito p { margin: 0; font-size: var(--step-0); }
+  .perto-veredito .perto-nota { margin-top: var(--s2); font-size: 13px; opacity: 0.9; }
+  .perto-veredito.iminente { background: var(--sinal); border-color: var(--sinal); color: #fff; }
+  .perto-veredito.previsto { background: var(--sinal-fraco); border-color: var(--sinal-fraco); color: #fff; }
+  .perto-veredito.sem-dado { background: var(--superficie-2); color: var(--tinta-media); }
+  .perto-veredito.convite p { margin-bottom: var(--s3); }
+  .perto-carregando { color: var(--tinta-fraca); }
+
+  .perto-botao {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 48px;
+    margin-top: var(--s3);
+    font-family: var(--font-ui);
+    font-size: var(--step-1);
+    font-weight: 600;
+    color: #fff;
+    background: var(--agua);
+    border: 0;
+    border-radius: var(--raio);
+    cursor: pointer;
+  }
+
+  .perto-barra { position: relative; height: 10px; margin: var(--s3) 0 var(--s1); border-radius: 5px; background: rgba(127, 127, 127, 0.3); }
+  .perto-barra i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; }
+  .perto-barra i.barra-agora { background: currentColor; }
+  .perto-barra i.barra-previsto { background: repeating-linear-gradient(45deg, currentColor 0 3px, transparent 3px 6px); opacity: 0.8; }
+  .perto-barra .limiar { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: currentColor; }
+  .perto-barra-rotulos { display: flex; justify-content: space-between; gap: var(--s2); font-family: var(--font-mono); font-size: var(--micro); }
+
+  .perto-lista { margin-top: var(--s4); }
+  .perto-lista[hidden] { display: none; }
+  .perto-secao {
+    display: flex;
+    justify-content: space-between;
+    margin: 0 0 var(--s2);
+    font-family: var(--font-cond);
+    font-size: var(--micro);
+    font-weight: 600;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--tinta-fraca);
+  }
+  .perto-itens { list-style: none; margin: 0; padding: 0; }
+  .perto-item {
+    display: grid;
+    grid-template-columns: 6px minmax(0, 1fr) auto;
+    gap: var(--s3);
+    align-items: center;
+    width: 100%;
+    min-height: 64px;
+    padding: var(--s2) var(--s3) var(--s2) 0;
+    font-family: var(--font-ui);
+    text-align: left;
+    color: var(--tinta);
+    background: var(--superficie);
+    border: var(--fio) solid var(--fio-cor);
+    border-bottom-width: 0;
+    cursor: pointer;
+  }
+  .perto-itens li:first-child .perto-item { border-radius: var(--raio) var(--raio) 0 0; }
+  .perto-itens li:last-child .perto-item { border-bottom-width: var(--fio); border-radius: 0 0 var(--raio) var(--raio); }
+  .perto-itens li:only-child .perto-item { border-radius: var(--raio); }
+  .perto-item .faixa { align-self: stretch; background: var(--fio-cor); }
+  .perto-item.iminente .faixa { background: var(--sinal); }
+  .perto-item.previsto .faixa { background: var(--sinal-fraco); }
+  .perto-item .texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .perto-item .texto b { font-size: var(--step-0); overflow-wrap: anywhere; }
+  .perto-item .texto span { font-size: 13px; color: var(--tinta-media); }
+  .perto-item .texto .nota { font-size: var(--micro); color: var(--tinta-fraca); }
+  .perto-item .onde { font-family: var(--font-mono); font-size: 13px; text-align: right; color: var(--tinta-media); max-width: 9ch; }
+  .perto-item .tag {
+    display: inline-block;
+    padding: 0 5px;
+    font-size: var(--micro);
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #fff;
+    border-radius: 2px;
+  }
+  .perto-item .tag.iminente { background: var(--sinal); }
+  .perto-item .tag.previsto { background: var(--sinal-fraco); }
+  .perto-vazio { margin: 0; padding: var(--s3); font-size: var(--step-0); color: var(--tinta-media); background: var(--superficie); border: var(--fio) solid var(--fio-cor); border-radius: var(--raio); }
+  .perto-vazio[hidden] { display: none; }
 }

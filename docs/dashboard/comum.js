@@ -38,14 +38,34 @@
   const DIAS_HISTORICO_PADRAO = 4;
   const DIAS_PREVISAO_PADRAO = 4;
 
-  /* Chuva horária de UM ponto, direto da Open-Meteo. Um ponto custa quase nada
-     de quota, ao contrário da UF inteira (SP são ~900 pontos de grade), então o
-     navegador pode fazer isto sob demanda. Usada pela aba "Minhas áreas" e pelo
-     "Atualizar agora" do município. */
-  async function buscarChuvaOpenMeteo(lat, lon, opcoes = {}) {
+  /* Converte a resposta da Open-Meteo em uma série por ponto, na ordem pedida.
+     A API devolve um objeto para 1 ponto e uma lista para vários. Item sem
+     `hourly.time` vira `null` naquela posição (não lança: os outros pontos
+     continuam valendo). Quantidade diferente da pedida lança, porque aí não dá
+     para saber qual série é de qual ponto. */
+  function seriesDaRespostaOpenMeteo(dados, nPontos) {
+    const itens = Array.isArray(dados) ? dados : [dados];
+    if (itens.length !== nPontos) {
+      throw new Error(`Open-Meteo devolveu ${itens.length} séries para ${nPontos} pontos.`);
+    }
+    return itens.map(item => {
+      const horario = item && item.hourly;
+      if (!horario || !Array.isArray(horario.time)) return null;
+      const precipitacoes = Array.isArray(horario.precipitation) ? horario.precipitation : [];
+      return horario.time.map((iso, i) => ({
+        dataHoraMs: Date.parse(iso.endsWith("Z") ? iso : `${iso}Z`),
+        chuvaMm: typeof precipitacoes[i] === "number" ? precipitacoes[i] : null,
+      }));
+    });
+  }
+
+  /* Chuva horária de VÁRIOS pontos numa só chamada à Open-Meteo (latitudes e
+     longitudes separadas por vírgula). Usada pela tela "Perto de mim": o ponto
+     do aparelho e os setores próximos saem juntos. */
+  async function buscarChuvaVariosPontos(pontos, opcoes = {}) {
     const url = new URL(FORECAST_URL);
-    url.searchParams.set("latitude", lat);
-    url.searchParams.set("longitude", lon);
+    url.searchParams.set("latitude", pontos.map(p => p.lat).join(","));
+    url.searchParams.set("longitude", pontos.map(p => p.lon).join(","));
     url.searchParams.set("hourly", "precipitation");
     url.searchParams.set("past_days", String(opcoes.diasHistorico || DIAS_HISTORICO_PADRAO));
     url.searchParams.set("forecast_days", String(opcoes.diasPrevisao || DIAS_PREVISAO_PADRAO));
@@ -54,14 +74,18 @@
     if (!resp.ok) {
       throw new Error(`Open-Meteo respondeu ${resp.status}. Tente novamente em instantes.`);
     }
-    const dados = await resp.json();
-    const horario = (dados && dados.hourly) || {};
-    const horas = horario.time || [];
-    const precipitacoes = horario.precipitation || [];
-    return horas.map((iso, i) => ({
-      dataHoraMs: Date.parse(iso.endsWith("Z") ? iso : `${iso}Z`),
-      chuvaMm: typeof precipitacoes[i] === "number" ? precipitacoes[i] : null,
-    }));
+    return seriesDaRespostaOpenMeteo(await resp.json(), pontos.length);
+  }
+
+  /* Chuva horária de UM ponto, direto da Open-Meteo. Um ponto custa quase nada
+     de quota, ao contrário da UF inteira (SP são ~900 pontos de grade), então o
+     navegador pode fazer isto sob demanda. Usada pela aba "Minhas áreas" e pelo
+     "Atualizar agora" do município. */
+  async function buscarChuvaOpenMeteo(lat, lon, opcoes = {}) {
+    const [serie] = await buscarChuvaVariosPontos([{ lat, lon }], opcoes);
+    // Antes desta função passar pela de vários pontos, resposta sem `hourly`
+    // virava série vazia; continua igual para quem já a usa.
+    return serie || [];
   }
 
   /* Soma a chuva da série na janela que termina em `referenciaMs`. Devolve
@@ -90,6 +114,7 @@
 
   window.ORCA = Object.assign(window.ORCA || {}, {
     escaparHtml, token, fetchComTimeout,
-    buscarChuvaOpenMeteo, chuvaAcumulada, referenciaObservada,
+    buscarChuvaOpenMeteo, buscarChuvaVariosPontos, seriesDaRespostaOpenMeteo,
+    chuvaAcumulada, referenciaObservada,
   });
 })();
