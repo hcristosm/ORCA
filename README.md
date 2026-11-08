@@ -43,15 +43,62 @@ e não custa nada.
 **Dashboard ao vivo:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/).
 Um cron atualiza os dados todo dia.
 
-**Instale como app:** abra o dashboard no Chrome ou no Edge. Clique no ícone de
-instalar, na barra de endereço. No celular, use "Adicionar à tela inicial". O
-ORCA ganha ícone e janela próprios. Ele se atualiza sozinho e se desinstala
-como qualquer programa.
+**Instale como app,** no celular ou no computador: veja
+[Instalar como app](#instalar-como-app).
 
 <p align="center">
   <img src="docs/screenshots/dashboard-claro.png" alt="Dashboard do ORCA em tema claro, no Rio Grande do Sul com limiar de 50mm: à esquerda os contadores e a régua de chuva por setor, no centro o mapa com os setores hachurados por grau e pins nos que passaram do limiar, à direita as tabelas de setores em atenção e de alerta previsto" width="49%">
   <img src="docs/screenshots/dashboard-escuro.png" alt="Mesmo dashboard do ORCA em tema escuro" width="49%">
 </p>
+
+## No celular
+
+<p align="center">
+  <img src="docs/screenshots/celular-telas.webp" alt="Três telas do ORCA no celular, em Nova Friburgo (RJ). Perto de mim: o veredito Sem alerta, com 28,9 mm de chuva em 72h contra o limiar de 100 mm, e cinco setores Muito alto a 280, 358, 441, 529 e 550 metros. Toque no setor: o mapa com o setor destacado e o cartão com a chuva, o limiar e os botões Compartilhar e Rota até aqui. Sem sinal: o app em modo avião, com a faixa Sem conexão e a hora do dado" width="820">
+</p>
+
+No celular, o ORCA abre na aba **Perto de mim**. Ele pede a sua localização e
+responde se o lugar onde você está pode entrar em alerta.
+
+- Dá o veredito do ponto: risco iminente, alerta previsto (com a hora), sem
+  alerta ou sem dado. O ponto não precisa ser setor oficial. Fora de setor, o
+  alerta vem só da chuva.
+- Lista os setores da CPRM/SGB a até 10 km, com a distância e a direção de cada
+  um.
+- Abre o setor no mapa com um toque. O cartão mostra a chuva, o limiar e os
+  botões de compartilhar e de rota.
+- Abre sem sinal, com a última consulta e a hora do dado.
+
+A conta roda no aparelho. O celular baixa um índice leve dos setores de todo o
+Brasil (`setores_pontos.json`, cerca de 530 KB com gzip) e consulta a chuva do
+ponto direto na Open-Meteo. Não há servidor no meio.
+
+### Instalar como app
+
+O ORCA se instala pelo navegador, sem loja de aplicativos. Ele ganha ícone e
+janela próprios, se atualiza sozinho e se desinstala como qualquer app.
+
+**Android (Chrome):** abra [hcristosm.github.io/ORCA](https://hcristosm.github.io/ORCA/),
+toque no menu ⋮ e escolha **Instalar app**. Em algumas versões do Chrome, a
+opção se chama **Adicionar à tela inicial**.
+
+<p align="center">
+  <img src="docs/screenshots/instalar-android.webp" alt="Três passos no Android. 1: o ORCA aberto no Chrome, com o menu de três pontos em destaque. 2: o menu aberto, com a opção Instalar app em destaque. 3: a tela inicial com o ícone do ORCA" width="820">
+</p>
+
+**iPhone (Safari):** abra o mesmo endereço, toque em **Compartilhar** e depois
+em **Adicionar à Tela de Início**. No iOS 26, o Compartilhar fica dentro do menu
+⋯ da barra do Safari.
+
+<p align="center">
+  <img src="docs/screenshots/instalar-iphone.webp" alt="Três passos no iPhone. 1: o ORCA aberto no Safari, com o botão Compartilhar em destaque. 2: a folha de compartilhamento, com a opção Adicionar à Tela de Início em destaque. 3: a tela inicial com o ícone do ORCA" width="820">
+</p>
+
+**Computador (Chrome ou Edge):** clique no ícone de instalar, na barra de
+endereço.
+
+As barras e os menus do navegador nas figuras são esquemáticos. Os nomes das
+opções mudam um pouco entre versões.
 
 ## O que o projeto faz hoje
 
@@ -79,7 +126,8 @@ como qualquer programa.
 - Filtra o mapa pela legenda e pelos contadores, por grau, por "acima do
   limiar" e por "alerta previsto".
 - Usa três colunas com rolagem própria: contexto, mapa e painel. O mapa fica
-  sempre à vista. Abaixo de 1081px de largura, as colunas empilham.
+  sempre à vista. Abaixo de 1081px de largura, as colunas empilham. Abaixo de
+  768px, o dashboard vira a versão de celular (veja [No celular](#no-celular)).
 
 **Ferramentas do visitante**
 
@@ -126,7 +174,7 @@ como qualquer programa.
 
 - Roda dois workflows separados: os setores uma vez por mês e a chuva uma vez
   por dia.
-- Tem 161 testes com HTTP mockado. O CI roda a suíte a cada push.
+- Tem 170 testes em Python, com HTTP mockado. O CI roda a suíte a cada push.
 
 ## Como ler o dashboard
 
@@ -221,7 +269,7 @@ de um processo Python em execução.
 
 ```
 src/                      pipeline em Python
-tests/                    161 testes, com HTTP mockado
+tests/                    170 testes em Python (HTTP mockado) e testes de JS
 scripts/                  guarda de publicação, mescla e atalho do dashboard
 docs/dashboard/           front-end estático (publicado em gh-pages)
 docs/dashboard/data/      saídas do pipeline (ignoradas pelo git)
@@ -426,19 +474,23 @@ junto. É contra isso que a guarda existe.
 
 O CI roda esses quatro comandos a cada push. Rode-os antes de commitar.
 
-Os 161 testes cobrem:
+Os 170 testes em Python cobrem:
 
 - a ingestão da CPRM: ArcGIS REST, paginação, incremental por marcador d'água e
   retry;
 - a Open-Meteo: lotes, retry e o cache SQLite;
 - o processamento: grade espacial nacional, acumulação de chuva e previsão;
 - a publicação: exportação, guarda anti-regressão e mescla não-destrutiva com o
-  `gh-pages`.
+  `gh-pages`;
+- o índice de setores da tela Perto de mim.
 
 Toda chamada de rede é mockada, então a suíte roda sem internet.
 
-O dashboard em si (HTML e JavaScript) não tem teste automatizado. A validação
-dele é manual.
+Os cálculos da versão de celular (distância, setores próximos, trajetória e
+veredito) têm 34 testes em `tests/js/calculo.html`. Eles rodam no navegador,
+porque o projeto não usa Node: sirva a raiz do repositório com
+`python3 -m http.server 8001` e abra `http://localhost:8001/tests/js/calculo.html`.
+A página termina com "PASSOU 34/34". O resto do dashboard é validado à mão.
 
 ## Limitações conhecidas
 

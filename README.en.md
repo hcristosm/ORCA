@@ -43,15 +43,64 @@ browser reads these files. Therefore the site runs on GitHub Pages at no cost.
 **Live dashboard:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/).
 A cron job updates the data every day.
 
-**Install it as an app:** open the dashboard in Chrome or in Edge. Click the
-install icon in the address bar. On a telephone, use "Add to Home screen". ORCA
-then has its own icon and window. It updates itself, and you remove it as you
-remove any other program.
+**Install it as an app,** on a telephone or on a computer: see
+[Install it as an app](#install-it-as-an-app).
 
 <p align="center">
   <img src="docs/screenshots/dashboard-claro.png" alt="ORCA dashboard in light theme, showing Rio Grande do Sul with a 50mm threshold: counters and the per-sector rainfall ruler on the left, the map with sectors hatched by risk level and pins on those above the threshold in the center, and the tables of sectors in attention and forecast alert on the right" width="49%">
   <img src="docs/screenshots/dashboard-escuro.png" alt="The same ORCA dashboard in dark theme" width="49%">
 </p>
+
+## On a telephone
+
+<p align="center">
+  <img src="docs/screenshots/celular-telas.webp" alt="Three ORCA screens on a telephone, in Nova Friburgo (RJ). Perto de mim (Near me): the verdict Sem alerta (no alert), with 28.9 mm of rain in 72h against the 100 mm threshold, and five Muito alto (very high) sectors at 280, 358, 441, 529 and 550 metres. Tap a sector: the map with the sector highlighted and the card with the rainfall, the threshold and the Share and Route buttons. No signal: the app in airplane mode, with the Sem conexão (no connection) bar and the time of the data" width="820">
+</p>
+
+On a telephone, ORCA opens on the **Perto de mim** (Near me) tab. It asks for
+your location. Then it tells you if the place where you are can go into alert.
+
+- It gives the verdict for your point: imminent risk, forecast alert (with the
+  time), no alert or no data. Your point does not have to be an official
+  sector. Outside a sector, only the rainfall gives the alert.
+- It lists the CPRM/SGB sectors in a radius of 10 km, with the distance and the
+  direction of each one.
+- One tap opens the sector on the map. The card shows the rainfall, the
+  threshold and the buttons to share and to get a route.
+- It opens with no signal. It then shows your last result and the time of the
+  data.
+
+The telephone does all the calculation. It downloads a small index of the
+sectors of all of Brazil (`setores_pontos.json`, approximately 530 KB with
+gzip). It gets the rainfall for your point directly from Open-Meteo. There is
+no server between them.
+
+### Install it as an app
+
+You install ORCA from the browser. You do not need an app store. ORCA then has
+its own icon and window. It updates itself, and you remove it as you remove any
+other app.
+
+**Android (Chrome):** open [hcristosm.github.io/ORCA](https://hcristosm.github.io/ORCA/),
+tap the ⋮ menu and select **Install app**. In some versions of Chrome, the
+option is **Add to Home screen**.
+
+<p align="center">
+  <img src="docs/screenshots/instalar-android.webp" alt="Three steps on Android. 1: ORCA open in Chrome, with the three-dot menu highlighted. 2: the open menu, with the Install app option highlighted. 3: the home screen with the ORCA icon" width="820">
+</p>
+
+**iPhone (Safari):** open the same address. Tap **Share**, then tap **Add to
+Home Screen**. In iOS 26, Share is in the ⋯ menu of the Safari bar.
+
+<p align="center">
+  <img src="docs/screenshots/instalar-iphone.webp" alt="Three steps on iPhone. 1: ORCA open in Safari, with the Share button highlighted. 2: the share sheet, with the Add to Home Screen option highlighted. 3: the home screen with the ORCA icon" width="820">
+</p>
+
+**Computer (Chrome or Edge):** click the install icon in the address bar.
+
+The browser bars and menus in the figures are diagrams. The figures show the
+Portuguese labels, and the names of the options change a little between
+versions.
 
 ## What the project does today
 
@@ -79,7 +128,8 @@ remove any other program.
 - It filters the map from the legend and from the counters, by risk level, by
   "above the threshold" and by "forecast alert".
 - It uses three columns with independent scroll: context, map and panel. The map
-  stays in view. Below a width of 1081px, the columns stack.
+  stays in view. Below a width of 1081px, the columns stack. Below 768px, the
+  dashboard changes to the telephone version (see [On a telephone](#on-a-telephone)).
 
 **Visitor tools**
 
@@ -130,7 +180,7 @@ remove any other program.
 
 - It runs two separate workflows: the sectors once per month and the rainfall
   once per day.
-- It has 161 tests with mocked HTTP. The CI runs the suite on every push.
+- It has 170 Python tests with mocked HTTP. The CI runs the suite on every push.
 
 ## How to read the dashboard
 
@@ -227,7 +277,7 @@ independence from a running Python process.
 
 ```
 src/                      Python pipeline
-tests/                    161 tests, with mocked HTTP
+tests/                    170 Python tests (mocked HTTP) and JS tests
 scripts/                  publication guard, merge and dashboard helper
 docs/dashboard/           static front-end (published to gh-pages)
 docs/dashboard/data/      pipeline output (ignored by git)
@@ -435,18 +485,23 @@ states and the cache with them. The guard exists against this.
 
 The CI runs these four commands on every push. Run them before you commit.
 
-The 161 tests cover:
+The 170 Python tests cover:
 
 - the CPRM ingestion: ArcGIS REST, pagination, incremental watermark and retry;
 - Open-Meteo: batches, retry and the SQLite cache;
 - the processing: national spatial grid, rainfall accumulation and forecast;
 - the publication: export, anti-regression guard and non-destructive merge with
-  `gh-pages`.
+  `gh-pages`;
+- the sector index of the Perto de mim (Near me) screen.
 
 Every network call is mocked, so the suite runs with no internet.
 
-The dashboard itself (HTML and JavaScript) has no automated test. Its validation
-is manual.
+The calculations of the telephone version (distance, near sectors, trajectory
+and verdict) have 34 tests in `tests/js/calculo.html`. They run in the browser,
+because the project does not use Node. Serve the root of the repository with
+`python3 -m http.server 8001` and open `http://localhost:8001/tests/js/calculo.html`.
+The page ends with "PASSOU 34/34". You do a manual check of the rest of the
+dashboard.
 
 ## Known limitations
 
