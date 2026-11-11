@@ -12,6 +12,8 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-11
+
 ### FEATURES
 - feat(dashboard): PWA que abre sem sinal. Um service worker guarda a casca do app (HTML, CSS, JS, fontes, ícones, bibliotecas do CDN) e o índice de setores; arquivos do próprio site vêm da rede primeiro (4 s de limite) e caem no cache sem rede, então uma versão nova chega já na primeira carga com sinal. Dados ao vivo (tiles, Open-Meteo, INMET, radar, raios) não passam pelo cache. Sem rede, "Perto de mim" mostra a última consulta com a hora. A sonda da recarga de aba parada passa direto pelo service worker, para não recarregar sem sinal
 - feat(dashboard): tela "Perto de mim", a primeira no celular. Com a localização do aparelho, dá o veredito do ponto (Risco iminente, Alerta previsto em ~Nh, Sem alerta ou Sem dado agora) e lista até 5 setores da CPRM a menos de 10 km, com distância, direção e estado. Ponto fora de setor é tratado como setor pela chuva, com o aviso de que não é área mapeada. Tudo no aparelho: índice estático e uma só chamada à Open-Meteo. Sem GPS, usa o centro do município buscado; sem Open-Meteo, o ponto fica em "Sem dado" e os setores usam o valor publicado com a hora; sem índice, só o veredito do ponto; sem rede, a última consulta guardada com a hora. Tocar num setor abre o mapa com o cartão dele
@@ -30,6 +32,8 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ### CHORE
 - docs(dashboard): reescreve a aba Tutorial no estilo ASD-STE100 aplicado a ~80% (média de 9,6 palavras por frase), mantendo a tabela de critérios, os botões, as notas de fonte e as referências
+- docs(readme): seção "No celular" nos dois READMEs, com as telas Perto de mim, cartão do setor e abertura sem sinal, e o passo a passo de instalação no Android (Chrome) e no iPhone (Safari); contagem de testes atualizada e os testes de JS documentados
+- chore(deps-dev): atualiza `ruff` (>=0.17.3), `pytest` (>=9.2.0) e `mypy` (>=2.4.1)
 
 ## [2.4.0] - 2026-10-28
 
