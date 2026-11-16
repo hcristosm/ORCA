@@ -109,6 +109,8 @@ que prova que o site é deste run.
 ## Convenções
 
 - Código, commits, docs e mensagens ao usuário **em português**.
+- Commits e PRs **sem atribuição ao Claude**: nada de `Co-Authored-By`,
+  `Claude-Session` nem "Generated with Claude Code" na mensagem ou na descrição.
 - Commits no padrão Conventional Commits; o `CHANGELOG.md` agrupa por
   `FEATURES`/`FIXES`/`REFACTOR`/`CHORE` (entradas até a v1.0.0 usam o formato antigo).
 - Release: bump em `pyproject.toml` + entrada no CHANGELOG + tag `vX.Y.Z`. A tag
