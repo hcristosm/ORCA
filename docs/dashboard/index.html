@@ -22,8 +22,9 @@
 ">
 
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/app-192.png">
-<link rel="apple-touch-icon" href="icons/app-192.png">
+<link rel="icon" href="icons/orca-32.png" sizes="32x32">
+<link rel="icon" href="icons/orca-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/orca-apple-180.png">
 <meta name="theme-color" content="#10161a">
 <link rel="stylesheet" href="style.css">
 
@@ -55,7 +56,7 @@
 <header class="faceplate">
   <div class="faceplate-interno">
     <div class="marca">
-      <img id="logoImg" src="logo/orca-logo-claro.png" alt="Logo do ORCA" height="34">
+      <img src="icons/orca-192.png" alt="" width="34" height="34">
       <span class="marca-texto">
         <b>ORCA</b>
         <span>risco geol&oacute;gico &times; chuva</span>
@@ -840,8 +841,6 @@
 
   function aplicarTema(tema) {
     document.documentElement.setAttribute("data-tema", tema);
-    document.getElementById("logoImg").src =
-      tema === "escuro" ? "logo/orca-logo-escuro.png" : "logo/orca-logo-claro.png";
   }
 
   function alternarTema() {

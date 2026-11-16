@@ -14,7 +14,7 @@
    a pessoa visita aquela UF. */
 "use strict";
 
-const CACHE_CASCA = "orca-casca-v1";
+const CACHE_CASCA = "orca-casca-v2";
 const CACHE_CDN = "orca-cdn-v1";
 const CACHES_ATUAIS = [CACHE_CASCA, CACHE_CDN];
 const LIMITE_REDE_MS = 4000;
@@ -31,9 +31,8 @@ const CASCA = [
   "areas-customizadas.js",
   "manifest.webmanifest",
   "icons/sprite.svg",
-  "icons/app-192.png",
-  "logo/orca-logo-claro.png",
-  "logo/orca-logo-escuro.png",
+  "icons/orca-32.png",
+  "icons/orca-192.png",
   "fonts/plex-sans.woff2",
   "fonts/plex-cond-600.woff2",
   "fonts/plex-cond-700.woff2",

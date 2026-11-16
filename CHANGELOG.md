@@ -12,6 +12,9 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+### FEATURES
+- feat(dashboard): logo novo, uma orca sobre fundo azul. O ícone do app ganha versões separadas para cada plataforma: `any` com cantos arredondados, `maskable` com a orca dentro do círculo seguro (antes o mesmo arquivo servia aos dois e o Android cortava as bordas) e `apple-touch-icon` de 180 px. O cabeçalho usa o ícone, que serve aos dois temas, então a troca de logo junto com o tema sai. A tela de abertura do app no Android passa a ser azul, e o README traz o logo com "ORCA" escrito embaixo. Os arquivos têm nomes novos e o cache da casca vai para `v2`, para nenhum cache prender o ícone antigo. `scripts/gerar_icones.py` refaz tudo a partir da arte de origem
+
 ## [2.5.0] - 2026-11-11
 
 ### FEATURES

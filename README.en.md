@@ -1,10 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/orca-logo-escuro.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/logo/orca-logo-claro.png">
-  <img src="docs/logo/orca-logo-claro.png" alt="ORCA logo: an orca jumping over a wave, with a mountain, a warning icon and a raindrop" width="320">
-</picture>
+<img src="docs/logo/orca-logo.png" alt="ORCA logo: a leaping orca on a blue background" width="240">
 
 # ORCA
 *Open Risk and Catastrophe Aggregator*
