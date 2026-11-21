@@ -15,6 +15,11 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 ### FEATURES
 - feat(dashboard): logo novo, uma orca sobre fundo azul. O ícone do app ganha versões separadas para cada plataforma: `any` com cantos arredondados, `maskable` com a orca dentro do círculo seguro (antes o mesmo arquivo servia aos dois e o Android cortava as bordas) e `apple-touch-icon` de 180 px. O cabeçalho usa o ícone, que serve aos dois temas, então a troca de logo junto com o tema sai. A tela de abertura do app no Android passa a ser azul, e o README traz o logo com "ORCA" escrito embaixo. Os arquivos têm nomes novos e o cache da casca vai para `v2`, para nenhum cache prender o ícone antigo. `scripts/gerar_icones.py` refaz tudo a partir da arte de origem
 
+### FIXES
+- fix(ingest): a poda incremental da CPRM apagava do GeoPackage todo setor ausente da lista de `objectid`, sem conferir o tamanho da lista. Uma lista truncada pela SGB (o corte de 2000 já visto em MG, que tem 3695) apagaria setores reais, e a guarda do `ingerir-setores.yml` só confere tamanho de arquivo, então o run fecharia verde. Agora a poda que removeria mais de 10% da UF e mais de 5 setores é recusada: a UF fica com o GeoPackage e o manifesto do mês anterior, e o job sai com 1. O piso de 5 deixa UF pequena (TO tem 9 setores) apagar um ou dois setores sem travar o mês. Remoção real e grande pede apagar o manifesto da UF para forçar carga completa
+- fix(ingest): o marcador d'água da CPRM recebia o máximo só dos registros novos, então um setor reeditado com `objectid` ou `data_setor` baixo rebaixava o marcador e o mês seguinte baixava quase a UF inteira. Passa a guardar o maior entre o antigo e o novo
+- fix(ingest): a paginação da CPRM não pedia ordem, e o ArcGIS não garante páginas estáveis sem ela, então a carga completa podia duplicar ou pular setores. Passa a pedir `orderByFields=objectid`
+
 ## [2.5.0] - 2026-11-11
 
 ### FEATURES

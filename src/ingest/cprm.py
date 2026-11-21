@@ -38,6 +38,13 @@ FEATURE_LAYER_URL = (
 
 PAGE_SIZE = 2000
 
+# A poda incremental recusa remover mais que isto de uma vez. Lista de ids
+# truncada pela SGB (MG: 2000 de 3695) apagaria setores reais e o run fecharia
+# verde. O piso absoluto deixa a UF pequena (TO tem 9 setores) apagar um ou
+# dois setores sem travar o mês.
+PODA_MAX_FRACAO = 0.10
+PODA_MAX_PISO = 5
+
 
 class CPRMFetchError(RuntimeError):
     """Erro ao buscar dados da camada de risco da CPRM/SGB."""
@@ -107,6 +114,9 @@ def fetch_setores_risco(
         params: dict[str, str | int] = {
             "where": where, "outFields": "*", "outSR": "4326", "f": "geojson",
             "resultOffset": offset, "resultRecordCount": PAGE_SIZE,
+            # Sem ordem fixa o ArcGIS não garante páginas estáveis entre
+            # consultas: a carga completa duplicaria ou pularia setores.
+            "orderByFields": "objectid",
         }
         payload = _query(params, sess, timeout, max_retries, backoff_factor)
         pagina_features = payload.get("features", [])
@@ -217,13 +227,35 @@ def data_setor_mais_recente(datas: pd.Series) -> str | None:
 def _atualizar_marcador_dagua(manifesto: dict, setores: gpd.GeoDataFrame) -> dict:
     if setores.empty or "objectid" not in setores.columns:
         return dict(manifesto)
+    # Máximo entre o antigo e o novo: o incremental pode trazer só um setor
+    # reeditado com objectid (ou data) baixo, e rebaixar o marcador faria o
+    # mês seguinte baixar quase a UF inteira de novo.
     novo = dict(manifesto)
-    novo["last_objectid"] = int(setores["objectid"].max())
+    candidatos = [int(setores["objectid"].max()), manifesto.get("last_objectid")]
+    novo["last_objectid"] = max(c for c in candidatos if c is not None)
     if "data_setor" in setores.columns:
         mais_recente = data_setor_mais_recente(setores["data_setor"])
-        if mais_recente:
+        anterior = manifesto.get("last_data_setor")
+        if mais_recente and (not anterior or mais_recente > anterior):
             novo["last_data_setor"] = mais_recente
     return novo
+
+
+def _podar(gdf: gpd.GeoDataFrame, vivos: set[int], uf: str) -> gpd.GeoDataFrame:
+    """Tira os setores que sumiram da fonte, recusando poda grande demais."""
+    podado = gdf[gdf["objectid"].isin(vivos)]
+    removidos = len(gdf) - len(podado)
+    limite = max(PODA_MAX_FRACAO * len(gdf), PODA_MAX_PISO)
+    if removidos > limite:
+        raise CPRMFetchError(
+            f"Poda de {uf} recusada: removeria {removidos} de {len(gdf)} setores "
+            f"(limite {int(limite)}). Lista de objectid provavelmente truncada pela "
+            "CPRM/SGB. Se a remoção for real, apague o manifesto da UF para forçar "
+            "uma carga completa."
+        )
+    if removidos:
+        logger.info("Poda de %s: %d setor(es) apagado(s) na fonte", uf, removidos)
+    return podado
 
 
 def ingerir_uf(
@@ -281,8 +313,7 @@ def ingerir_uf(
             # fonte ficaria para sempre no GeoPackage sem esta poda.
             vivos = fetch_objectids(uf, timeout=timeout, max_retries=max_retries,
                                     backoff_factor=backoff_factor)
-            gdf = _mesclar_setores(existente, novos)
-            gdf = gdf[gdf["objectid"].isin(vivos)]
+            gdf = _podar(_mesclar_setores(existente, novos), vivos, uf_norm)
         salvar_setores(gdf, output)
         manifesto_novo = _atualizar_marcador_dagua(manifesto, novos)
         # Só no caminho de sucesso: o fallback para o cache local abaixo não

@@ -387,3 +387,89 @@ def test_manifesto_sem_geopackage_faz_carga_completa(tmp_path: Path):
 
     assert "objectid" not in capturado[0].split("where=")[1].split("&")[0]
     assert set(resultado["objectid"]) == {1, 9}
+
+
+def _ingerir_inicial(output: Path, objectids: range, data_setor: str = "2020-01-01") -> None:
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={
+        "type": "FeatureCollection", "features": [_feature(i, data_setor=data_setor) for i in objectids],
+    })
+    ingerir_uf("SP", output)
+    responses.reset()
+
+
+@responses.activate
+def test_poda_grande_e_recusada_sem_tocar_no_gpkg(tmp_path: Path):
+    """Lista de ids truncada pela SGB (MG: 2000 de 3695) não pode apagar setores."""
+    output = tmp_path / "risco_sp.gpkg"
+    _ingerir_inicial(output, range(1, 21))
+    manifesto_antes = (tmp_path / "cprm_manifest_sp.json").read_text()
+
+    _ids_vivos(*range(1, 11), 21)  # metade dos setores some da lista
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={
+        "type": "FeatureCollection", "features": [_feature(21, data_setor="2026-08-01")],
+    })
+
+    with pytest.raises(CPRMFetchError, match="Poda de SP recusada"):
+        ingerir_uf("SP", output, backoff_factor=0, permitir_cache=False)
+    assert len(gpd.read_file(output)) == 20
+    assert (tmp_path / "cprm_manifest_sp.json").read_text() == manifesto_antes
+
+
+@responses.activate
+def test_poda_pequena_em_uf_pequena_e_aceita(tmp_path: Path):
+    """TO tem 9 setores: apagar 2 passa de 10%, mas é edição normal da fonte."""
+    output = tmp_path / "risco_sp.gpkg"
+    _ingerir_inicial(output, range(1, 10))
+
+    _ids_vivos(*range(3, 10))
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={
+        "type": "FeatureCollection", "features": [],
+    })
+    resultado = ingerir_uf("SP", output, permitir_cache=False)
+
+    assert set(resultado["objectid"]) == set(range(3, 10))
+
+
+@responses.activate
+def test_marcador_dagua_nao_anda_para_tras(tmp_path: Path):
+    """Setor reeditado com objectid baixo não pode rebaixar o marcador."""
+    output = tmp_path / "risco_sp.gpkg"
+    _ingerir_inicial(output, range(1, 11), data_setor="2025-01-01")
+
+    _ids_vivos(*range(1, 11))
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={
+        "type": "FeatureCollection", "features": [_feature(3, data_setor="2026-08-01")],
+    })
+    ingerir_uf("SP", output, permitir_cache=False)
+
+    manifesto = json.loads((tmp_path / "cprm_manifest_sp.json").read_text())
+    assert manifesto["last_objectid"] == 10
+    assert manifesto["last_data_setor"] == "2026-08-01"
+
+
+@responses.activate
+def test_data_setor_do_marcador_nao_anda_para_tras(tmp_path: Path):
+    """Setor novo (objectid alto) com data antiga não pode rebaixar a data."""
+    output = tmp_path / "risco_sp.gpkg"
+    _ingerir_inicial(output, range(1, 11), data_setor="2025-06-01")
+
+    _ids_vivos(*range(1, 12))
+    responses.add(responses.GET, FEATURE_LAYER_URL, status=200, json={
+        "type": "FeatureCollection", "features": [_feature(11, data_setor="2019-03-01")],
+    })
+    ingerir_uf("SP", output, permitir_cache=False)
+
+    manifesto = json.loads((tmp_path / "cprm_manifest_sp.json").read_text())
+    assert manifesto["last_objectid"] == 11
+    assert manifesto["last_data_setor"] == "2025-06-01"
+
+
+@responses.activate
+def test_paginacao_pede_ordem_fixa_por_objectid():
+    """Sem ordem fixa o ArcGIS não garante páginas estáveis: duplica ou pula setores."""
+    responses.add(
+        responses.GET, FEATURE_LAYER_URL, status=200,
+        json={"type": "FeatureCollection", "features": [_feature(1)]},
+        match=[matchers.query_param_matcher({"orderByFields": "objectid"}, strict_match=False)],
+    )
+    assert len(fetch_setores_risco("SP", backoff_factor=0)) == 1
