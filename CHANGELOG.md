@@ -12,6 +12,9 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 
 ## [Unreleased]
 
+### CHORE
+- docs(readme): o topo dos dois READMEs troca o ícone do app por um header com a orca, o nome e curvas de nível (`docs/logo/orca-header.webp`). O ícone e o logo do app não mudam
+
 ## [2.6.0] - 2026-11-21
 
 ### FEATURES

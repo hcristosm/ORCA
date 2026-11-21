@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo/orca-logo.png" alt="Logo do ORCA: uma orca saltando, sobre fundo azul" width="240">
+<img src="docs/logo/orca-header.webp" alt="ORCA: uma orca saltando ao lado do nome, sobre fundo azul com curvas de nível" width="100%">
 
 # ORCA
 *Open Risk and Catastrophe Aggregator*

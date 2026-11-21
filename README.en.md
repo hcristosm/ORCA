@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo/orca-logo.png" alt="ORCA logo: a leaping orca on a blue background" width="240">
+<img src="docs/logo/orca-header.webp" alt="ORCA: a leaping orca next to the name, on a blue background with contour lines" width="100%">
 
 # ORCA
 *Open Risk and Catastrophe Aggregator*
