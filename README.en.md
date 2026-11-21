@@ -2,7 +2,6 @@
 
 <img src="docs/logo/orca-header.webp" alt="ORCA: a leaping orca next to the name, on a blue background with contour lines" width="100%">
 
-# ORCA
 *Open Risk and Catastrophe Aggregator*
 
 **Brazil's official geological risk sectors (CPRM/SGB) cross-referenced with recent rainfall, in a static dashboard.**
