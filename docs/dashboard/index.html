@@ -623,6 +623,43 @@
   // mim"): a tela Perto usa o centro dele como ponto quando não há GPS.
   let anunciarMunicipioAoCarregar = false;
 
+  // Município SEM setor da CPRM escolhido na busca. Não vira filtro (filtraria
+  // os setores para zero, e o link não teria o que abrir): o mapa vai até ele
+  // com um balão que diz o que falta, e a tela Perto usa o ponto dele.
+  let semSetorPendente = null;   // escolhido em outra UF, aplicado ao carregar
+
+  function mostrarMunicipioSemSetor(m) {
+    document.getElementById("buscaMunicipio").value = "";
+    if (m.uf !== UF) {
+      semSetorPendente = m;
+      trocarUf(m.uf);
+      sincronizarNavegacao("push");
+      return;
+    }
+    if (estado.municipio) limparMunicipio();
+    aplicarMunicipioSemSetor(m);
+  }
+
+  function aplicarMunicipioSemSetor(m) {
+    if (mapa) {
+      mapa.setView([m.lat, m.lon], 11);
+      // O mapa já está onde deve: sem isto, a promoção para o choropleth
+      // (malha do IBGE, assíncrona) reenquadraria a UF inteira por cima.
+      recorteEnquadrado = `${UF}|`;
+      L.popup({ maxWidth: 280, className: "popup-sem-setor" })
+        .setLatLng([m.lat, m.lon])
+        .setContent(
+          `<b>${escaparHtml(m.nome)} (${escaparHtml(m.uf.toUpperCase())})</b><br>` +
+          "A CPRM não mapeou setores de risco neste município. " +
+          "Isso não quer dizer que não há risco.<br>" +
+          "Procure a Defesa Civil do município. Em emergência, ligue 199.")
+        .openOn(mapa);
+    }
+    document.dispatchEvent(new CustomEvent("orca:municipio", {
+      detail: { uf: m.uf, nome: m.nome, lat: m.lat, lon: m.lon, semSetor: true },
+    }));
+  }
+
   function anunciarMunicipioBuscado() {
     if (!estado.municipio) return;
     const centro = centroideMunicipio(estado.municipio);
@@ -655,6 +692,35 @@
       });
     }
     return promessaIndiceNacional;
+  }
+
+  // Municípios do IBGE SEM setor da CPRM (São Paulo, Rio, Petrópolis...): sem
+  // isto a busca não achava a cidade e parecia que ela não existia. Lista
+  // estática (municipios.json, scripts/gerar_municipios.py); a cobertura sai
+  // do índice nacional do dia. Arquivo que falhe só deixa a busca como antes.
+  let municipiosIbge = null;
+  let promessaMunicipiosIbge = null;
+  let semSetorCache = null;   // { base, lista } -- refeito quando o índice muda
+
+  function garantirMunicipiosIbge() {
+    if (!promessaMunicipiosIbge) {
+      promessaMunicipiosIbge = fetchComTimeout("municipios.json")
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then(json => { municipiosIbge = window.ORCA.calculo.lerMunicipios(json); })
+        .catch(e => {
+          console.warn("Lista de municípios do IBGE indisponível; a busca mostra só municípios com setor.", e);
+          promessaMunicipiosIbge = null;  // tenta de novo no próximo foco
+        });
+    }
+    return promessaMunicipiosIbge;
+  }
+
+  function municipiosSemSetor() {
+    if (!municipiosIbge || !indiceNacional) return [];
+    if (semSetorCache && semSetorCache.base === indiceNacional) return semSetorCache.lista;
+    const lista = window.ORCA.calculo.municipiosSemCobertura(municipiosIbge, indiceNacional);
+    semSetorCache = { base: indiceNacional, lista };
+    return lista;
   }
 
   function slugMunicipio(nome) {
@@ -919,6 +985,12 @@
       anunciarMunicipioAoCarregar = false;
       anunciarMunicipioBuscado();
     }
+    if (semSetorPendente) {
+      const pendente = semSetorPendente;
+      semSetorPendente = null;
+      // A pessoa pode ter trocado de UF de novo enquanto esta carregava.
+      if (pendente.uf === UF) aplicarMunicipioSemSetor(pendente);
+    }
     if (setorPendente) {
       const pendente = setorPendente;
       setorPendente = "";
@@ -1116,15 +1188,16 @@
       indiceAtivo = -1;
       lista.innerHTML = "";
       if (!opcoes.length) { lista.hidden = true; return; }
-      for (const { nome, uf } of opcoes) {
+      for (const { nome, uf, semSetor } of opcoes) {
         const li = document.createElement("li");
         li.setAttribute("role", "option");
         li.dataset.nome = nome;
         li.dataset.uf = uf;
+        if (semSetor) li.dataset.semSetor = "1";
         li.textContent = nome;
         const sigla = document.createElement("span");
         sigla.className = "sugestao-uf";
-        sigla.textContent = uf.toUpperCase();
+        sigla.textContent = semSetor ? `${uf.toUpperCase()} · sem setor CPRM` : uf.toUpperCase();
         li.appendChild(sigla);
         lista.appendChild(li);
       }
@@ -1133,25 +1206,27 @@
 
     // Ordem: UF atual primeiro (é a lista que sempre existe, mesmo sem o índice
     // nacional), depois as demais UFs; dentro de cada grupo, quem começa com o termo
-    // vem antes de quem só o contém.
+    // vem antes de quem só o contém, e município com setor antes do sem setor.
     function candidatosBusca(termo) {
       const vistos = new Set();
       const todos = [];
-      const adicionar = (nome, uf) => {
+      const adicionar = (nome, uf, semSetor = false) => {
         const chave = uf + "|" + nome;
         if (vistos.has(chave)) return;
         vistos.add(chave);
         const n = normalizarNome(nome);
         if (!n.includes(termo)) return;
-        todos.push({ nome, uf, grupo: (uf === UF ? 0 : 2) + (n.startsWith(termo) ? 0 : 1) });
+        todos.push({ nome, uf, semSetor, grupo: (uf === UF ? 0 : 2) + (n.startsWith(termo) ? 0 : 1) });
       };
       for (const m of opcoesMunicipios) adicionar(m, UF);
       for (const item of indiceNacional || []) adicionar(item.nome, item.uf);
-      return todos.sort((a, b) => a.grupo - b.grupo || a.nome.localeCompare(b.nome, "pt-BR"));
+      for (const item of municipiosSemSetor()) adicionar(item.nome, item.uf, true);
+      return todos.sort((a, b) => a.grupo - b.grupo || a.semSetor - b.semSetor ||
+        a.nome.localeCompare(b.nome, "pt-BR"));
     }
 
     input.addEventListener("focus", () => {
-      garantirIndiceNacional().then(() => {
+      Promise.all([garantirIndiceNacional(), garantirMunicipiosIbge()]).then(() => {
         // O índice chegou com o usuário ainda digitando: atualiza a lista aberta.
         if (document.activeElement === input && input.value.trim()) renderSugestoes(input.value);
       });
@@ -1161,11 +1236,16 @@
       Array.from(lista.children).forEach((li, i) => li.classList.toggle("ativo", i === indiceAtivo));
     }
 
-    function escolher(nome, uf = UF) {
+    function escolher(nome, uf = UF, semSetor = false) {
       clearTimeout(debounceId);
       input.value = nome;
       lista.hidden = true;
       lista.innerHTML = "";
+      if (semSetor) {
+        const m = municipiosSemSetor().find(x => x.uf === uf && x.nome === nome);
+        if (m) mostrarMunicipioSemSetor(m);
+        return;
+      }
       if (uf === UF) {
         selecionarMunicipio(nome);
         anunciarMunicipioBuscado();
@@ -1197,7 +1277,7 @@
         if (ultimoFiltro !== input.value) renderSugestoes(input.value);
         if (lista.children.length) {
           const li = lista.children[indiceAtivo] || lista.children[0];
-          escolher(li.dataset.nome, li.dataset.uf);
+          escolher(li.dataset.nome, li.dataset.uf, Boolean(li.dataset.semSetor));
         } else if (!input.value.trim()) {
           limparMunicipio();
         } else {
@@ -1222,7 +1302,7 @@
 
     lista.addEventListener("click", ev => {
       const li = ev.target.closest("li[data-nome]");
-      if (li) escolher(li.dataset.nome, li.dataset.uf);
+      if (li) escolher(li.dataset.nome, li.dataset.uf, Boolean(li.dataset.semSetor));
     });
 
     function fecharEReconciliar() {

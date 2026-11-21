@@ -29,6 +29,7 @@ const CASCA = [
   "perto.js",
   "relatorio.js",
   "areas-customizadas.js",
+  "municipios.json",
   "manifest.webmanifest",
   "icons/sprite.svg",
   "icons/orca-32.png",

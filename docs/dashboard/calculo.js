@@ -151,8 +151,55 @@
     return Boolean(erro) && (erro instanceof TypeError || erro.name === "AbortError");
   }
 
+  /* ------------------------------------- município sem setor da CPRM */
+
+  /* A CPRM não grava o código IBGE, só o nome, às vezes com a UF no fim
+     ("SÃO MIGUEL DO TOCANTINS (TO)"). Comparar sem acento, caixa e sufixo. */
+  function normalizarMunicipio(nome) {
+    return String(nome || "")
+      .replace(/\(.*?\)/g, " ")
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, " ")
+      .trim();
+  }
+
+  /* Grafias antigas da CPRM que não batem com o IBGE (conferido em 2026-11-21
+     contra os 1.601 municípios com setor: só estes três). */
+  const GRAFIA_CPRM_PARA_IBGE = {
+    "mg|BARAO DE MONTE ALTO": "BARAO DO MONTE ALTO",
+    "mt|SANTO ANTONIO DO LEVERGER": "SANTO ANTONIO DE LEVERGER",
+    "rn|ACU": "ASSU",
+  };
+
+  function lerMunicipios(json) {
+    const campos = (json && json.campos) || [];
+    const i = nome => campos.indexOf(nome);
+    return ((json && json.municipios) || []).map(linha => ({
+      uf: linha[i("uf")], nome: linha[i("nome")], lat: linha[i("lat")], lon: linha[i("lon")],
+    }));
+  }
+
+  /* Municípios do IBGE (`lista`) sem nenhum setor da CPRM (`comSetor`, nomes
+     da CPRM por UF). Só UF que tem ao menos um nome em `comSetor` entra: UF
+     cuja lista não carregou ficaria inteira como "sem setor", o que é falso. */
+  function municipiosSemCobertura(lista, comSetor) {
+    const cobertos = new Set();
+    const ufsConhecidas = new Set();
+    for (const { uf, nome } of comSetor) {
+      const chave = `${uf}|${normalizarMunicipio(nome)}`;
+      ufsConhecidas.add(uf);
+      cobertos.add(`${uf}|${GRAFIA_CPRM_PARA_IBGE[chave] || normalizarMunicipio(nome)}`);
+    }
+    return lista.filter(m =>
+      ufsConhecidas.has(m.uf) && !cobertos.has(`${m.uf}|${normalizarMunicipio(m.nome)}`));
+  }
+
   window.ORCA = Object.assign(window.ORCA || {}, {
     calculo: Object.assign((window.ORCA && window.ORCA.calculo) || {}, {
+      lerMunicipios,
+      municipiosSemCobertura,
+      normalizarMunicipio,
       pareceSemRede,
       distanciaPontoPoligonoPx,
       distanciaKm,

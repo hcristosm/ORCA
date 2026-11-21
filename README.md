@@ -482,8 +482,8 @@ Os 170 testes em Python cobrem:
 
 Toda chamada de rede é mockada, então a suíte roda sem internet.
 
-Os cálculos da versão de celular (distância, setores próximos, trajetória e
-veredito) têm 34 testes em `tests/js/calculo.html`. Eles rodam no navegador,
+Os cálculos da versão de celular (distância, setores próximos, trajetória,
+veredito e cobertura da CPRM por município) têm 41 testes em `tests/js/calculo.html`. Eles rodam no navegador,
 porque o projeto não usa Node: sirva a raiz do repositório com
 `python3 -m http.server 8001` e abra `http://localhost:8001/tests/js/calculo.html`.
 A página termina com "PASSOU 34/34". O resto do dashboard é validado à mão.

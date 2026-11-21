@@ -171,6 +171,32 @@
   teste("I-1: HTTP de erro com rede não é sem rede", () =>
     igual(C().pareceSemRede(new Error("Open-Meteo respondeu 500."), true), false));
 
+  /* ------------------------------- município sem setor da CPRM (cobertura) */
+  const ibge = [
+    { uf: "rj", nome: "Petrópolis", lat: -22.4, lon: -43.2 },
+    { uf: "rj", nome: "Nova Friburgo", lat: -22.3, lon: -42.5 },
+    { uf: "rn", nome: "Assú", lat: -5.6, lon: -37.0 },
+    { uf: "to", nome: "São Miguel do Tocantins", lat: -5.5, lon: -47.6 },
+    { uf: "sp", nome: "São Paulo", lat: -23.6, lon: -46.6 },
+  ];
+  const semCobertura = comSetor => C().municipiosSemCobertura(ibge, comSetor).map(m => m.nome);
+  teste("cobertura: nome igual ao da CPRM tem setor", () =>
+    igual(semCobertura([{ uf: "rj", nome: "NOVA FRIBURGO" }]).join(), "Petrópolis"));
+  teste("cobertura: sufixo da UF e acento não contam", () =>
+    igual(semCobertura([{ uf: "to", nome: "SAO MIGUEL DO TOCANTINS (TO)" }]).length, 0));
+  teste("cobertura: grafia antiga da CPRM (AÇU) cobre Assú", () =>
+    igual(semCobertura([{ uf: "rn", nome: "AÇU" }]).length, 0));
+  teste("cobertura: UF sem lista não marca ninguém como sem setor", () =>
+    igual(semCobertura([{ uf: "rj", nome: "NOVA FRIBURGO" }]).includes("São Paulo"), false));
+  teste("cobertura: mesmo nome em outra UF não cobre", () =>
+    igual(semCobertura([{ uf: "rj", nome: "NOVA FRIBURGO" }, { uf: "sp", nome: "PETRÓPOLIS" }]).includes("Petrópolis"), true));
+  teste("cobertura: lê o municipios.json compacto", () => {
+    const lidos = C().lerMunicipios({ campos: ["uf", "nome", "lat", "lon"], municipios: [["rj", "Petrópolis", -22.4, -43.2]] });
+    igual(lidos[0].nome, "Petrópolis");
+    igual(lidos[0].lon, -43.2);
+  });
+  teste("cobertura: arquivo sem a lista dá lista vazia", () => igual(C().lerMunicipios({}).length, 0));
+
   window.addEventListener("load", () => {
     const lista = document.getElementById("casos");
     const falhas = [];

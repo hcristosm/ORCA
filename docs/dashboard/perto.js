@@ -212,6 +212,7 @@
                previsaoIndisponivel: v.previsaoIndisponivel, refMs: v.refMs },
       // Sem índice não dá para saber se o ponto está num setor: não afirmar nada.
       foraDeSetor: !erroIndice && !proximos.some(p => p.dentro),
+      municipioSemSetor: lugar.semSetor ? lugar.nome : "",
       listaIndisponivel: erroIndice,
       itens,
     };
@@ -266,6 +267,20 @@
       `<span>${typeof pico === "number" ? `${mm(pico)} prev.` : "sem previsão"}</span></div>`;
   }
 
+  /* "Fora de setor" não é "sem risco": a CPRM não mapeou São Paulo, Rio,
+     Petrópolis e outras centenas de cidades. A nota diz isso com todas as letras. */
+  function notaCobertura(m) {
+    let texto = "";
+    if (m.municipioSemSetor) {
+      texto = `A CPRM não mapeou setores de risco em ${m.municipioSemSetor}. ` +
+        "Isso não quer dizer que não há risco. O alerta aqui é só pela chuva.";
+    } else if (m.foraDeSetor) {
+      texto = "Este ponto não está num setor mapeado pela CPRM. Isso não quer dizer que não há risco: " +
+        "a CPRM não mapeou todas as cidades. O alerta aqui é só pela chuva.";
+    }
+    return texto ? `<p class="perto-nota">${escaparHtml(texto)}</p>` : "";
+  }
+
   function desenharVeredito({ carregando } = {}) {
     const caixa = el("pertoVeredito");
     caixa.className = "perto-veredito carregando";
@@ -311,7 +326,7 @@
       `<strong>${escaparHtml(TITULOS[p.estado](m))}</strong>` +
       `<p>${escaparHtml(frase)}</p>` +
       (p.estado !== "sem-dado" ? barra(m) : "") +
-      (m.foraDeSetor ? `<p class="perto-nota">Este ponto não é setor mapeado pela CPRM. O alerta é pela chuva.</p>` : "") +
+      notaCobertura(m) +
       (p.refMs ? `<p class="perto-nota">Chuva até ${horaBrasilia(p.refMs)} (Open-Meteo).</p>` : "");
 
     const bloco = el("pertoListaBloco");
@@ -327,7 +342,9 @@
     }
     if (!m.itens.length) {
       lista.innerHTML = "";
-      vazio.textContent = "Nenhum setor mapeado pela CPRM a menos de 10 km.";
+      vazio.textContent = "Nenhum setor mapeado pela CPRM a menos de 10 km. " +
+        "A CPRM não mapeou todas as cidades, então isso não quer dizer que não há risco. " +
+        "Em emergência, ligue 199 (Defesa Civil).";
       vazio.hidden = false;
       return;
     }
@@ -384,7 +401,13 @@
       if (window.ORCA.movel?.vistaAtual() !== "perto") return;
       if (estadoGps === "ok") return;
       const d = ev.detail;
-      ponto = { lat: d.lat, lon: d.lon, rotulo: `Centro de ${d.nome}, ${d.uf.toUpperCase()}`, origem: "municipio" };
+      // Sem setor, o ponto vem da malha do IBGE: é o meio do território, que
+      // pode ficar longe da cidade (Petrópolis), então não se chama "centro".
+      const rotulo = d.semSetor
+        ? `${d.nome}, ${d.uf.toUpperCase()} · ponto central do município`
+        : `Centro de ${d.nome}, ${d.uf.toUpperCase()}`;
+      ponto = { lat: d.lat, lon: d.lon, rotulo, origem: "municipio",
+                semSetor: Boolean(d.semSetor), nome: d.nome };
       consultar();
     });
     document.addEventListener("visibilitychange", () => {
