@@ -11,11 +11,10 @@ do projeto.
 
 - **Bugs**: descreva o comportamento esperado vs. o observado, e como
   reproduzir (comando rodado, UF/ano usados, mensagem de erro completa).
-  Se envolver uma das fontes de dados (CPRM/SGB, INMET, ANA, Open-Meteo),
-  vale checar antes se não é uma instabilidade pontual do endpoint: as
-  quatro têm rate limit ou catálogos que mudam sem aviso (ver
-  [Limitações conhecidas](README.md#limitações-conhecidas) e
-  [Decisões e investigações](README.md#decisões-e-investigações) no README).
+  Se envolver uma das fontes de dados (CPRM/SGB, Open-Meteo), vale checar
+  antes se não é uma instabilidade pontual do endpoint: as duas têm rate
+  limit ou mudam sem aviso (ver
+  [Limitações conhecidas](README.md#limitações-conhecidas) no README).
 - **Ideias/funcionalidades novas**: dá uma olhada no
   [Roadmap](README.md#roadmap) primeiro. Se já está lá, comente na issue
   correspondente (ou abra uma se não existir) antes de começar a codar, pra

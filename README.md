@@ -19,33 +19,49 @@
 
 ---
 
-
 ## Sobre
 
 O ORCA mostra duas informações públicas no mesmo mapa: o setor de risco
-geológico e a chuva recente. Ele baixa a setorização de risco da CPRM/SGB.
-Depois busca a chuva de cada setor. Então marca os setores com chuva acumulada
-acima de um limiar que você escolhe.
+geológico e a chuva recente. Ele baixa a setorização de risco da CPRM/SGB,
+busca a chuva de cada setor e marca os setores com chuva acumulada acima de um
+limiar que você escolhe.
 
-A ideia veio de um problema concreto. Sou geólogo e já mapeei área de risco. Eu
-queria ver o dado de risco e o dado de chuva lado a lado, sem backend, sem
-servidor e sem custo. As duas informações são públicas, mas quase nunca
-aparecem juntas.
+A ideia veio de um problema concreto. Sou geólogo e já mapeei área de risco. As
+duas informações são públicas, mas quase nunca aparecem juntas. Eu queria vê-las
+lado a lado sem servidor e sem custo: um pipeline em Python gera arquivos
+estáticos, e o dashboard no navegador lê esses arquivos. O site roda no GitHub
+Pages, e um cron atualiza os dados todo dia.
 
-O ORCA não tem backend. Um pipeline em Python gera arquivos estáticos. O
-dashboard no navegador lê esses arquivos. Por isso o site roda no GitHub Pages
-e não custa nada.
-
-**Dashboard ao vivo:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/).
-Um cron atualiza os dados todo dia.
-
-**Instale como app,** no celular ou no computador: veja
-[Instalar como app](#instalar-como-app).
+**Dashboard ao vivo:** [hcristosm.github.io/ORCA/](https://hcristosm.github.io/ORCA/)
 
 <p align="center">
   <img src="docs/screenshots/dashboard-claro.png" alt="Dashboard do ORCA em tema claro, no Rio Grande do Sul com limiar de 50mm: à esquerda os contadores e a régua de chuva por setor, no centro o mapa com os setores hachurados por grau e pins nos que passaram do limiar, à direita as tabelas de setores em atenção e de alerta previsto" width="49%">
   <img src="docs/screenshots/dashboard-escuro.png" alt="Mesmo dashboard do ORCA em tema escuro" width="49%">
 </p>
+
+> **Atenção:** o ORCA não substitui a Defesa Civil. Ele cruza dado público e
+> modelado. Em uma emergência, siga o órgão oficial da sua cidade ou ligue 199.
+
+## Como ler o dashboard
+
+O dashboard responde uma pergunta: **onde chove muito sobre um setor de risco
+conhecido?** Três elementos dão essa resposta.
+
+1. **A hachura** mostra o grau de risco do setor, de acordo com a CPRM/SGB. Ela
+   não muda com a chuva.
+2. **A cor** mostra um setor com chuva acumulada acima do limiar. Só esse estado
+   usa cor.
+3. **A régua** mostra todos os setores da UF contra o limiar. Cada marca é um
+   setor. Você arrasta o limiar e vê quantos setores passam dele.
+
+A janela de acumulação (24h ou 72h) e o limiar são seus. O padrão é 100mm em
+72h, um valor ilustrativo. O seletor "Critério" e a aba "Tutorial" trazem os
+limiares de órgãos reais, com fonte: Defesa Civil de Santos, Concessionária
+Tamoios, PPDC-SP, sirenes do Rio, Belo Horizonte e outros.
+
+O **alerta previsto** usa a previsão de chuva das próximas 72h. Ele indica o
+setor que deve passar do limiar se a previsão se confirmar. Não é alerta
+oficial.
 
 ## No celular
 
@@ -57,17 +73,16 @@ No celular, o ORCA abre na aba **Perto de mim**. Ele pede a sua localização e
 responde se o lugar onde você está pode entrar em alerta.
 
 - Dá o veredito do ponto: risco iminente, alerta previsto (com a hora), sem
-  alerta ou sem dado. O ponto não precisa ser setor oficial. Fora de setor, o
-  alerta vem só da chuva.
-- Lista os setores da CPRM/SGB a até 10 km, com a distância e a direção de cada
-  um.
+  alerta ou sem dado. Fora de setor mapeado, o alerta vem só da chuva, e a tela
+  diz que isso não quer dizer ausência de risco.
+- Lista os setores da CPRM/SGB a até 10 km, com distância e direção.
 - Abre o setor no mapa com um toque. O cartão mostra a chuva, o limiar e os
   botões de compartilhar e de rota.
 - Abre sem sinal, com a última consulta e a hora do dado.
 
-A conta roda no aparelho. O celular baixa um índice leve dos setores de todo o
+A conta roda no aparelho: o celular baixa um índice leve dos setores de todo o
 Brasil (`setores_pontos.json`, cerca de 530 KB com gzip) e consulta a chuva do
-ponto direto na Open-Meteo. Não há servidor no meio.
+ponto direto na Open-Meteo.
 
 ### Instalar como app
 
@@ -75,8 +90,8 @@ O ORCA se instala pelo navegador, sem loja de aplicativos. Ele ganha ícone e
 janela próprios, se atualiza sozinho e se desinstala como qualquer app.
 
 **Android (Chrome):** abra [hcristosm.github.io/ORCA](https://hcristosm.github.io/ORCA/),
-toque no menu ⋮ e escolha **Instalar app**. Em algumas versões do Chrome, a
-opção se chama **Adicionar à tela inicial**.
+toque no menu ⋮ e escolha **Instalar app** (em algumas versões, **Adicionar à
+tela inicial**).
 
 <p align="center">
   <img src="docs/screenshots/instalar-android.webp" alt="Três passos no Android. 1: o ORCA aberto no Chrome, com o menu de três pontos em destaque. 2: o menu aberto, com a opção Instalar app em destaque. 3: a tela inicial com o ícone do ORCA" width="820">
@@ -93,124 +108,43 @@ em **Adicionar à Tela de Início**. No iOS 26, o Compartilhar fica dentro do me
 **Computador (Chrome ou Edge):** clique no ícone de instalar, na barra de
 endereço.
 
-As barras e os menus do navegador nas figuras são esquemáticos. Os nomes das
-opções mudam um pouco entre versões.
+As barras e os menus nas figuras são esquemáticos. Os nomes das opções mudam um
+pouco entre versões.
 
-## O que o projeto faz hoje
+## O que mais o dashboard faz
 
-**Dados e cobertura**
-
-- Cobre as **27 UFs**. O dashboard tem um seletor de estado.
-- Baixa os setores de risco da CPRM/SGB de forma incremental. Guarda cada UF em
-  um GeoPackage.
-- Busca a chuva horária na **Open-Meteo**, no centro de cada setor. Não depende
-  de estação meteorológica.
-- Calcula a chuva acumulada de 24h e de 72h.
-- Calcula uma trajetória de alerta previsto para as próximas 72h.
-- Exporta tudo como GeoJSON e JSON estáticos.
-
-**Mapa e leitura**
-
-- Serve um dashboard em HTML, CSS e JavaScript puro. O mapa usa Leaflet e o
-  gráfico usa Chart.js. Há tema claro e tema escuro.
-- Mostra o grau de risco como hachura, no estilo de carta geológica. A cor fica
-  reservada a uma coisa só: o setor acima do limiar.
-- Plota todos os setores da UF contra o limiar, em uma régua. Você arrasta o
-  limiar e a régua responde.
-- Marca com pins os setores acima do limiar e os setores em alerta previsto.
-  Clique em um pin para descer ao município.
-- Filtra o mapa pela legenda e pelos contadores, por grau, por "acima do
-  limiar" e por "alerta previsto".
-- Usa três colunas com rolagem própria: contexto, mapa e painel. O mapa fica
-  sempre à vista. Abaixo de 1081px de largura, as colunas empilham. Abaixo de
-  768px, o dashboard vira a versão de celular (veja [No celular](#no-celular)).
-
-**Ferramentas do visitante**
-
-- Exporta relatórios em CSV e em PDF, dentro do navegador. Você exporta a tabela
-  inteira, uma linha só ou uma área própria.
-- Aceita uma área própria na aba "Minhas áreas", em GeoJSON, KML ou shapefile
-  em `.zip`. O limite é de 5 áreas e de 10MB por arquivo. O cálculo acontece no
-  navegador. O arquivo não vai para servidor nenhum.
-- Explica a régua na aba "Tutorial". A aba também reúne limiares de referência
-  com fonte: Defesa Civil de Santos, Concessionária Tamoios, PPDC-SP, sirenes do
-  Rio, Petrópolis, Belo Horizonte e Tatizana et al. Ela cita também a literatura
-  que justifica o acumulado de 72h. Cada critério que cabe na régua tem um botão
-  "Usar Xmm/Yh". O botão aplica a janela e o limiar, e volta ao mapa.
-- Busca município em todo o Brasil, não só na UF selecionada. Se você escolher
-  uma cidade de outro estado, o dashboard troca a UF sozinho.
-- Guarda a navegação na URL (`#/<uf>/<município>?l=<limiar>&j=<janela>`). Você
-  usa Voltar e Avançar do navegador, compartilha o link e clica na trilha. O link
-  leva o limiar e a janela, então abre com a mesma régua de quem mandou. Mexer no
-  limiar ou na janela não cria entrada no Voltar.
-- Reabre onde você parou. Sem link (atalho do app instalado, endereço digitado),
-  o dashboard volta à última UF, município e critério.
-- Recarrega sozinho a aba aberta há mais de 30 minutos, quando ninguém mexe nela
-  há 5 minutos. Assim uma tela de monitoramento não fica com a chuva e o radar de
-  horas atrás. Ele não recarrega sem rede nem com áreas em "Minhas áreas", que se
-  perderiam.
-
-**Monitoramento ao vivo**
-
-- Mostra um selo de atualização por fonte, em horário de Brasília: setores da
-  CPRM/SGB e chuva. O selo informa a idade do dado. Ele avisa quando uma fonte
+- **Cobre as 27 UFs.** A busca de município funciona em todo o Brasil e troca a
+  UF sozinha. Município sem setor da CPRM também aparece, marcado como "sem
+  setor CPRM" (veja [Limitações](#limitações-conhecidas)).
+- **Filtra** o mapa pela legenda e pelos contadores: por grau, por "acima do
+  limiar" e por "alerta previsto". Pins marcam os setores que pedem atenção.
+- **Exporta relatórios** em CSV e PDF, dentro do navegador: a tabela inteira,
+  uma linha ou uma área própria.
+- **Aceita áreas próprias** na aba "Minhas áreas", em GeoJSON, KML ou shapefile
+  `.zip` (até 5 áreas, 10MB cada). O arquivo não sai do navegador.
+- **Guarda a navegação na URL** (`#/<uf>/<município>?l=<limiar>&j=<janela>`).
+  O link compartilhado abre com a mesma régua de quem mandou, e Voltar/Avançar
+  funcionam. Sem link, o dashboard reabre onde você parou.
+- **Mostra dado ao vivo:** avisos meteorológicos do INMET (lista e polígonos no
+  mapa, por UF, região ou Brasil, e por dia), radar de chuva e raios.
+- **Diz a idade de cada dado.** O selo de atualização avisa quando uma fonte
   passa do ciclo esperado.
-- Lista os avisos meteorológicos oficiais do INMET no painel, por ordem de
-  severidade. A lista tem dois recortes: abrangência (esta UF, a macrorregião do
-  IBGE da UF atual ou o Brasil) e dia (hoje, amanhã e os próximos dias com
-  aviso). Assim a lista responde "vai cair tempestade no Sudeste no domingo?".
-  Clique em um aviso para enquadrar o polígono no mapa. A camada segue o mesmo
-  recorte da lista.
-- Liga e desliga três camadas ao vivo no mapa: avisos do INMET (ligada por
-  padrão, com polígono na cor da severidade, riscos e instruções), radar de
-  chuva (RainViewer) e raios (GOES-19 GLM, via SSEC RealEarth, como indicador de
-  tempestade).
-
-**Operação**
-
-- Roda dois workflows separados: os setores uma vez por mês e a chuva uma vez
-  por dia.
-- Tem 170 testes em Python, com HTTP mockado. O CI roda a suíte a cada push.
-
-## Como ler o dashboard
-
-O dashboard responde uma pergunta: **onde chove muito sobre um setor de risco
-conhecido?** Três elementos dão essa resposta.
-
-1. **A hachura** mostra o grau de risco do setor, de acordo com a CPRM/SGB. Ela
-   não muda com a chuva.
-2. **A cor** mostra um setor com chuva acumulada acima do limiar. Só esse estado
-   usa cor.
-3. **A régua** mostra todos os setores da UF contra o limiar. Cada marca é um
-   setor. Você arrasta o limiar e vê quantos setores passam dele.
-
-A janela de acumulação e o limiar são seus. O padrão é 100mm em 72h. Esse valor
-é ilustrativo, e a aba "Tutorial" mostra os limiares de órgãos reais.
-
-O alerta previsto usa a previsão de chuva das próximas 72h. Ele indica o setor
-que deve passar do limiar, se a previsão se confirmar. Ele não é um alerta
-oficial.
-
-> **Atenção:** o ORCA não substitui a Defesa Civil. Ele cruza dado público e
-> modelado. Em uma emergência, siga o órgão oficial da sua cidade.
+- **Se mantém atual numa tela de monitoramento:** aba aberta há mais de 30
+  minutos e parada há 5 recarrega sozinha.
 
 ## Fontes de dados
 
 O pipeline fala com duas fontes:
 
-| Fonte | O que fornece | Endpoint |
-|---|---|---|
-| [CPRM/SGB](https://www.sgb.gov.br/) | Polígonos de setorização de risco (grau, tipologia, moradias e pessoas afetadas) | `geoportal.sgb.gov.br/.../risco/FeatureServer/0` (ArcGIS REST) |
-| [Open-Meteo](https://open-meteo.com/) | Chuva horária por coordenada, sem estação. Única fonte de chuva | `api.open-meteo.com/v1/forecast` |
+| Fonte | O que fornece |
+|---|---|
+| [CPRM/SGB](https://www.sgb.gov.br/) | Polígonos de setorização de risco: grau, tipologia, moradias e pessoas afetadas. ArcGIS REST em `geoportal.sgb.gov.br` |
+| [Open-Meteo](https://open-meteo.com/) | Chuva horária e previsão por coordenada. É a única fonte de chuva: não depende de estação meteorológica |
 
-A CPRM virou SGB. Os domínios antigos (`geoportal.cprm.gov.br` e companhia)
-ainda respondem em parte. A camada de risco hoje mora em
-`geoportal.sgb.gov.br`.
+O navegador de quem olha busca outras fontes ao vivo, fora do pipeline. Se uma
+delas cair, só aquela camada falta, e o controle de camadas diz por quê.
 
-O navegador de quem olha busca mais cinco fontes ao vivo. Elas não passam pelo
-pipeline:
-
-| Fonte | Camada no mapa |
+| Fonte | Uso no dashboard |
 |---|---|
 | [IBGE](https://servicodados.ibge.gov.br/) | Malha de municípios (choropleth) |
 | [INMET](https://portal.inmet.gov.br/) | Avisos meteorológicos oficiais |
@@ -218,9 +152,9 @@ pipeline:
 | [SSEC RealEarth](https://realearth.ssec.wisc.edu/) | Raios (GOES-19 GLM) |
 | [OpenStreetMap](https://www.openstreetmap.org/) | Mapa de fundo |
 
-Se uma dessas cinco cair, a camada some ou o mapa degrada para quem está
-olhando. O pipeline nem percebe. Em "Minhas áreas", a chuva também vem da
-Open-Meteo direto do navegador.
+A lista de municípios da busca (`docs/dashboard/municipios.json`) vem do IBGE,
+mas é estática e versionada no repositório: o dashboard não depende do IBGE no
+ar para buscar.
 
 ## Arquitetura
 
@@ -240,33 +174,27 @@ flowchart LR
     EXPORT --> DASH["docs/dashboard/<br/>Leaflet + Chart.js"]
 ```
 
-Cada módulo tem uma responsabilidade:
-
 | Módulo | O que faz |
 |---|---|
-| `src/cli.py` | Reúne os comandos da linha de comando (Typer) |
-| `src/config.py` | Guarda **toda** convenção de caminho e as constantes. Use `caminho_setores()` em vez de montar um caminho à mão |
-| `src/ingest/cprm.py` | Baixa os setores de risco por UF, com paginação e marcador d'água |
-| `src/ingest/openmeteo.py` | Busca a chuva horária por coordenada, em lotes de 50 pontos |
-| `src/ingest/rate_limiter.py` | Controla o ritmo das requisições. É compartilhado |
-| `src/storage/` | Camada fina sobre GeoPackage, para os setores. Não há banco de dados |
-| `src/storage_cache_openmeteo.py` | Guarda em SQLite a chuva já baixada, para não repetir hora já buscada. Ele grava só a hora que já passou, para a previsão não entrar no acumulado como chuva observada |
-| `src/processing/cruzamento.py` | Dá os centroides (por setor e por município) e acumula a chuva na janela |
-| `src/processing/grade_espacial.py` | Monta a grade adaptativa nacional, por busca binária |
-| `src/processing/previsao.py` | Calcula a trajetória de alerta de 72h |
+| `src/cli.py` | Comandos da linha de comando (Typer) |
+| `src/config.py` | **Toda** convenção de caminho e as constantes. Use `caminho_setores()` em vez de montar um caminho à mão |
+| `src/ingest/cprm.py` | Setores de risco por UF, com paginação e ingestão incremental |
+| `src/ingest/openmeteo.py` | Chuva horária por coordenada, em lotes de 50 pontos |
+| `src/ingest/rate_limiter.py` | Ritmo das requisições, compartilhado |
+| `src/storage/` | Camada fina sobre GeoPackage. Não há banco de dados |
+| `src/storage_cache_openmeteo.py` | Cache SQLite da chuva já baixada. Guarda só hora passada, para a previsão não virar chuva observada |
+| `src/processing/cruzamento.py` | Centroides (por setor e por município) e chuva acumulada na janela |
+| `src/processing/grade_espacial.py` | Grade adaptativa nacional, que agrupa setores próximos num mesmo ponto de consulta |
+| `src/processing/previsao.py` | Trajetória de alerta de 72h |
 | `src/export/dashboard_data.py` | Exporta uma UF |
 | `src/export/nacional.py` | Orquestra as 27 UFs com uma grade compartilhada |
-
-O dashboard já foi um app Streamlit. Ele virou site estático por três motivos:
-o controle do layout e da estética, a publicação como página e a independência
-de um processo Python em execução.
 
 ## Estrutura do repositório
 
 ```
 src/                      pipeline em Python
-tests/                    170 testes em Python (HTTP mockado) e testes de JS
-scripts/                  guarda de publicação, mescla e atalho do dashboard
+tests/                    testes em Python (HTTP mockado) e testes de JS
+scripts/                  guarda de publicação, mescla, geradores e atalho do dashboard
 docs/dashboard/           front-end estático (publicado em gh-pages)
 docs/dashboard/data/      saídas do pipeline (ignoradas pelo git)
 data/                     GeoPackages locais (ignorados pelo git)
@@ -274,9 +202,11 @@ data/                     GeoPackages locais (ignorados pelo git)
 .github/actions/          preparar-python e baixar-branch
 ```
 
-O front-end não tem build. São quatro arquivos: `index.html`, `comum.js` (que
-carrega primeiro e expõe `window.ORCA`), `areas-customizadas.js` e
-`relatorio.js`.
+O front-end é JavaScript puro, sem build. O `index.html` carrega o
+`comum.js` primeiro (ele expõe `window.ORCA`). Os cálculos sem DOM ficam em
+`calculo.js`; a versão de celular em `movel.js` e `perto.js`; "Minhas áreas" e
+relatórios em `areas-customizadas.js` e `relatorio.js`; o modo sem sinal em
+`sw.js`.
 
 ## Instalação
 
@@ -294,7 +224,8 @@ pip install -e ".[dev]"
 
 ### Baixar os setores de risco
 
-Este comando fala com a CPRM/SGB. Rode-o uma vez por mês.
+Este comando fala com a CPRM/SGB. A ingestão é incremental: na segunda vez, ela
+pede só o que mudou.
 
 ```bash
 python -m src.cli ingerir-setores --diretorio data        # as 27 UFs
@@ -302,57 +233,44 @@ python -m src.cli ingest-cprm --uf SP                     # uma UF só
 # -> data/risco_sp.gpkg
 ```
 
-A ingestão é incremental. Um marcador d'água por UF registra o que já veio. Na
-próxima vez, o ORCA pede só o que mudou.
-
 ### Exportar os dados do dashboard
 
-```bash
-python -m src.cli exportar-dashboard --uf SP
-# -> docs/dashboard/data/setores_sp.geojson, series_sp.json, meta_sp.json, previsao_sp.json
-```
-
-Este comando precisa dos setores já ingeridos. A chuva vem da Open-Meteo na
+Estes comandos precisam dos setores já ingeridos. A chuva vem da Open-Meteo na
 hora.
 
-Para todas as UFs de uma vez:
-
 ```bash
-python -m src.cli atualizar-nacional --ufs SP,RJ,MG       # sem --ufs = as 27
+python -m src.cli exportar-dashboard --uf SP              # uma UF
+python -m src.cli atualizar-nacional --ufs SP,RJ,MG       # várias; sem --ufs = as 27
 ```
 
-O `atualizar-nacional` calcula uma grade espacial nacional única antes de
-exportar. Assim os setores próximos compartilham o mesmo ponto de consulta,
-mesmo em UFs vizinhas. Isso mantém o total de pontos dentro de
-`--orcamento-alvo` (o padrão é 6.000; o teto gratuito da Open-Meteo é
-10.000/dia). O comando não ingere nada. Ele espera os GeoPackages já em `data/`.
+O `atualizar-nacional` monta uma grade espacial única para o Brasil antes de
+exportar. Setores próximos, mesmo em UFs vizinhas, dividem o mesmo ponto de
+consulta, e o total fica dentro de `--orcamento-alvo` (padrão 6.000; o teto
+gratuito da Open-Meteo é 10.000 por dia).
 
 ### Abrir o dashboard
 
 ```bash
-scripts/rodar_dashboard.sh    # atalho para python -m http.server 8000 --directory docs
+scripts/rodar_dashboard.sh    # serve docs/ em http://localhost:8000/dashboard/
 ```
 
-Depois abra `http://localhost:8000/dashboard/`.
+O dashboard precisa de HTTP: o `fetch()` do navegador não lê `file://`.
 
-Você precisa servir o dashboard por HTTP. O `fetch()` do navegador não lê
-`file://`.
+## Referência
 
-## Referência da linha de comando
+### Linha de comando
 
 | Comando | Para que serve | Opções principais |
 |---|---|---|
-| `ingerir-setores` | Baixa os setores de várias UFs | `--ufs`, `--diretorio`, `--backoff-factor` |
+| `ingerir-setores` | Baixa os setores de várias UFs (workflow mensal) | `--ufs`, `--diretorio`, `--backoff-factor` |
 | `ingest-cprm` | Baixa os setores de uma UF | `--uf`, `--output`, `--timeout`, `--max-retries` |
-| `exportar-dashboard` | Exporta uma UF para o dashboard | `--uf`, `--diretorio`, `--saida` |
-| `atualizar-nacional` | Exporta várias UFs com grade compartilhada | `--ufs`, `--orcamento-alvo`, `--diretorio`, `--saida` |
+| `atualizar-nacional` | Exporta várias UFs com grade compartilhada (workflow diário) | `--ufs`, `--orcamento-alvo`, `--diretorio`, `--saida` |
+| `exportar-dashboard` | Exporta uma UF | `--uf`, `--diretorio`, `--saida` |
+| `indexar-setores` | Gera o índice leve da tela Perto de mim | |
 
-Os dois comandos que os workflows chamam são o `ingerir-setores` (mensal) e o
-`atualizar-nacional` (diário).
+### Arquivos que o dashboard consome
 
-## Arquivos que o dashboard consome
-
-O pipeline grava em `docs/dashboard/data/`. Todos os nomes ficam em minúsculas.
+O pipeline grava em `docs/dashboard/data/`, com nomes em minúsculas.
 
 | Arquivo | Conteúdo |
 |---|---|
@@ -360,17 +278,15 @@ O pipeline grava em `docs/dashboard/data/`. Todos os nomes ficam em minúsculas.
 | `series_<uf>.json` | Série horária de chuva por município |
 | `previsao_<uf>.json` | Trajetória de alerta para as próximas 72h |
 | `meta_<uf>.json` | Fonte, data de referência, totais e idade do dado |
-| `ufs_disponiveis.json` | Lista das UFs publicadas |
-| `versao.txt` | Id do run que publicou. Serve ao teste de fumaça |
+| `setores_pontos.json` | Índice nacional leve dos setores, para o celular |
+| `ufs_disponiveis.json` | UFs publicadas. Guia o seletor de estado e a guarda de publicação |
+| `versao.txt` | Id do run que publicou, para o teste de fumaça |
 
-O `ufs_disponiveis.json` guia o seletor de estado do front-end. Ele é também a
-métrica da guarda anti-regressão.
-
-## Variáveis de ambiente
+### Variáveis de ambiente
 
 | Variável | Efeito | Padrão |
 |---|---|---|
-| `ORCA_PISO_COBERTURA` | Piso de cobertura que a publicação aceita | `0.6` |
+| `ORCA_PISO_COBERTURA` | Fração mínima de UFs que uma publicação precisa ter | `0.6` |
 | `ORCA_LOG_LEVEL` | Nível de log do pipeline | `INFO` |
 
 ## Como roda em produção
@@ -386,78 +302,42 @@ flowchart TB
     SAIDA --> MESCLA["mesclar_publicado.py<br/>preserva a UF que este run não gerou"]
     PUB[("gh-pages<br/>o que já está no ar")] --> MESCLA
     MESCLA --> GUARDA{"conferir_publicacao.py"}
-    GUARDA -->|recusa| RECUSA["publicar=false, depois exit 1<br/>0 UFs, menos que o publicado<br/>ou contagem ilegível"]
-    GUARDA -->|aprova| DEPLOY["deploy com force_orphan<br/>gh-pages passa a ser docs/dashboard/"]
-    DEPLOY --> SMOKE{"versao.txt traz o id deste run<br/>e a mesma contagem de UFs?"}
+    GUARDA -->|recusa| RECUSA["não publica e falha o run"]
+    GUARDA -->|aprova| DEPLOY["deploy no gh-pages"]
+    DEPLOY --> SMOKE{"o site no ar é deste run?"}
     SMOKE -->|não| FALHA["run vermelho"]
     SMOKE -->|sim| AR[("dashboard no ar")]
 ```
 
-O setor de risco muda em escala de meses. A chuva muda em escala de horas. Por
-isso há dois workflows:
+O setor de risco muda em escala de meses; a chuva, em escala de horas. Por isso
+há dois workflows:
 
 - **Mensal** ([`ingerir-setores.yml`](.github/workflows/ingerir-setores.yml)):
   baixa os setores das 27 UFs e publica os GeoPackages na branch `dados-base`.
-  É o único ponto do projeto que fala com a SGB. Os timeouts são generosos
-  (120s, 5 tentativas) e não há fallback de cache. Se a SGB cair, o run falha
-  alto, em vez de fechar verde com dado vazio. A ingestão também desconfia do
-  HTTP 200: ela repete o erro do ArcGIS que chega com status 200 e recusa a
-  carga vazia, que gravaria um GeoPackage de 0 setores.
-- **Diário** ([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml),
-  `0 9 * * *`): lê os setores da `dados-base`, roda o `atualizar-nacional` e
-  publica no `gh-pages`. Ele não toca em nenhuma fonte `.gov.br`.
+  É o único ponto que fala com a SGB. Se a SGB cair, ou responder vazio com
+  HTTP 200, a UF fica com o dado do mês anterior e o run falha alto.
+- **Diário** ([`atualizar-dados.yml`](.github/workflows/atualizar-dados.yml)):
+  lê os setores da `dados-base`, busca a chuva e publica no `gh-pages`. Não toca
+  em nenhuma fonte `.gov.br`.
 
-Se a SGB cair, o dashboard continua no ar com os setores da `dados-base`.
+A publicação não apaga dado bom:
 
-Uma UF ruim não derruba as outras. Um erro inesperado em uma UF — GeoPackage
-corrompido ou schema novo da SGB — para só aquela UF. As demais seguem, e o run
-falha no fim, para a falha ficar visível.
+- **Uma UF ruim não derruba as outras.** A UF que falhou mantém o dado da
+  véspera no ar: ela envelhece, não some.
+- **A guarda recusa publicar menos do que já está no ar**, publicar abaixo do
+  piso de cobertura ou publicar sem conseguir ler o que está no ar. Toda recusa
+  deixa o run vermelho.
+- **O teste de fumaça** confere que o site público serve o deploy deste run, e
+  não o de ontem.
 
-A publicação é não-destrutiva. Antes de subir, o job busca o `gh-pages` atual.
-Ele preserva os dados das UFs que este run não regenerou
-([`scripts/mesclar_publicado.py`](scripts/mesclar_publicado.py)). A UF que
-falhou não some do dashboard: ela envelhece.
-
-Três guardas protegem essa mescla, e toda recusa falha o run:
-
-- A guarda recusa se o run não exportou UF nenhuma.
-- A guarda recusa se a cobertura nova fica abaixo do piso. O padrão é 60% e a
-  variável `ORCA_PISO_COBERTURA` ajusta o valor. Em um run manual com `--ufs`,
-  o piso mede contra as UFs pedidas (`--pedidas`), não contra as 27. Esse 0,6 saiu dos 12 runs
-  limpos entre 10 e 23/08/2026, com cobertura entre 70% e 100%. O piso fica
-  abaixo do pior caso normal e ainda barra os casos degenerados reais, de 4% e
-  de 7%.
-- A guarda recusa conjunto vazio, contagem publicada ilegível ou regressão no
-  total de UFs em relação ao que já está no ar.
-
-A lógica mora em [`scripts/conferir_publicacao.py`](scripts/conferir_publicacao.py).
-Os dois workflows compartilham esse script. A guarda sempre grava
-`publicar=false` no `$GITHUB_OUTPUT` **antes** de sair com 1, nessa ordem. O
-output pula a publicação. O exit 1 deixa a recusa visível: uma guarda silenciosa
-em um cron diário poderia bloquear a publicação por semanas sem ninguém notar.
-
-Depois do deploy, um teste de fumaça espera a URL pública servir o deploy
-daquele run. O marcador é o `versao.txt` com o id do run, lido por fora do cache
-do CDN. O teste confere também o número de UFs no ar. Contar UFs sozinho não
-prova nada, porque o deploy de ontem também tem 27. É o marcador que prova que o
-site é deste run. Se o build do Pages falhar, ou se o site servir outra coisa, o
-run fica vermelho.
-
-Essas guardas existem por um motivo real. Em 22 e 23/08/2026, dois runs
-publicaram 1 e 2 UFs de 27 e fecharam como `success`, com a ingestão da CPRM em
-timeout. **Nunca julgue um run pelo status. Meça o resultado nos logs.**
-
-## Branches
+Essas regras vieram de dois runs de 2026 que apagaram o dashboard e fecharam
+como `success`. Por isso a regra da casa: **nunca julgue um run pelo status.**
 
 | Branch | Conteúdo |
 |---|---|
 | `main` | Código |
 | `dados-base` | GeoPackages dos setores da CPRM (ingestão mensal) |
 | `gh-pages` | Dashboard publicado e cache da Open-Meteo |
-
-O deploy usa `force_orphan`. Por isso o `gh-pages` vira exatamente o conteúdo de
-`docs/dashboard/`. Uma publicação com `data/` vazio apagaria as 27 UFs e o cache
-junto. É contra isso que a guarda existe.
 
 ## Testes e gates
 
@@ -468,96 +348,47 @@ junto. É contra isso que a guarda existe.
 .venv/bin/python -m bandit -q -c pyproject.toml -r src
 ```
 
-O CI roda esses quatro comandos a cada push. Rode-os antes de commitar.
+O CI roda os quatro a cada push. Rode-os antes de commitar. Toda chamada de rede
+é mockada, então a suíte roda sem internet.
 
-Os 170 testes em Python cobrem:
-
-- a ingestão da CPRM: ArcGIS REST, paginação, incremental por marcador d'água e
-  retry;
-- a Open-Meteo: lotes, retry e o cache SQLite;
-- o processamento: grade espacial nacional, acumulação de chuva e previsão;
-- a publicação: exportação, guarda anti-regressão e mescla não-destrutiva com o
-  `gh-pages`;
-- o índice de setores da tela Perto de mim.
-
-Toda chamada de rede é mockada, então a suíte roda sem internet.
-
-Os cálculos da versão de celular (distância, setores próximos, trajetória,
-veredito e cobertura da CPRM por município) têm 41 testes em `tests/js/calculo.html`. Eles rodam no navegador,
-porque o projeto não usa Node: sirva a raiz do repositório com
-`python3 -m http.server 8001` e abra `http://localhost:8001/tests/js/calculo.html`.
-A página termina com "PASSOU 34/34". O resto do dashboard é validado à mão.
+Os cálculos do front-end (distância, setores próximos, trajetória, veredito e
+cobertura da CPRM por município) têm testes em `tests/js/calculo.html`. Eles
+rodam no navegador, porque o projeto não usa Node: sirva a raiz do repositório
+com `python3 -m http.server 8001` e abra
+`http://localhost:8001/tests/js/calculo.html`. A página termina com "PASSOU
+n/n". O resto do dashboard é validado à mão.
 
 ## Limitações conhecidas
 
+- **A CPRM não mapeou todas as cidades.** A setorização cobre cerca de 1.600
+  municípios. Ficam de fora São Paulo, Rio de Janeiro, Belo Horizonte, Recife,
+  Salvador e cidades com desastres recentes, como Petrópolis, São Sebastião e
+  Guarujá. Nelas, o mapeamento é de órgão estadual ou municipal (IPT, DRM-RJ,
+  prefeituras). O ORCA mostra esses municípios na busca como "sem setor CPRM" e
+  dá o alerta só pela chuva. **Falta de setor não é falta de risco.**
 - **A chuva é modelada, não medida.** A Open-Meteo entrega reanálise e previsão
-  por coordenada, não leitura de pluviômetro. Isso permite cobrir as 27 UFs sem
-  depender da densidade de estações. Não é observação direta.
-- **Não há fonte de chuva alternativa.** A Open-Meteo é a única. Se ela cair, a
-  UF fica de fora do run e o dashboard envelhece, em vez de sumir: a mescla com
-  o `gh-pages` preserva o dado da véspera.
-- **O limiar de atenção é ilustrativo.** O padrão de 100mm/72h é referência
-  comum na literatura de deslizamento. Não é valor oficial calibrado para os
-  setores da CPRM/SGB. O dashboard avisa isso, deixa o valor ajustável e mostra
-  na aba "Tutorial" os limiares que órgãos reais usam.
-- **A publicação no `gh-pages` ainda não é reversível.** O deploy usa
-  `force_orphan: true`, então a branch tem um commit só. Isso existe por causa
-  do blob de cache da Open-Meteo (~45MB), que muda todo dia. Para abandonar o
-  `force_orphan`, é preciso primeiro tirar o cache de lá. Até então, a proteção
-  é preventiva, não reversível.
-- **A Open-Meteo limita por volume, não só por frequência.** O teste com
-  requisição real mostrou isso: um POST com as ~900 coordenadas de SP funciona
-  sozinho, mas o mesmo volume repetido gera `429` de forma consistente. O
-  `src/ingest/openmeteo.py` divide em lotes de 50 pontos, usa janela de
-  histórico curta e espera 60s em `429`.
-- **As camadas ao vivo dependem de terceiros.** O navegador busca os avisos do
-  INMET, o radar e os raios na hora, com timeout de 8s. Se a fonte cair ou
-  parar de responder, a camada não aparece e o bloco de avisos diz que a fonte
-  está indisponível. O timeout é o que torna esses dois casos iguais: um host
-  que pendura não rejeita o `fetch`, e sem ele a camada sumia em silêncio. Esse estado é
-  distinto de "nenhum aviso ativo", porque um `.gov.br` fora do ar responde 200
-  com o HTML do portal. O resto do painel não depende dessas fontes. A camada de
-  raios é omitida também quando o quadro mais recente tem mais de 30 minutos.
-  Ela mostra raio total (nuvem e solo), não ponto de impacto.
-  Quando uma dessas camadas não vem, o controle de camadas diz
-  "<camada>: fonte sem dado agora" no lugar da caixa de seleção: sumir sem
-  explicação fazia a queda da fonte parecer defeito do dashboard. A falha não
-  fica em cache — só o sucesso —, então a camada volta sozinha na próxima
-  montagem do mapa (trocar de UF, Voltar/Avançar), sem recarregar a página.
-- **Não há autenticação nem multiusuário.** O ORCA é ferramenta local e de
-  portfólio.
-- **O dashboard não atualiza sob demanda.** Ele mostra a última exportação, que
-  roda uma vez por dia. Para ver dado mais novo na hora, rode o
-  `exportar-dashboard` localmente.
-
-## Decisões e investigações
-
-As decisões maiores foram testadas com requisição real, não por suposição.
-
-- **Streamlit para site estático:** resolveu a estética, o layout e a
-  distribuição.
-- **Open-Meteo como única fonte de chuva:** ela responde chuva por coordenada,
-  sem depender de estação. O INMET e a ANA foram implementados e descartados. O
-  INMET só publica o ZIP anual, com dias de defasagem. A rede da ANA é
-  majoritariamente fluviométrica. Manter as duas trilhas custava ~1.900 linhas
-  que nenhum workflow executava. Os avisos oficiais do INMET voltaram só como
-  lista e camada do mapa, lidas pelo navegador. Eles não entram no cálculo.
-- **Cobertura nacional:** ingestão incremental da CPRM, mais uma grade espacial
-  calibrada por busca binária. A alternativa era um limiar de densidade
-  escolhido a dedo.
-- **Grafo de código descartado:** a avaliação de 12/09/2026 mediu um
-  `graph.json` de 825 KB contra 121 KB de todo o `src/`. O mapa custava mais que
-  o território. Um README e um CLAUDE.md explícitos resolvem melhor.
+  por coordenada, não leitura de pluviômetro. Isso cobre as 27 UFs sem depender
+  de estação, mas não é observação direta.
+- **Não há fonte de chuva alternativa.** Se a Open-Meteo cair, a UF fica de fora
+  do run e o dashboard mostra o dado da véspera.
+- **O limiar padrão é ilustrativo.** 100mm/72h é referência comum na literatura,
+  não valor oficial calibrado para os setores da CPRM/SGB.
+- **O dashboard não atualiza sob demanda.** Ele mostra a exportação do dia. O
+  botão "Atualizar agora" de um município busca a chuva de um ponto na hora, mas
+  não recalcula a UF.
+- **As camadas ao vivo dependem de terceiros.** INMET, radar e raios vêm direto
+  do navegador, com timeout de 8s. A camada de raios mostra raio total (nuvem e
+  solo), não ponto de impacto.
+- **O `gh-pages` não tem histórico.** O deploy usa `force_orphan`, por causa do
+  cache da Open-Meteo (~45MB) que muda todo dia. A proteção contra publicação
+  ruim é preventiva, não reversível.
 
 ## Roadmap
 
+- Cobrir os municípios sem setorização da CPRM com fontes estaduais e
+  municipais.
 - Tirar o cache da Open-Meteo do `gh-pages`, para abandonar o `force_orphan` e
   recuperar o histórico da branch publicada.
-- Fallback municipal, com camadas de prefeituras em ArcGIS REST. A investigação
-  de 14/08/2026 para Itaquaquecetuba/SP não confirmou endpoint público. O item
-  espera um município piloto com dado aberto.
-- Orquestração melhor das requisições à Open-Meteo: paginação, backoff mais
-  completo e talvez uma fila para espaçar o envio.
 
 ## Sobre como isso foi feito
 
@@ -568,7 +399,6 @@ testo e corrijo o rumo quando o resultado não bate com a realidade do dado.
 
 Achei melhor deixar isso claro do que fingir o contrário. Se você encontrar algo
 estranho no código, provavelmente é isso. Um issue é bem-vindo.
-
 
 ## Contribuindo
 
