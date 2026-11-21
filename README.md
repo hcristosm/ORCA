@@ -158,22 +158,6 @@ ar para buscar.
 
 ## Arquitetura
 
-```mermaid
-flowchart LR
-    CPRM[("CPRM/SGB")] --> ING1["src/ingest/cprm.py"]
-    OM[("Open-Meteo")] --> ING4["src/ingest/openmeteo.py"]
-    ING1 --> STORE["src/storage/<br/>GeoPackage"]
-    STORE --> PROC["src/processing/cruzamento.py<br/>centroides + chuva 24h/72h"]
-    STORE --> GRADE["src/processing/grade_espacial.py<br/>grade nacional por orçamento"]
-    GRADE --> NAC["src/export/nacional.py"]
-    PROC --> PREV["src/processing/previsao.py<br/>alerta previsto 72h"]
-    PROC --> EXPORT["src/export/dashboard_data.py"]
-    NAC --> EXPORT
-    PREV --> EXPORT
-    ING4 --> EXPORT
-    EXPORT --> DASH["docs/dashboard/<br/>Leaflet + Chart.js"]
-```
-
 | Módulo | O que faz |
 |---|---|
 | `src/cli.py` | Comandos da linha de comando (Typer) |
@@ -290,24 +274,6 @@ O pipeline grava em `docs/dashboard/data/`, com nomes em minúsculas.
 | `ORCA_LOG_LEVEL` | Nível de log do pipeline | `INFO` |
 
 ## Como roda em produção
-
-```mermaid
-flowchart TB
-    SGB[("CPRM/SGB")] --> ING["ingerir-setores.yml<br/>mensal"]
-    ING --> BASE[("branch dados-base<br/>GeoPackages das 27 UFs")]
-    BASE --> ATU["atualizar-dados.yml<br/>diário, 09:00 UTC"]
-    OM[("Open-Meteo")] --> ATU
-    CACHE[("cache SQLite<br/>lido do gh-pages")] --> ATU
-    ATU --> SAIDA["docs/dashboard/data/<br/>UFs que este run gerou"]
-    SAIDA --> MESCLA["mesclar_publicado.py<br/>preserva a UF que este run não gerou"]
-    PUB[("gh-pages<br/>o que já está no ar")] --> MESCLA
-    MESCLA --> GUARDA{"conferir_publicacao.py"}
-    GUARDA -->|recusa| RECUSA["não publica e falha o run"]
-    GUARDA -->|aprova| DEPLOY["deploy no gh-pages"]
-    DEPLOY --> SMOKE{"o site no ar é deste run?"}
-    SMOKE -->|não| FALHA["run vermelho"]
-    SMOKE -->|sim| AR[("dashboard no ar")]
-```
 
 O setor de risco muda em escala de meses; a chuva, em escala de horas. Por isso
 há dois workflows:

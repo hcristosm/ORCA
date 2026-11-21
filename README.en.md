@@ -167,22 +167,6 @@ not need IBGE to be online.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    CPRM[("CPRM/SGB")] --> ING1["src/ingest/cprm.py"]
-    OM[("Open-Meteo")] --> ING4["src/ingest/openmeteo.py"]
-    ING1 --> STORE["src/storage/<br/>GeoPackage"]
-    STORE --> PROC["src/processing/cruzamento.py<br/>centroids + 24h/72h rainfall"]
-    STORE --> GRADE["src/processing/grade_espacial.py<br/>national grid by budget"]
-    GRADE --> NAC["src/export/nacional.py"]
-    PROC --> PREV["src/processing/previsao.py<br/>72h forecast alert"]
-    PROC --> EXPORT["src/export/dashboard_data.py"]
-    NAC --> EXPORT
-    PREV --> EXPORT
-    ING4 --> EXPORT
-    EXPORT --> DASH["docs/dashboard/<br/>Leaflet + Chart.js"]
-```
-
 | Module | What it does |
 |---|---|
 | `src/cli.py` | Command-line commands (Typer) |
@@ -299,24 +283,6 @@ The pipeline writes to `docs/dashboard/data/`, with lowercase names.
 | `ORCA_LOG_LEVEL` | Pipeline log level | `INFO` |
 
 ## How it runs in production
-
-```mermaid
-flowchart TB
-    SGB[("CPRM/SGB")] --> ING["ingerir-setores.yml<br/>monthly"]
-    ING --> BASE[("dados-base branch<br/>GeoPackages of the 27 states")]
-    BASE --> ATU["atualizar-dados.yml<br/>daily, 09:00 UTC"]
-    OM[("Open-Meteo")] --> ATU
-    CACHE[("SQLite cache<br/>read from gh-pages")] --> ATU
-    ATU --> SAIDA["docs/dashboard/data/<br/>states this run made"]
-    SAIDA --> MESCLA["mesclar_publicado.py<br/>keeps the states this run did not make"]
-    PUB[("gh-pages<br/>what is already live")] --> MESCLA
-    MESCLA --> GUARDA{"conferir_publicacao.py"}
-    GUARDA -->|refuses| RECUSA["does not publish and fails the run"]
-    GUARDA -->|approves| DEPLOY["deploy to gh-pages"]
-    DEPLOY --> SMOKE{"is the live site from this run?"}
-    SMOKE -->|no| FALHA["red run"]
-    SMOKE -->|yes| AR[("dashboard live")]
-```
 
 A risk sector changes in months; the rainfall changes in hours. Thus there are
 two workflows:

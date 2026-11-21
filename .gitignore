@@ -17,3 +17,6 @@ docs/.superpowers/
 
 # mídia de divulgação do projeto, gerada localmente
 brag-output*/
+
+# instruções locais do agente (ficam só na máquina)
+CLAUDE.md

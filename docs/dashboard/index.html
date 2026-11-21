@@ -1404,7 +1404,7 @@
   // Radar RainViewer é overlay opcional (mostra chuva em andamento, sem
   // relação com os dados de setor/série): cacheia só o sucesso e, se a API
   // estiver fora do ar, o controle de camadas anuncia a ausência em vez de o
-  // mapa quebrar -- coerente com "funcionar sem paus" (ver CLAUDE.md).
+  // mapa quebrar -- coerente com "confiabilidade primeiro" (ver CONTRIBUTING.md).
   function carregarRadarRainViewer() {
     if (!promessaRadarRainViewer) {
       promessaRadarRainViewer = fetchComTimeout(RAINVIEWER_API_URL, TIMEOUT_CAMADA_VIVA_MS)
@@ -1435,7 +1435,7 @@
   // de Wisconsin). É raio total (nuvem-solo + intranuvem) a ~8 km, não ponto de
   // impacto: indica tempestade convectiva ativa. Mesmo molde do radar; além de
   // falha de rede, omite a camada se o último quadro for velho -- fonte que para
-  // de ingerir continua respondendo 200 (ver CLAUDE.md).
+  // de ingerir continua respondendo 200 (ver CONTRIBUTING.md).
   function carregarRaiosGlm() {
     if (!promessaRaiosGlm) {
       promessaRaiosGlm = fetchComTimeout(REALEARTH_GLM_URL, TIMEOUT_CAMADA_VIVA_MS)
@@ -1483,7 +1483,7 @@
   //
   // Resolve com a lista de features, ou com `null` quando a API não responde,
   // devolve erro ou devolve 200 com corpo inesperado -- um .gov.br fora do ar
-  // responde 200 com HTML de portal (ver CLAUDE.md). "Indisponível" e "nenhum
+  // responde 200 com HTML de portal (ver CONTRIBUTING.md). "Indisponível" e "nenhum
   // aviso" são estados diferentes na interface, então não podem virar o mesmo
   // `[]` aqui.
   function carregarAvisosInmet() {

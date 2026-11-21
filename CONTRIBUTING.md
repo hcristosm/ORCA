@@ -9,18 +9,38 @@ do projeto.
 
 ## Antes de abrir uma issue ou PR
 
-- **Bugs**: descreva o comportamento esperado vs. o observado, e como
-  reproduzir (comando rodado, UF/ano usados, mensagem de erro completa).
-  Se envolver uma das fontes de dados (CPRM/SGB, Open-Meteo), vale checar
-  antes se não é uma instabilidade pontual do endpoint: as duas têm rate
-  limit ou mudam sem aviso (ver
-  [Limitações conhecidas](README.md#limitações-conhecidas) no README).
-- **Ideias/funcionalidades novas**: dá uma olhada no
-  [Roadmap](README.md#roadmap) primeiro. Se já está lá, comente na issue
-  correspondente (ou abra uma se não existir) antes de começar a codar, pra
-  alinhar escopo e evitar retrabalho.
-- **Dúvidas de uso**: abra uma issue mesmo, não tem fórum/discussions
-  separado.
+- **Bugs**: descreva o comportamento esperado e o observado, e como
+  reproduzir (comando rodado, UF, critério usado, mensagem de erro completa).
+  Se envolver uma fonte de dados (CPRM/SGB, Open-Meteo), confira antes se não
+  é uma instabilidade pontual: as duas têm limite de requisições e mudam sem
+  aviso (ver [Limitações conhecidas](README.md#limitações-conhecidas)).
+- **Ideias e funcionalidades novas**: olhe o [Roadmap](README.md#roadmap)
+  primeiro. Comente na issue correspondente (ou abra uma) antes de começar a
+  codar, para alinhar o escopo.
+- **Dúvidas de uso**: abra uma issue. Não há fórum separado.
+
+## A prioridade é confiabilidade
+
+O pipeline depende de fontes `.gov.br` que caem, mudam de formato e devolvem
+resposta vazia com HTTP 200. **Funcionar sem quebrar vale mais que qualquer
+funcionalidade nova.** Ao mexer em ingestão, assuma que a fonte vai falhar e
+trate o caso: lista vazia, página cortada, erro com status 200.
+
+Duas regras valem para todo o código:
+
+- **Caminhos moram em `src/config.py`.** Nunca monte um caminho de `data/` à
+  mão; use `caminho_setores()`, `caminho_manifesto_cprm()` e os demais.
+- **Publicar menos do que já está no ar é proibido.** O deploy usa
+  `force_orphan`, então o `gh-pages` vira exatamente o conteúdo de
+  `docs/dashboard/`: publicar com `data/` vazio apaga as 27 UFs. A guarda em
+  `scripts/conferir_publicacao.py` recusa esse caso, sempre grava
+  `publicar=false` antes de sair com 1 (o output pula a publicação; o exit 1
+  deixa a recusa visível) e é coberta por `tests/test_conferir_publicacao.py`.
+  Não mude essas propriedades sem olhar esses testes primeiro.
+
+E uma regra para quem opera os workflows: **nunca julgue um run pelo status.**
+Dois runs já apagaram o dashboard fechando como `success`. Confira nos logs a
+contagem de UFs e o teste de fumaça.
 
 ## Ambiente de desenvolvimento
 
@@ -34,68 +54,77 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Isso instala o pacote em modo editável mais `pytest` e `responses` (mock de
-HTTP). Veja a seção [Uso](README.md#uso) do README para rodar os comandos de
-ingestão/exportação localmente.
+Veja a seção [Uso](README.md#uso) do README para rodar a ingestão e a
+exportação localmente, e `scripts/rodar_dashboard.sh` para abrir o dashboard.
 
-## Testes
+## Testes e gates
+
+O CI roda estes quatro comandos a cada push e PR. Rode-os antes de commitar:
 
 ```bash
-pytest
+.venv/bin/python -m pytest -q
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy src
+.venv/bin/python -m bandit -q -c pyproject.toml -r src
 ```
 
 Toda chamada de rede nos testes é mockada (`responses`): a suíte roda sem
-internet e deve continuar assim. Se você adicionar código que fala com uma
-API externa, mocke a resposta em vez de bater na rede de verdade dentro do
-teste.
+internet e deve continuar assim. Código novo que fala com uma API externa
+precisa de teste com a resposta mockada, incluindo os casos de falha.
 
-O dashboard (`docs/dashboard/`, HTML/JS estático) não tem testes
-automatizados, não há framework de teste de frontend no projeto. Se você
-mexer nele, valide manualmente rodando `scripts/rodar_dashboard.sh` e
-conferindo tema claro/escuro, os filtros e a camada de vento.
+Os cálculos do dashboard que não dependem de DOM ficam em
+`docs/dashboard/calculo.js` e têm testes em `tests/js/calculo.html`. Eles rodam
+no navegador, porque o projeto não usa Node: sirva a raiz do repositório com
+`python3 -m http.server 8001` e abra
+`http://localhost:8001/tests/js/calculo.html`. A página deve terminar com
+"PASSOU n/n". Lógica nova do front-end que dá para separar do DOM vai para o
+`calculo.js`, com teste.
 
-PRs que quebram o CI (`.github/workflows/ci.yml`, roda `pytest` a cada push
-e PR) não serão mesclados até os testes passarem.
+O resto do dashboard é validado à mão: confira o desktop e o celular (abaixo de
+768px), os temas claro e escuro, e o console sem erro.
 
 ## Padrão de commits
 
 O histórico segue [Conventional Commits](https://www.conventionalcommits.org/),
-em português, no formato `tipo(escopo): descrição breve no imperativo`:
+em português, no formato `tipo(escopo): descrição breve`:
 
 ```
-feat(cli): expor exportar-vento e incluí-lo em atualizar
-fix(ibge): validate malha/localidades response shape
-chore(dashboard): atualizar dados exportados
-docs: add design spec for Open-Meteo as dashboard rain source
+feat(dashboard): busca acha município sem setor da CPRM
+fix(ingest): protege a poda, o marcador e a paginação da CPRM
+docs(readme): reorganiza os READMEs
+chore(deps-dev): atualiza ruff
 ```
 
-Tipos usados no projeto: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`.
-O escopo é normalmente o módulo afetado (`cli`, `ibge`, `dashboard`,
-`ingest`, `processing`, `export`). Mensagens de commit e PR podem ser em
-português ou inglês. O README e o código-fonte são em português, mas não é
-bloqueante.
+Tipos usados: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`. O escopo é
+normalmente a área afetada (`ingest`, `processing`, `export`, `dashboard`,
+`ci`, `readme`).
+
+Código, comentários, commits e documentação são em português. Toda mudança
+relevante ganha uma entrada no `CHANGELOG.md`, em `[Unreleased]`, agrupada por
+`FEATURES`, `FIXES`, `REFACTOR` ou `CHORE`.
 
 ## Pull requests
 
-1. Abra a partir de uma branch própria (`feat/nome-curto`, `fix/nome-curto`),
-   nunca direto em `main`.
-2. Mantenha o PR focado: uma mudança lógica por PR facilita review. PRs
-   grandes demais podem ser pedidos para dividir.
-3. Inclua testes para código novo em `src/` (ingestão, processamento,
-   exportação). Mudanças só no dashboard estático ou em documentação não
-   precisam de teste automatizado.
-4. Descreva o que mudou e por quê. Se corrigir um bug, inclua como
-   reproduzir o problema original.
+1. Abra a partir de uma branch própria (`feat/nome-curto`, `fix/nome-curto`).
+2. Mantenha o PR focado: uma mudança lógica por PR.
+3. Inclua testes para código novo em `src/` e para lógica nova do
+   `calculo.js`.
+4. Descreva o que mudou e por quê. Se corrigir um bug, inclua como reproduzir
+   o problema original.
 5. Espere o CI passar antes de pedir review.
 
-Não há um linter/formatter configurado no projeto ainda, siga o estilo já
-presente no arquivo que você está editando (nomes em português no domínio
-de dados, docstrings quando o comportamento não é óbvio, sem comentário
-redundante com o código).
+Siga o estilo do arquivo que você está editando: nomes em português no domínio
+dos dados, e comentário que explica o porquê, não o que o código já diz.
 
-## Fontes de dados sensíveis
+## Releases
 
-Se sua contribuição adicionar uma nova fonte de dados (novo endpoint, nova
-UF, nova API), documente no PR: a URL usada, se exige autenticação/captcha,
-e qualquer rate limit observado, no mesmo nível de detalhe com que as fontes
-atuais (CPRM/SGB, INMET, ANA, Open-Meteo) estão descritas no README.
+Bump da versão no `pyproject.toml`, entrada no `CHANGELOG.md` e tag `vX.Y.Z`.
+A tag dispara o `release.yml`: confira que os artefatos existem, não só que o
+run passou.
+
+## Fontes de dados novas
+
+Se sua contribuição adicionar uma fonte de dados, documente no PR a URL usada,
+se exige autenticação, o limite de requisições observado e como a fonte falha
+(fora do ar, resposta vazia, mudança de formato). O código precisa tratar cada
+um desses casos sem apagar dado que já está publicado.
