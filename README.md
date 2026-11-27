@@ -41,6 +41,19 @@ Pages, e um cron atualiza os dados todo dia.
 > **Atenção:** o ORCA não substitui a Defesa Civil. Ele cruza dado público e
 > modelado. Em uma emergência, siga o órgão oficial da sua cidade ou ligue 199.
 
+## Para quem é
+
+- **Defesa civil e gestão municipal.** Abrir o link, escolher a UF e ver num
+  mapa só quais setores já mapeados receberam chuva acima do critério que o seu
+  órgão usa. Não precisa instalar nada nem criar conta, e o recorte sai em CSV
+  ou PDF para o relatório do dia.
+- **Pesquisa e ensino.** Comparar limiares de chuva de órgãos diferentes sobre
+  o mesmo conjunto de setores, ou usar os dados exportados em aula e em
+  trabalho acadêmico.
+- **Quem desenvolve.** O código é aberto e os dados são arquivos estáticos. Dá
+  para reaproveitar a ingestão, trocar a fonte de chuva ou apontar o dashboard
+  para outra base de setores.
+
 ## Como ler o dashboard
 
 O dashboard responde uma pergunta: **onde chove muito sobre um setor de risco
@@ -245,6 +258,14 @@ estranho no código, provavelmente é isso. Um issue é bem-vindo.
 Issues, PRs e sugestões são bem-vindos. Veja o
 [guia de contribuição](CONTRIBUTING.md) e o
 [Código de Conduta](CODE_OF_CONDUCT.md).
+
+## Como citar
+
+Se o ORCA entrar num trabalho, relatório ou artigo, use o botão **Cite this
+repository**, no topo da página do GitHub. Ele lê o
+[`CITATION.cff`](CITATION.cff) e entrega a referência em APA e BibTeX. Cite
+também o [BELUGA](https://github.com/hcristosm/BELUGA) e a fonte primária dos
+setores: o levantamento de campo é da CPRM/SGB ou do órgão que mapeou.
 
 ## Licença
 

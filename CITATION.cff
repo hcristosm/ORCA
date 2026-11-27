@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: >-
+  Se você usar o ORCA, cite este repositório. Cite também o BELUGA, de onde vêm
+  os setores, e a fonte primária de cada setor: o levantamento de campo é da
+  CPRM/SGB ou do órgão que mapeou.
+title: "ORCA: Open Risk and Catastrophe Aggregator"
+abstract: >-
+  Dashboard estático que cruza os setores de risco geológico do Brasil,
+  lidos do BELUGA, com a chuva recente de cada setor e marca os que passaram
+  de um limiar de chuva acumulada escolhido pelo usuário. Cobre as 27 UFs,
+  roda no GitHub Pages sem servidor e é atualizado todo dia.
+type: software
+authors:
+  - given-names: Mateus Hcristos
+    family-names: Leptokarydis
+    orcid: "https://orcid.org/0009-0000-5877-5763"
+    alias: hcristosm
+version: 3.0.0
+date-released: "2026-11-27"
+license: AGPL-3.0-or-later
+repository-code: "https://github.com/hcristosm/ORCA"
+url: "https://hcristosm.github.io/ORCA/"
+keywords:
+  - risco geológico
+  - deslizamento
+  - chuva
+  - defesa civil
+  - alerta
+  - Brasil
+  - dados abertos
+  - dashboard
+references:
+  - type: software
+    title: "BELUGA: Brazilian External Landslide & Unmapped Geohazard Archive"
+    authors:
+      - given-names: Mateus Hcristos
+        family-names: Leptokarydis
+    repository-code: "https://github.com/hcristosm/BELUGA"

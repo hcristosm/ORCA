@@ -10,6 +10,12 @@ O projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 Versões até a 1.0.0 usam o formato anterior, com seções
 `Added`/`Changed`/`Fixed` do [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
+## [Unreleased]
+
+### CHORE
+- docs(readme): seção "Para quem é", com o uso por defesa civil, pesquisa e quem desenvolve, e seção "Como citar", nas versões em português e em inglês
+- chore(citation): `CITATION.cff` com autor, ORCID, licença e referência ao BELUGA, para o botão "Cite this repository" do GitHub e para o arquivamento no Zenodo
+
 ## [3.0.0] - 2026-11-27
 
 ### FEATURES

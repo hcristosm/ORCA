@@ -43,6 +43,19 @@ on GitHub Pages, and a cron job updates the data every day.
 > and modelled data. In an emergency, follow your city's official agency or call
 > 199.
 
+## Who it is for
+
+- **Civil defence and municipal staff.** Open the link, pick a state and see on
+  one map which mapped sectors got more rain than the threshold your agency
+  uses. Nothing to install and no account to create, and the selection exports
+  to CSV or PDF for the daily report.
+- **Research and teaching.** Compare rainfall thresholds from different
+  agencies over the same set of sectors, or use the exported data in class and
+  in academic work.
+- **Developers.** The code is open and the data is static files. You can reuse
+  the ingestion, swap the rainfall source or point the dashboard at another
+  sector dataset.
+
 ## How to read the dashboard
 
 The dashboard answers one question: **where is it raining heavily over a known
@@ -249,6 +262,14 @@ in the code, that is probably why. An issue is welcome.
 Issues, PRs and suggestions are welcome. See the
 [contributing guide](CONTRIBUTING.md) and the
 [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## How to cite
+
+If ORCA ends up in a paper, report or thesis, use the **Cite this repository**
+button at the top of the GitHub page. It reads [`CITATION.cff`](CITATION.cff)
+and gives the reference in APA and BibTeX. Please also cite
+[BELUGA](https://github.com/hcristosm/BELUGA) and the primary source of the
+sectors: the field survey belongs to CPRM/SGB or to the agency that mapped them.
 
 ## License
 
