@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "orca"
 version = "2.6.0"
-description = "Dashboard estático que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (Open-Meteo)"
+description = "Dashboard estático que cruza setores de risco geológico do Brasil (BELUGA) com chuva recente (Open-Meteo)"
 requires-python = ">=3.11"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]

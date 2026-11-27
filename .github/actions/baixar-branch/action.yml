@@ -6,7 +6,7 @@ description: >
 
 inputs:
   branch:
-    description: "Nome da branch remota (ex.: dados-base, gh-pages)."
+    description: "Nome da branch remota (ex.: gh-pages)."
     required: true
   destino:
     description: >
