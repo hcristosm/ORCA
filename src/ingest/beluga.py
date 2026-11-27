@@ -24,6 +24,7 @@ import geopandas as gpd
 import requests
 
 from src.config import (
+    UFS_VALIDAS,
     caminho_manifesto_beluga,
     caminho_setores_beluga,
     validar_uf,
@@ -91,29 +92,52 @@ def baixar_manifest(
     return manifest
 
 
-def contagens_publicadas(dados_dir: Path) -> dict[str, int]:
-    """`total_setores` de cada `meta_<uf>.json` já publicado, por UF.
+def _codigos_distintos(colecao: object) -> set[str]:
+    """`num_setor` distintos de uma FeatureCollection já carregada."""
+    feicoes = colecao.get("features") if isinstance(colecao, dict) else None
+    if not isinstance(feicoes, list):
+        raise TypeError("GeoJSON sem lista de features")
+    codigos = set()
+    for feicao in feicoes:
+        props = feicao.get("properties") if isinstance(feicao, dict) else None
+        codigo = props.get("num_setor") if isinstance(props, dict) else None
+        if isinstance(codigo, str):
+            codigos.add(codigo.strip())
+    return codigos
 
-    É o piso da guarda por UF. UF cujo meta não existe ou está ilegível fica
-    sem piso (e avisa): uma UF não medível não pode travar as outras 26, e a
-    guarda de contagem de UFs em `scripts/conferir_publicacao.py` e o piso de
-    cobertura em `scripts/mesclar_publicado.py` continuam valendo para o
-    conjunto.
+
+def contagens_publicadas(dados_dir: Path) -> dict[str, int]:
+    """Setores DISTINTOS de cada `setores_<uf>.geojson` já publicado, por UF.
+
+    É o piso da guarda por UF, e conta setores, não feições. A distinção é o
+    que separa "a publicação encolheu" de "mudou a forma de guardar": um setor
+    mapeado em partes separadas pode vir como várias feições de mesmo
+    `num_setor`, e aí contar feições infla o piso e recusa uma publicação que
+    não perdeu setor nenhum. Medido na virada para o BELUGA: a SGB publica o
+    setor `RO_PORTOVE_SR_12_CPRM` em 21 feições, e o piso por feições recusava
+    RO inteira por causa disso.
+
+    Não sai do `total_setores` do `meta_<uf>.json` pelo mesmo motivo: aquele
+    número é a contagem de feições de quem exportou. Lido do GeoJSON, o piso
+    mede o que de fato está publicado, qualquer que tenha sido o produtor.
+
+    UF cujo GeoJSON não existe ou está ilegível fica sem piso (e avisa): uma
+    UF não medível não pode travar as outras 26, e a guarda de contagem de UFs
+    em `scripts/conferir_publicacao.py` e o piso de cobertura em
+    `scripts/mesclar_publicado.py` continuam valendo para o conjunto.
     """
     contagens: dict[str, int] = {}
     if not dados_dir.is_dir():
         logger.warning("Sem %s; download do BELUGA sem piso por UF.", dados_dir)
         return contagens
-    for caminho in sorted(dados_dir.glob("meta_*.json")):
-        uf = caminho.stem.removeprefix("meta_").upper()
-        try:
-            meta = json.loads(caminho.read_text())
-            total = meta["total_setores"]
-        except (OSError, ValueError, KeyError, TypeError):
-            logger.warning("%s ilegível; %s fica sem piso por UF.", caminho, uf)
+    for caminho in sorted(dados_dir.glob("setores_*.geojson")):
+        uf = caminho.stem.removeprefix("setores_").upper()
+        if uf not in UFS_VALIDAS:
             continue
-        if isinstance(total, int) and not isinstance(total, bool):
-            contagens[uf] = total
+        try:
+            contagens[uf] = len(_codigos_distintos(json.loads(caminho.read_text())))
+        except (OSError, ValueError, AttributeError, TypeError):
+            logger.warning("%s ilegível; %s fica sem piso por UF.", caminho, uf)
     return contagens
 
 
@@ -170,9 +194,13 @@ def baixar_uf(
             f"GeoJSON truncado ou manifest desatualizado; {uf_norm} fica com o dado anterior."
         )
 
-    if minimo is not None and len(feicoes) < minimo:
+    # Setores distintos dos dois lados: o piso vem de `contagens_publicadas`,
+    # que conta `num_setor` distintos, e comparar com a contagem de feições
+    # daqui recusaria uma UF que só mudou de forma.
+    distintos = len(_codigos_distintos(colecao))
+    if minimo is not None and distintos < minimo:
         raise BelugaFetchError(
-            f"{uf_norm} viria com {len(feicoes)} setores, menos que os {minimo} já "
+            f"{uf_norm} viria com {distintos} setores distintos, menos que os {minimo} já "
             "publicados pelo ORCA; publicação que encolhe é recusada e a UF fica com "
             "o dado anterior."
         )

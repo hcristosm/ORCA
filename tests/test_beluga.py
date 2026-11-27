@@ -167,11 +167,47 @@ def test_baixa_uf_e_grava_gpkg_e_manifesto(tmp_path: Path, anterior: Path):
     assert manifesto["contrato"] == "v1"
 
 
-def test_contagens_publicadas_le_o_total_de_cada_meta(tmp_path: Path):
-    (tmp_path / "meta_sp.json").write_text(json.dumps({"total_setores": 907}))
-    (tmp_path / "meta_rj.json").write_text(json.dumps({"total_setores": 346}))
+def _publicar(diretorio: Path, uf: str, codigos: list[str]) -> None:
+    """Escreve um `setores_<uf>.geojson` publicado com os códigos dados."""
+    diretorio.mkdir(parents=True, exist_ok=True)
+    (diretorio / f"setores_{uf.lower()}.geojson").write_text(json.dumps({
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "geometry": None,
+                      "properties": {"num_setor": c}} for c in codigos],
+    }))
+
+
+def test_contagens_publicadas_conta_setores_de_cada_geojson(tmp_path: Path):
+    _publicar(tmp_path, "SP", [f"SP_{i}" for i in range(907)])
+    _publicar(tmp_path, "RJ", [f"RJ_{i}" for i in range(346)])
 
     assert contagens_publicadas(tmp_path) == {"SP": 907, "RJ": 346}
+
+
+def test_contagens_publicadas_conta_setor_em_partes_uma_vez_so(tmp_path: Path):
+    # O caso que motivou a regra: a SGB publica `RO_PORTOVE_SR_12_CPRM` em 21
+    # feições, que são partes do MESMO setor. Contando feições, o piso de RO
+    # virava 178 contra os 143 setores reais, e recusava uma publicação que
+    # não perdia setor nenhum.
+    partido = ["RO_PORTOVE_SR_12_CPRM"] * 21
+    _publicar(tmp_path, "RO", partido + [f"RO_OUTRO_{i}" for i in range(142)])
+
+    assert contagens_publicadas(tmp_path) == {"RO": 143}
+
+
+def test_contagens_publicadas_ignora_espaco_em_branco_no_codigo(tmp_path: Path):
+    # A ingestão antiga guardava três códigos de SC com `\r\n` grudado no
+    # fim. É o mesmo setor, e contar os dois infla o piso.
+    _publicar(tmp_path, "SC", ["SC_IRATI_SR_1_CPRM\r\n", "SC_IRATI_SR_1_CPRM"])
+
+    assert contagens_publicadas(tmp_path) == {"SC": 1}
+
+
+def test_contagens_publicadas_ignora_arquivo_que_nao_e_de_uf(tmp_path: Path):
+    _publicar(tmp_path, "SP", ["SP_1"])
+    (tmp_path / "setores_pontos.json").write_text(json.dumps({"versao": 2}))
+
+    assert contagens_publicadas(tmp_path) == {"SP": 1}
 
 
 def test_contagens_publicadas_sem_diretorio_nao_levanta(tmp_path: Path):
@@ -181,16 +217,15 @@ def test_contagens_publicadas_sem_diretorio_nao_levanta(tmp_path: Path):
     assert contagens_publicadas(tmp_path / "nao-existe") == {}
 
 
-def test_contagens_publicadas_ignora_meta_ilegivel_e_total_que_nao_e_inteiro(tmp_path: Path):
-    (tmp_path / "meta_sp.json").write_text(json.dumps({"total_setores": 907}))
-    (tmp_path / "meta_rj.json").write_text("{isto não é json")
-    (tmp_path / "meta_mg.json").write_text(json.dumps({"total_setores": "3695"}))
-    (tmp_path / "meta_ba.json").write_text(json.dumps({"total_setores": True}))
-    (tmp_path / "meta_pe.json").write_text(json.dumps({}))
+def test_contagens_publicadas_ignora_geojson_ilegivel(tmp_path: Path):
+    _publicar(tmp_path, "SP", ["SP_1", "SP_2"])
+    (tmp_path / "setores_rj.geojson").write_text("{isto não é json")
+    (tmp_path / "setores_mg.geojson").write_text(json.dumps({"type": "FeatureCollection"}))
+    (tmp_path / "setores_ba.geojson").write_text(json.dumps([]))
 
     # Só SP ganha piso; as outras ficam sem, e sem piso é diferente de piso 0:
     # piso 0 aceitaria qualquer coisa, inclusive publicação vazia.
-    assert contagens_publicadas(tmp_path) == {"SP": 907}
+    assert contagens_publicadas(tmp_path) == {"SP": 2}
 
 
 @responses.activate
@@ -315,14 +350,27 @@ def test_publicacao_menor_que_a_anterior_e_recusada(tmp_path: Path, anterior: Pa
     responses.add(responses.GET, URL_MANIFEST, json=_manifest(corpo), status=200)
     responses.add(responses.GET, URL_SP, body=corpo, status=200)
     publicado = tmp_path / "publicado"
-    publicado.mkdir()
-    (publicado / "meta_sp.json").write_text(json.dumps({"total_setores": 5}))
+    _publicar(publicado, "SP", [f"SP_ANTIGO_{i}" for i in range(5)])
 
     resultado = _invocar(tmp_path, publicado=publicado)
 
     assert resultado.exit_code == 1
     assert "menos que os 5 já" in resultado.output
     _intacto(anterior)
+
+
+@responses.activate
+def test_uf_que_so_juntou_partes_passa_pelo_piso(tmp_path: Path, anterior: Path):
+    # 2 setores novos contra 3 feições publicadas que eram 2 setores: não
+    # encolheu, e recusar aqui travaria a UF todo dia sem motivo.
+    corpo = _geojson(2)
+    responses.add(responses.GET, URL_MANIFEST, json=_manifest(corpo), status=200)
+    responses.add(responses.GET, URL_SP, body=corpo, status=200)
+    publicado = tmp_path / "publicado"
+    _publicar(publicado, "SP", ["SP_CIDADEX_SR_0_CPRM", "SP_CIDADEX_SR_0_CPRM",
+                                "SP_CIDADEX_SR_1_CPRM"])
+
+    assert _invocar(tmp_path, publicado=publicado).exit_code == 0
 
 
 @responses.activate
