@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ORCA: Dashboard</title>
-<meta name="description" content="Setores de risco geológico (CPRM/SGB) cruzados com chuva recente e previsão (Open-Meteo), radar, raios e avisos do INMET.">
+<meta name="description" content="Setores de risco geológico mapeados pela CPRM/SGB e por prefeituras, cruzados com chuva recente e previsão (Open-Meteo), radar, raios e avisos do INMET.">
 <!-- 'unsafe-inline' em script-src/style-src é necessário porque o dashboard
      usa <script>/style="" inline (site estático sem build step, sem
      nonce/hash); a CSP ainda restringe de onde scripts/estilos/conexões
@@ -46,6 +46,23 @@
       <rect width="7" height="7" fill="var(--hachura-fundo)"></rect>
       <line x1="0" y1="0" x2="0" y2="7" stroke="var(--hachura-traco)" stroke-width="1.7"></line>
       <line x1="0" y1="0" x2="7" y2="0" stroke="var(--hachura-traco)" stroke-width="1.7"></line>
+    </pattern>
+    <!-- Médio: mesma trama de linhas do Alto, na diagonal contrária. A direção
+         distingue sem sugerir "mais denso, logo mais grave". -->
+    <pattern id="hach-medio" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+      <rect width="9" height="9" fill="var(--hachura-fundo)"></rect>
+      <line x1="0" y1="0" x2="0" y2="9" stroke="var(--hachura-traco)" stroke-width="1.4"></line>
+    </pattern>
+    <pattern id="hach-baixo" width="8" height="8" patternUnits="userSpaceOnUse">
+      <rect width="8" height="8" fill="var(--hachura-fundo)"></rect>
+      <circle cx="2" cy="2" r="1.15" fill="var(--hachura-traco)"></circle>
+      <circle cx="6" cy="6" r="1.15" fill="var(--hachura-traco)"></circle>
+    </pattern>
+    <!-- Sem grau tem trama própria, e não a padrão: "a fonte não classificou
+         este setor" é um fato do dado, diferente de "valor que não esperávamos". -->
+    <pattern id="hach-sem-grau" width="9" height="9" patternUnits="userSpaceOnUse">
+      <rect width="9" height="9" fill="var(--hachura-fundo)"></rect>
+      <circle cx="4.5" cy="4.5" r="1.1" fill="var(--hachura-traco)"></circle>
     </pattern>
     <pattern id="hach-padrao" width="9" height="9" patternUnits="userSpaceOnUse">
       <rect width="9" height="9" fill="var(--hachura-fundo)"></rect>
@@ -141,6 +158,8 @@
       <svg class="icone"><use href="icons/sprite.svg#icon-upload"></use></svg>Minhas &aacute;reas</button>
     <button type="button" data-mais="vistaTutorial">
       <svg class="icone"><use href="icons/sprite.svg#icon-info"></use></svg>Tutorial</button>
+    <button type="button" data-mais="vistaTutorial" data-ancora="creditos">
+      <svg class="icone"><use href="icons/sprite.svg#icon-info"></use></svg>Cr&eacute;ditos e licen&ccedil;as</button>
     <button type="button" data-mais="tema">
       <svg class="icone"><use href="icons/sprite.svg#icon-moon"></use></svg>Alternar tema claro/escuro</button>
     <a href="https://github.com/hcristosm/ORCA#readme">
@@ -164,6 +183,7 @@
         <span class="contagem" id="contagemRecorte"></span>
       </div>
       <div class="contadores" id="cards"></div>
+      <p class="nota-sobreposicao" id="notaSobreposicao" hidden></p>
       <p class="nota-filtro">Clique num n&uacute;mero para esconder essa classe do mapa.</p>
     </section>
 
@@ -192,8 +212,10 @@
     <div class="agora" id="agora" hidden></div>
 
     <footer>
-      <span>Dados p&uacute;blicos da CPRM/SGB, Open-Meteo, INMET, RainViewer e NOAA. Site est&aacute;tico, atualizado diariamente.</span>
+      <span>Dados p&uacute;blicos da CPRM/SGB e de prefeituras, IBGE, Open-Meteo, INMET, RainViewer e NOAA.
+        Site est&aacute;tico, atualizado diariamente. C&oacute;digo sob AGPL-3.0-or-later.</span>
       <span>
+        <a href="#creditos" data-ancora="creditos">Cr&eacute;ditos e licen&ccedil;as</a> &middot;
         <a href="https://github.com/hcristosm/ORCA#readme">Sobre o projeto</a> &middot;
         <a href="https://github.com/hcristosm/ORCA">GitHub <svg class="icone"><use href="icons/sprite.svg#icon-external-link"></use></svg></a>
       </span>
@@ -286,7 +308,7 @@
       <span class="rotulo-inst">roda no seu navegador</span>
     </div>
     <p class="areas-intro">
-      A setoriza&ccedil;&atilde;o da CPRM/SGB n&atilde;o cobre tudo. Carregue uma &aacute;rea sua (GeoJSON, KML ou shapefile
+      O mapeamento oficial de setores n&atilde;o cobre tudo. Carregue uma &aacute;rea sua (GeoJSON, KML ou shapefile
       em .zip) para ver a chuva acumulada e o alerta previsto nela. O arquivo &eacute; lido pelo seu
       navegador e a chuva vem direto da Open-Meteo: nada passa por um servidor do ORCA nem fica
       salvo, e tudo some quando voc&ecirc; recarregar. At&eacute; 5 &aacute;reas, 10MB por arquivo.
@@ -326,9 +348,12 @@
     </div>
     <p class="areas-intro">
       O ORCA cruza duas informa&ccedil;&otilde;es: os setores de risco geol&oacute;gico mapeados pelo Servi&ccedil;o
-      Geol&oacute;gico do Brasil (CPRM/SGB) e a chuva dos &uacute;ltimos dias. Ele responde uma pergunta:
+      Geol&oacute;gico do Brasil (CPRM/SGB) e por defesas civis municipais, e a chuva dos &uacute;ltimos
+      dias. Ele responde uma pergunta:
       <em>em quais setores j&aacute; choveu mais do que um valor que eu considero perigoso?</em> Esse
-      valor &eacute; o limiar. Voc&ecirc; escolhe o limiar na r&eacute;gua.
+      valor &eacute; o limiar. Voc&ecirc; escolhe o limiar na r&eacute;gua. A legenda do mapa mostra de qual
+      levantamento vem cada setor, e os <a href="#creditos" data-ancora="creditos">cr&eacute;ditos</a>
+      listam a licen&ccedil;a de cada fonte.
     </p>
 
     <h3>1. O que a r&eacute;gua mostra</h3>
@@ -344,7 +369,9 @@
         &agrave; direita dela fica <b>em aten&ccedil;&atilde;o</b>: ele ganha cor cheia no mapa e entra na tabela
         &ldquo;Setores em aten&ccedil;&atilde;o&rdquo; e nos contadores. O padr&atilde;o &eacute; 100mm em 72h.</li>
       <li><b>No mapa, a trama e a cor dizem coisas diferentes.</b> A trama (hachura) &eacute; o grau de
-        risco do setor, alto ou muito alto, e n&atilde;o muda com a chuva. A cor cheia aparece s&oacute; quando
+        risco do setor, de muito alto a baixo, e n&atilde;o muda com a chuva. Fonte que n&atilde;o classifica
+        o setor aparece como <em>sem grau informado</em>, que n&atilde;o quer dizer risco menor: quer dizer
+        que aquele levantamento n&atilde;o publica grau. A cor cheia aparece s&oacute; quando
         o setor passa do limiar.</li>
       <li><b>Alerta previsto</b> lista os setores abaixo do limiar que devem cruz&aacute;-lo nas pr&oacute;ximas
         72h, se a previs&atilde;o da Open-Meteo se confirmar. O c&aacute;lculo projeta o acumulado de 72h de 3 em
@@ -467,6 +494,54 @@
       <li>Caine, N. <a href="https://doi.org/10.2307/520449">The rainfall intensity-duration control of shallow landslides and debris flows</a>. Geografiska Annaler A, 62(1/2), p. 23&ndash;27, 1980.</li>
       <li>Guzzetti, F.; Peruccacci, S.; Rossi, M.; Stark, C. P. The rainfall intensity-duration control of shallow landslides and debris flows: an update. Landslides, 5, p. 3&ndash;17, 2008.</li>
     </ol>
+
+    <h3 id="creditos">Cr&eacute;ditos, licen&ccedil;as e c&oacute;digo-fonte</h3>
+    <p>
+      O ORCA n&atilde;o produz dado: ele cruza o que outros publicam. Cada fonte tem licen&ccedil;a pr&oacute;pria, e
+      algumas delas obrigam quem redistribui. Se voc&ecirc; for reusar algo daqui, confira a licen&ccedil;a da
+      fonte, n&atilde;o a deste site.
+    </p>
+
+    <h4>Setores de risco nesta UF</h4>
+    <div class="creditos-fontes" id="creditosFontes">
+      <p>Carregando as fontes desta UF&hellip;</p>
+    </div>
+    <p class="nota-tutorial">
+      Nenhuma dessas fontes cobre o Brasil inteiro, e aus&ecirc;ncia de setor mapeado n&atilde;o &eacute;
+      aus&ecirc;ncia de risco. Procure a Defesa Civil do munic&iacute;pio. Em emerg&ecirc;ncia, ligue 199.
+    </p>
+
+    <h4>Outras fontes do painel</h4>
+    <ul class="creditos-lista">
+      <li><b>IBGE</b> &middot; malha municipal, nomes e c&oacute;digos de munic&iacute;pio, e a lista dos 5.570
+        munic&iacute;pios que a busca usa. &Eacute; o IBGE que desenha cada munic&iacute;pio do mapa por
+        munic&iacute;pio e que d&aacute; o ponto central das cidades sem setor mapeado.
+        <a href="https://servicodados.ibge.gov.br/api/docs" rel="noopener">API de servi&ccedil;o de dados</a>.</li>
+      <li><b>Open-Meteo</b> &middot; chuva observada e prevista, por coordenada. &Uacute;nica fonte de chuva
+        do painel. <a href="https://open-meteo.com/en/license" rel="noopener">CC-BY 4.0</a>, com dado de
+        modelos meteorol&oacute;gicos nacionais.</li>
+      <li><b>INMET</b> &middot; avisos meteorol&oacute;gicos oficiais, lidos ao vivo da API do
+        alerta-as.inmet.gov.br. O aviso mostrado aqui &eacute; o do INMET, sem reinterpreta&ccedil;&atilde;o.</li>
+      <li><b>RainViewer</b> &middot; mosaico de radar de chuva em andamento, camada opcional.</li>
+      <li><b>NOAA / GOES-19 GLM</b>, via SSEC RealEarth (Univ. de Wisconsin) &middot; densidade de raios,
+        camada opcional.</li>
+      <li><b>OpenStreetMap</b> &middot; mapa de base.
+        <a href="https://www.openstreetmap.org/copyright" rel="noopener">&copy; colaboradores do
+        OpenStreetMap</a>, sob ODbL.</li>
+    </ul>
+
+    <h4>O ORCA</h4>
+    <p>
+      O c&oacute;digo deste painel e do pipeline que o alimenta est&aacute; sob
+      <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noopener">AGPL-3.0-or-later</a>. A AGPL
+      exige que quem serve esta aplica&ccedil;&atilde;o pela rede ofere&ccedil;a o c&oacute;digo-fonte a quem a usa, e a
+      oferta &eacute; esta:
+      <a href="https://github.com/hcristosm/ORCA" rel="noopener">github.com/hcristosm/ORCA</a>. O
+      reposit&oacute;rio tem a &aacute;rvore completa, o hist&oacute;rico e os workflows que publicam este site.
+    </p>
+    <p class="nota-tutorial">
+      Este painel n&atilde;o &eacute; alerta oficial e n&atilde;o substitui a Defesa Civil.
+    </p>
   </article>
 </div>
 
@@ -623,7 +698,7 @@
   // mim"): a tela Perto usa o centro dele como ponto quando não há GPS.
   let anunciarMunicipioAoCarregar = false;
 
-  // Município SEM setor da CPRM escolhido na busca. Não vira filtro (filtraria
+  // Município SEM setor mapeado escolhido na busca. Não vira filtro (filtraria
   // os setores para zero, e o link não teria o que abrir): o mapa vai até ele
   // com um balão que diz o que falta, e a tela Perto usa o ponto dele.
   let semSetorPendente = null;   // escolhido em outra UF, aplicado ao carregar
@@ -650,7 +725,7 @@
         .setLatLng([m.lat, m.lon])
         .setContent(
           `<b>${escaparHtml(m.nome)} (${escaparHtml(m.uf.toUpperCase())})</b><br>` +
-          "A CPRM não mapeou setores de risco neste município. " +
+          "Nenhuma das fontes do ORCA tem setor de risco mapeado neste município. " +
           "Isso não quer dizer que não há risco.<br>" +
           "Procure a Defesa Civil do município. Em emergência, ligue 199.")
         .openOn(mapa);
@@ -694,7 +769,7 @@
     return promessaIndiceNacional;
   }
 
-  // Municípios do IBGE SEM setor da CPRM (São Paulo, Rio, Petrópolis...): sem
+  // Municípios do IBGE SEM setor mapeado (São Paulo, Rio, Petrópolis...): sem
   // isto a busca não achava a cidade e parecia que ela não existia. Lista
   // estática (municipios.json, scripts/gerar_municipios.py); a cobertura sai
   // do índice nacional do dia. Arquivo que falhe só deixa a busca como antes.
@@ -855,19 +930,54 @@
   function corAtencao() { return token("--contorno-atencao"); }
   function corSerie() { return token("--serie-chuva"); }
 
+  // A lista única do grau mora em calculo.js (window.ORCA.calculo). Daqui saem
+  // a hachura, os contadores, a legenda, o filtro e o choropleth: cinco lugares,
+  // uma lista. Antes eram três listas separadas, e o grau "Médio" não entrava em
+  // nenhuma delas.
+  const {
+    GRAUS, SEM_GRAU, ID_CPRM, chaveGrau, rotuloGrau, severidadeGrau,
+    ehCprm, sobrepoeCprm, repetidoNaCprm, rotuloFonte,
+  } = window.ORCA.calculo;
+
   // Grau de risco vira trama, não cor: no mapa a cor fica reservada ao limiar.
-  const HACHURA_POR_GRAU = {
-    "alto": "url(#hach-alto)",
-    "muito alto": "url(#hach-muito-alto)",
-  };
+  // Um id de <pattern> por grau da lista: "Muito alto" -> "hach-muito-alto",
+  // "Médio" -> "hach-medio". Sem acento no id, como nos <pattern> do documento.
+  const idHachura = grau => "hach-" + grau.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ /g, "-");
+  const HACHURA_POR_GRAU = Object.fromEntries(
+    GRAUS.map(g => [g.toLowerCase(), `url(#${idHachura(g)})`])
+  );
+  // Grau fora da lista cai na trama padrão, que agora significa de verdade
+  // "valor que não esperávamos" -- "sem grau" tem trama própria.
   function hachuraPorGrau(grau) {
-    return HACHURA_POR_GRAU[(grau || "").toLowerCase()] || "url(#hach-padrao)";
+    return HACHURA_POR_GRAU[chaveGrau(grau)] || "url(#hach-padrao)";
+  }
+
+  // ------------------------------------------------- fonte e sobreposição
+  // `sobrepoeCprm` e `repetidoNaCprm` (o limiar de 50%) moram em calculo.js:
+  // são regra, não desenho, e assim têm teste em tests/js/calculo.html.
+
+  // Fontes presentes na UF carregada, da que tem mais setores para a que tem
+  // menos, com nome/órgão/licença do meta quando ele traz.
+  let fontesDaUf = [];
+
+  function infoFonte(id) {
+    return fontesDaUf.find(f => f.id === id) || { id, nome: rotuloFonte(id) };
+  }
+
+  function nomeFonte(id) {
+    return infoFonte(id).nome || rotuloFonte(id);
   }
 
   // `ocultos`: classes escondidas do MAPA pelo clique na legenda/KPI. Não entra
   // nas contagens nem na tabela de propósito — contador que muda com o filtro
   // mente sobre quantos setores existem.
-  const estado = { janela: 72, limiar: 100, municipio: "", ocultos: new Set() };
+  // `fontesOcultas`: ids de fonte escondidos do mapa. `sob`: "todos", "sim" (só
+  // os que sobrepõem a CPRM) ou "nao" (só os que não sobrepõem).
+  const estado = {
+    janela: 72, limiar: 100, municipio: "", ocultos: new Set(),
+    fontesOcultas: new Set(), sob: "todos",
+  };
   let setoresGeoJSON = null;
   let series = {};
   let previsao = null;
@@ -965,8 +1075,15 @@
     series = seriesCarregadas;
     previsao = previsaoCarregada;
     ufCarregada = ufAlvo;
+    // As fontes desta UF, já ordenadas por setores no `meta`. Alimentam o selo,
+    // a legenda, a ficha do setor, as tabelas e o bloco de créditos.
+    fontesDaUf = blocoSetores(meta).fontes;
+    // Filtro de fonte da UF anterior não pode esconder nada desta.
+    estado.fontesOcultas.clear();
+    estado.sob = "todos";
 
     renderizarSelo(meta, "Open-Meteo, consulta direta por setor");
+    renderizarCreditos();
 
     popularBuscaMunicipios();
     // Município vindo da URL/histórico: resolve o slug agora que há lista. Slug
@@ -1041,7 +1158,14 @@
 
   function carimbo(iso, { comHora = true, limiteHoras = null } = {}) {
     const d = dataValida(iso);
-    if (!d) return `<span class="selo-indisponivel">data indisponível</span>`;
+    // Data ausente conta como DESATUALIZADA onde há limite de idade. Antes ela
+    // só dizia "data indisponível" e nunca disparava o aviso: uma ingestão que
+    // parasse de gravar o carimbo ficaria indistinguível de uma em dia, que é
+    // exatamente o jeito de uma fonte morrer em silêncio.
+    if (!d) {
+      return `<span class="selo-indisponivel">data indisponível</span>` +
+        (limiteHoras !== null ? ` <span class="selo-idade desatualizado">(desatualizado)</span>` : "");
+    }
     const utc = d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
     let texto = `<time datetime="${escaparHtml(d.toISOString())}" title="${utc}">${formatarBrasilia(d, comHora)}</time>`;
     if (limiteHoras !== null) {
@@ -1052,16 +1176,41 @@
     return texto;
   }
 
+  /* Lê o bloco `setores` do meta (contrato v1) e, para dado antigo, o bloco
+     `cprm` que ele substituiu. Devolve sempre a mesma forma. */
+  function blocoSetores(meta) {
+    const s = meta.setores;
+    if (s && typeof s === "object") {
+      return {
+        coletadoEm: s.coletado_em,
+        maisRecente: s.mais_recente,
+        fontes: Array.isArray(s.fontes) ? s.fontes.filter(f => f && f.id) : [],
+      };
+    }
+    const cprm = meta.cprm || {};
+    return {
+      coletadoEm: cprm.ingerido_em,
+      maisRecente: cprm.setor_mais_recente,
+      fontes: [{ id: ID_CPRM, nome: "CPRM/SGB", setores: meta.total_setores }],
+    };
+  }
+
   function renderizarSelo(meta, detalheFonte) {
     // Meta antigo (sem os blocos por fonte) cai nos campos do topo.
     const chuva = meta.chuva || { ate: meta.referencia, consultado_em: meta.gerado_em };
-    const cprm = meta.cprm || {};
+    const setores = blocoSetores(meta);
     const nomeChuva = "Chuva e previsão (Open-Meteo)";
-    // setor_mais_recente é só data (AAAA-MM-DD): meio-dia UTC evita cair no dia anterior em Brasília.
-    const setorRecente = cprm.setor_mais_recente ? `${cprm.setor_mais_recente}T12:00:00Z` : null;
+    // mais_recente é só data (AAAA-MM-DD): meio-dia UTC evita cair no dia anterior em Brasília.
+    const setorRecente = setores.maisRecente ? `${setores.maisRecente}T12:00:00Z` : null;
+    // O selo nomeia as fontes que de fato estão nesta UF, e não mais "CPRM/SGB"
+    // fixo: desde a migração a setorização pode vir de mais de um levantamento.
+    const quaisFontes = setores.fontes.length
+      ? setores.fontes.map(f => f.nome || rotuloFonte(f.id)).join(", ")
+      : "fonte não informada";
     document.getElementById("selo").innerHTML =
-      `<div class="selo-linha"><span class="selo-fonte">Setores de risco (CPRM/SGB)</span>` +
-      `<span>consultado em ${carimbo(cprm.ingerido_em, { limiteHoras: LIMITE_IDADE_CPRM_DIAS * 24 })}` +
+      `<div class="selo-linha"><span class="selo-fonte">Setores mapeados</span>` +
+      `<span>${escaparHtml(quaisFontes)} · coletado em ` +
+      `${carimbo(setores.coletadoEm, { limiteHoras: LIMITE_IDADE_CPRM_DIAS * 24 })}` +
       ` · setor mais recente de ${carimbo(setorRecente, { comHora: false })}</span></div>` +
       `<div class="selo-linha"><span class="selo-fonte">${nomeChuva}</span>` +
       `<span>chuva até ${carimbo(chuva.ate)} · consultado em ` +
@@ -1071,6 +1220,26 @@
 
   function formatarMm(valor) {
     return typeof valor === "number" ? valor.toFixed(1) : "—";
+  }
+
+  /* Uma linha por fonte de setor presente na UF, com órgão, licença e quantos
+     setores. Sai do `meta_<uf>.json`, então o crédito acompanha o dado em vez
+     de ser uma lista fixa que sai de sincronia. */
+  function renderizarCreditos() {
+    const alvo = document.getElementById("creditosFontes");
+    if (!alvo) return;
+    if (!fontesDaUf.length) {
+      alvo.innerHTML = `<p>O arquivo desta UF não diz de quais fontes vêm os setores.</p>`;
+      return;
+    }
+    alvo.innerHTML = `<ul class="creditos-lista">` + fontesDaUf.map(f => {
+      const licenca = f.licenca || "licença não declarada pela fonte";
+      return `<li><b>${escaparHtml(f.nome || rotuloFonte(f.id))}</b>` +
+        (f.orgao ? ` · ${escaparHtml(f.orgao)}` : "") +
+        (f.setores ? ` · ${f.setores} setor${f.setores === 1 ? "" : "es"} nesta UF` : "") +
+        `<br>Licença: ${escaparHtml(licenca)}` +
+        `<br><span class="mono">${escaparHtml(f.id)}</span></li>`;
+    }).join("") + `</ul>`;
   }
 
   const TIMEOUT_IBGE_MS = 6000;
@@ -1197,7 +1366,7 @@
         li.textContent = nome;
         const sigla = document.createElement("span");
         sigla.className = "sugestao-uf";
-        sigla.textContent = semSetor ? `${uf.toUpperCase()} · sem setor CPRM` : uf.toUpperCase();
+        sigla.textContent = semSetor ? `${uf.toUpperCase()} · sem setor mapeado` : uf.toUpperCase();
         li.appendChild(sigla);
         lista.appendChild(li);
       }
@@ -1851,6 +2020,10 @@
           alternar.setAttribute("aria-expanded", String(!fechada));
           return;
         }
+        const porFonte = ev.target.closest("button[data-fonte]");
+        if (porFonte) { alternarFonte(porFonte.dataset.fonte); return; }
+        const porSob = ev.target.closest("button[data-sob]");
+        if (porSob) { escolherSobreposicao(porSob.dataset.sob); return; }
         const botao = ev.target.closest("button[data-filtro]");
         if (botao) alternarFiltro(botao.dataset.filtro);
       });
@@ -1960,7 +2133,17 @@
     let menor = Infinity;
     const visitar = camada => {
       if (camada.eachLayer && !camada.feature) { camada.eachLayer(visitar); return; }
-      if (!camada.feature || !camada.getLatLngs) return;
+      if (!camada.feature) return;
+      // Setor de ponto (circleMarker): distância do dedo ao próprio ponto. Sem
+      // isto os 629 pontos do Recife e de Contagem não abririam cartão nenhum
+      // no celular, porque não têm anéis para medir.
+      if (!camada.getLatLngs && camada.getLatLng) {
+        const centro = mapa.latLngToContainerPoint(camada.getLatLng());
+        const d = Math.hypot(pontoTela.x - centro.x, pontoTela.y - centro.y);
+        if (d < menor) { menor = d; melhor = camada.feature.properties.num_setor; }
+        return;
+      }
+      if (!camada.getLatLngs) return;
       const caixa = camada.getBounds();
       const no = mapa.latLngToContainerPoint(caixa.getNorthWest());
       const se = mapa.latLngToContainerPoint(caixa.getSouthEast());
@@ -2009,6 +2192,41 @@
     return { classe: "abaixo", frase: "Abaixo do limiar e sem previsão de passar nas próximas 72h.", chuva };
   }
 
+  /* Proveniência e relação com a CPRM na ficha do setor. Com uma fonte só (o
+     estado de hoje) a ficha fica como sempre foi. */
+  function linhasProveniencia(p) {
+    const linhas = [];
+    const fonte = infoFonte(p.bl_fonte || ID_CPRM);
+    if (fontesDaUf.length > 1 || !ehCprm(p.bl_fonte)) {
+      linhas.push(["Fonte", fonte.nome || rotuloFonte(p.bl_fonte)]);
+    }
+    if (p.orgao_exec) linhas.push(["Órgão", p.orgao_exec]);
+    if (p.bl_produto) linhas.push(["Produto", PRODUTO[p.bl_produto] || p.bl_produto]);
+    if (fonte.licenca) linhas.push(["Licença", fonte.licenca]);
+    else if (p.bl_licenca) linhas.push(["Licença", p.bl_licenca]);
+    // `bl_sob_cp` nulo é "não se aplica" (o setor é da própria CPRM), e não
+    // "não sobrepõe": são respostas diferentes e a ficha diz qual é.
+    if (!ehCprm(p.bl_fonte)) {
+      const frac = typeof p.bl_cp_frac === "number" ? ` (${Math.round(p.bl_cp_frac * 100)}% da área)` : "";
+      linhas.push(["Também mapeado pela CPRM",
+        p.bl_sob_cp === true ? `sim${frac}` : p.bl_sob_cp === false ? "não" : "não conferido"]);
+      if (repetidoNaCprm(p)) {
+        linhas.push(["Na contagem", "não somado: mais da metade da área já está mapeada pela CPRM"]);
+      }
+    }
+    if (!linhas.length) return "";
+    return `<dl class="cartao-ficha">` + linhas.map(([rotulo, valor]) =>
+      `<dt>${escaparHtml(rotulo)}</dt><dd>${escaparHtml(valor)}</dd>`).join("") + `</dl>`;
+  }
+
+  // Vocabulário de produto do BELUGA, em português corrente.
+  const PRODUTO = {
+    setorizacao_risco: "setorização de risco",
+    area_risco_sem_grau: "área de risco, sem grau",
+    ponto_risco: "ponto de risco",
+    suscetibilidade: "suscetibilidade",
+  };
+
   function abrirCartaoSetor(num, { enquadrar = false } = {}) {
     const feature = featureDoSetor(num);
     const cartao = document.getElementById("cartaoSetor");
@@ -2031,6 +2249,7 @@
         `<div><small>Limiar</small><b>${estado.limiar} mm</b></div>` +
       `</div>` +
       `<p class="cartao-resposta ${r.classe}">${escaparHtml(r.frase)}</p>` +
+      linhasProveniencia(p) +
       `<div class="cartao-acoes">` +
         `<button type="button" data-compartilhar><svg class="icone"><use href="icons/sprite.svg#icon-share-2"></use></svg>Compartilhar</button>` +
         `<a class="primario" href="${rota}" target="_blank" rel="noopener"><svg class="icone"><use href="icons/sprite.svg#icon-navigation"></use></svg>Rota até aqui</a>` +
@@ -2042,6 +2261,10 @@
     if (destaqueSetor) mapa.removeLayer(destaqueSetor);
     destaqueSetor = L.geoJSON(feature, {
       interactive: false,
+      // Setor de ponto também precisa de destaque, e sem pointToLayer ele
+      // viria como o marcador padrão do Leaflet, que a CSP bloqueia.
+      pointToLayer: (f, latlng) =>
+        L.circleMarker(latlng, { radius: RAIO_PONTO_PX + 4, className: "marcador-ponto" }),
       style: { color: token("--agua"), weight: 3, fill: false },
     }).addTo(mapa);
     if (enquadrar) mapa.fitBounds(destaqueSetor.getBounds(), { maxZoom: 16, padding: [48, 48] });
@@ -2448,16 +2671,43 @@
 
   /* ------------------------------------------------------------ contadores */
 
-  function renderizarCards(filtrados, emAtencao, alertaPrevisto) {
-    const grauAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "alto").length;
-    const grauMuitoAlto = filtrados.filter(r => (r.f.properties.grau_risco || "").toLowerCase() === "muito alto").length;
+  // Quantos setores do recorte em cada grau, incluindo os sem grau e os de
+  // valor inesperado. Antes eram dois `if` para "alto" e "muito alto": tudo que
+  // não fosse um desses dois não entrava em card nenhum, e a soma dos cards não
+  // fechava com o total exibido ao lado.
+  function contagemPorGrau(filtrados) {
+    const conta = new Map();
+    for (const r of filtrados) {
+      const chave = chaveGrau(r.f.properties.grau_risco);
+      conta.set(chave, (conta.get(chave) || 0) + 1);
+    }
+    return conta;
+  }
 
-    const cards = [
-      { filtro: "alto", icone: "icon-mountain", rotulo: "Grau alto", valor: grauAlto },
-      { filtro: "muito alto", icone: "icon-mountain", rotulo: "Grau muito alto", valor: grauMuitoAlto },
-      { filtro: "atencao", icone: "icon-triangle-alert", rotulo: `Em atenção (≥ ${estado.limiar}mm)`,
-        valor: emAtencao.length, destaque: true },
-    ];
+  // Chaves de grau presentes, da pior para a melhor. Valor que não está na lista
+  // única vai para o fim (severidade 0) mas CONTINUA aparecendo: grau que a
+  // interface não conhece sumindo da tela foi justamente o bug do "Médio".
+  function ordenarGraus(chaves) {
+    return [...chaves].sort((a, b) => severidadeGrau(b) - severidadeGrau(a) || a.localeCompare(b, "pt-BR"));
+  }
+
+  function rotuloCardGrau(chave) {
+    return chave === SEM_GRAU ? "Sem grau informado" : `Grau ${rotuloGrau(chave).toLowerCase()}`;
+  }
+
+  function renderizarCards(filtrados, emAtencao, alertaPrevisto) {
+    const porGrau = contagemPorGrau(filtrados);
+    // Só os graus presentes no recorte: card zerado de um grau que a fonte não
+    // publica (a CPRM quase não publica "Baixo") só faria ruído. Como a lista sai
+    // das chaves presentes, a soma dos cards fecha com o total por construção.
+    const cards = ordenarGraus(porGrau.keys()).map(chave => ({
+      filtro: chave,
+      icone: "icon-mountain",
+      rotulo: rotuloCardGrau(chave),
+      valor: porGrau.get(chave),
+    }));
+    cards.push({ filtro: "atencao", icone: "icon-triangle-alert", rotulo: `Em atenção (≥ ${estado.limiar}mm)`,
+      valor: emAtencao.length, destaque: true });
     if (previsao) {
       cards.push({ filtro: "previsto", icone: "icon-clock", rotulo: "Alerta previsto em 72h",
         valor: alertaPrevisto.length, destaque: true });
@@ -2475,8 +2725,25 @@
 
     document.getElementById("tituloRecorte").textContent =
       estado.municipio || "Estado inteiro";
+
+    // Cada área de risco conta UMA vez: setor externo com mais de metade da
+    // área já coberta pela CPRM é o mesmo lugar visto por dois levantamentos.
+    // Ele continua no mapa e na tabela, só não é somado de novo.
+    const repetidos = filtrados.filter(r => repetidoNaCprm(r.f.properties)).length;
+    const contados = filtrados.length - repetidos;
     document.getElementById("contagemRecorte").textContent =
-      `${filtrados.length} setor${filtrados.length === 1 ? "" : "es"}`;
+      `${contados} setor${contados === 1 ? "" : "es"}`;
+
+    const notaSob = document.getElementById("notaSobreposicao");
+    notaSob.hidden = !repetidos;
+    if (repetidos) {
+      const soSob = estado.sob === "sim";
+      notaSob.innerHTML =
+        `<button type="button" data-sob="${soSob ? "todos" : "sim"}" aria-pressed="${soSob}">` +
+        `${repetidos} setor${repetidos === 1 ? "" : "es"} também mapeado` +
+        `${repetidos === 1 ? "" : "s"} pela CPRM, não somado${repetidos === 1 ? "" : "s"}` +
+        `</button>`;
+    }
   }
 
   /* ------------------------------------------------------------------ mapa */
@@ -2511,6 +2778,21 @@
       ` title="${visivel ? "Esconder" : "Mostrar"} no mapa">${amostra}${rotulo}</button>`;
   }
 
+  // Graus presentes na UF carregada (não no recorte): a legenda explica o mapa,
+  // e sumir com uma linha porque o município escolhido não tem aquele grau faria
+  // a legenda piscar a cada seleção.
+  function grausPresentes() {
+    if (!setoresGeoJSON) return [];
+    return ordenarGraus(new Set(setoresGeoJSON.features.map(f => chaveGrau(f.properties.grau_risco))));
+  }
+
+  // Botão de uma das três posições do filtro de sobreposição.
+  function linhaSob(valor, rotulo) {
+    const ativo = estado.sob === valor;
+    return `<button type="button" data-sob="${valor}" aria-pressed="${ativo}"` +
+      ` class="opcao${ativo ? " ativa" : ""}">${rotulo}</button>`;
+  }
+
   function conteudoLegenda() {
     const linhasSetor = modoSetoresVisivel()
       ? linhaLegenda("atencao", `<span class="amostra" style="background:${corAtencao()}"></span>`, "Acima do limiar") +
@@ -2518,27 +2800,63 @@
           `<span class="amostra" style="background:transparent;border:2px dashed ${corAtencao()}"></span>`,
           "Alerta previsto")
       : `<span class="nota">Escolha um município para ver setor por setor.</span>`;
+
+    // Fonte: só aparece com mais de uma no recorte. Com a CPRM sozinha, a
+    // legenda fica como sempre foi.
+    const blocoFontes = fontesDaUf.length > 1
+      ? `<span class="titulo">Fonte do mapeamento</span>` +
+        fontesDaUf.map(f => {
+          const visivel = !estado.fontesOcultas.has(f.id);
+          return `<button type="button" data-fonte="${escaparHtml(f.id)}" aria-pressed="${visivel}"` +
+            ` title="${visivel ? "Esconder" : "Mostrar"} no mapa">` +
+            `<span class="amostra amostra-fonte${ehCprm(f.id) ? " cprm" : ""}"></span>` +
+            `${escaparHtml(f.nome || rotuloFonte(f.id))}` +
+            `${f.setores ? ` <span class="n">${f.setores}</span>` : ""}</button>`;
+        }).join("")
+      : "";
+
+    // Sobreposição: só com fonte externa no recorte (nos setores da própria
+    // CPRM `bl_sob_cp` é nulo e a pergunta não se aplica).
+    const blocoSob = fontesDaUf.some(f => !ehCprm(f.id))
+      ? `<span class="titulo">Sobreposição com a CPRM</span>` +
+        `<div class="legenda-opcoes">` +
+        linhaSob("todos", "Todos") + linhaSob("sim", "Só sobrepõe") + linhaSob("nao", "Só não sobrepõe") +
+        `</div>`
+      : "";
+
     return `<span class="titulo">Grau de risco</span>` +
-      linhaLegenda("alto", amostraHachura("url(#hach-alto)"), "Alto") +
-      linhaLegenda("muito alto", amostraHachura("url(#hach-muito-alto)"), "Muito alto") +
-      linhasSetor;
+      grausPresentes().map(chave =>
+        linhaLegenda(chave, amostraHachura(hachuraPorGrau(chave)),
+          chave === SEM_GRAU ? "Sem grau informado" : escaparHtml(rotuloGrau(chave)))).join("") +
+      linhasSetor + blocoFontes + blocoSob;
+  }
+
+  // Qualquer filtro do mapa derruba o choropleth: ele não depende de janela nem
+  // de limiar, mas depende de grau, de fonte e de sobreposição.
+  function refazerComFiltro() {
+    if (camadaChoropleth) { mapa.removeLayer(camadaChoropleth); camadaChoropleth = null; }
+    renderizarTudo();
   }
 
   function alternarFiltro(filtro) {
     if (estado.ocultos.has(filtro)) estado.ocultos.delete(filtro);
     else estado.ocultos.add(filtro);
-    // O choropleth só é refeito quando some do mapa (não depende de janela nem
-    // de limiar); o filtro de grau é a exceção, então derruba para refazer.
-    if (camadaChoropleth) { mapa.removeLayer(camadaChoropleth); camadaChoropleth = null; }
-    renderizarTudo();
+    refazerComFiltro();
+  }
+
+  function alternarFonte(id) {
+    if (estado.fontesOcultas.has(id)) estado.fontesOcultas.delete(id);
+    else estado.fontesOcultas.add(id);
+    refazerComFiltro();
+  }
+
+  function escolherSobreposicao(valor) {
+    estado.sob = valor;
+    refazerComFiltro();
   }
 
   function atualizarLegenda() {
     if (legendaDiv) legendaDiv.innerHTML = conteudoLegenda();
-  }
-
-  function rotuloGrau(grau) {
-    return grau ? grau.charAt(0).toUpperCase() + grau.slice(1) : "—";
   }
 
   function tooltipSetor(p, quando) {
@@ -2547,12 +2865,31 @@
       ? `Fonte: ${(p.fonte_estacao || "—").toUpperCase()}`
       : `Estação a ${p.distancia_km != null ? p.distancia_km.toFixed(2) : "—"}km ` +
         `(${(p.fonte_estacao || "—").toUpperCase()})`;
+    // Com mais de uma fonte no recorte, de qual levantamento vem o setor é
+    // parte do que ele diz.
+    const linhaMapeamento = fontesDaUf.length > 1
+      ? `Mapeado por: ${escaparHtml(nomeFonte(p.bl_fonte || ID_CPRM))}<br>` +
+        (sobrepoeCprm(p) ? "Também mapeado pela CPRM<br>" : "")
+      : "";
     return `<b>${escaparHtml(p.munic)}</b><br>` +
       `<span class="mono">${escaparHtml(p.num_setor)}</span><br>` +
-      `Grau: ${escaparHtml(p.grau_risco)}<br>` +
+      `Grau: ${escaparHtml(rotuloGrau(p.grau_risco))}<br>` +
       `Chuva ${estado.janela}h: <span class="mono">${formatarMm(p[campo])}mm</span><br>` +
+      linhaMapeamento +
       linhaFonte +
       (quando ? `<br>Cruza o limiar em ${formatarData(quando)}` : "");
+  }
+
+  /* Setor que é um ponto, e não um polígono (produto "ponto_risco": 364 pontos
+     do Recife, 265 de Contagem). Sem `pointToLayer` o Leaflet faz dele um
+     L.Marker: a função `style` é ignorada em silêncio (Marker não tem
+     setStyle) e o ícone padrão vem do unpkg, que a CSP não libera em `img-src`
+     -- o marcador apareceria quebrado. Com um circleMarker, o mesmo `style`
+     dos polígonos vale (circleMarker tem setStyle) e a trama do grau continua
+     dizendo a mesma coisa. */
+  const RAIO_PONTO_PX = 6;
+  function marcadorPonto(feature, latlng) {
+    return L.circleMarker(latlng, { radius: RAIO_PONTO_PX, className: "marcador-ponto" });
   }
 
   // ponytail: centro do bounding box, não centroide do polígono. Setor de risco
@@ -2578,9 +2915,16 @@
 
   function escondidoPeloFiltro(p, emAtencaoAgora, previstoAgora) {
     const o = estado.ocultos;
-    return o.has((p.grau_risco || "").toLowerCase())
-      || (o.has("atencao") && emAtencaoAgora)
-      || (o.has("previsto") && previstoAgora);
+    // Grau nulo tem a chave "sem grau", e não "": sem isso um setor sem grau
+    // nunca podia ser escondido, porque "" não está em filtro nenhum.
+    if (o.has(chaveGrau(p.grau_risco))) return true;
+    if (estado.fontesOcultas.has(p.bl_fonte || ID_CPRM)) return true;
+    // `=== true` / `=== false`, não truthiness: lido de JSON a coluna pode vir
+    // como número, e nos setores da própria CPRM ela é nula (não se aplica),
+    // então eles ficam fora das duas pontas deste filtro.
+    if (estado.sob === "sim" && p.bl_sob_cp !== true) return true;
+    if (estado.sob === "nao" && p.bl_sob_cp !== false) return true;
+    return (o.has("atencao") && emAtencaoAgora) || (o.has("previsto") && previstoAgora);
   }
 
   // Devolve um featureGroup (polígonos + pins) para que remover/limpar a camada
@@ -2598,6 +2942,7 @@
 
     const pins = [];
     const poligonos = L.geoJSON({ type: "FeatureCollection", features: visiveis }, {
+      pointToLayer: marcadorPonto,
       style: feature => {
         const numSetor = feature.properties.num_setor;
         const emAtencaoAgora = codigosAtencao.has(numSetor);
@@ -2649,16 +2994,19 @@
   }
 
   function calcularRiscoPorMunicipio() {
-    const rank = { "alto": 1, "muito alto": 2 };
     const porCodarea = new Map();
     const semCorrespondencia = new Set();
     for (const f of setoresGeoJSON.features) {
       const codarea = codareaPorNome.get(normalizarNome(f.properties.munic));
       if (!codarea) { semCorrespondencia.add(f.properties.munic); continue; }
-      const atual = porCodarea.get(codarea) || { grauMax: "", nome: f.properties.munic, qtdSetores: 0 };
+      // `grauMax` nasce em "sem grau", o piso da lista, e qualquer grau de
+      // verdade ganha dele. Antes nascia vazio e só "alto"/"muito alto"
+      // venciam: um município cujos setores fossem todos Médio ficava com
+      // "Grau máximo: —", afirmando ausência de grau onde há risco mapeado.
+      const atual = porCodarea.get(codarea) || { grauMax: SEM_GRAU, nome: f.properties.munic, qtdSetores: 0 };
       atual.qtdSetores++;
-      const grau = (f.properties.grau_risco || "").toLowerCase();
-      if ((rank[grau] || 0) > (rank[atual.grauMax] || 0)) atual.grauMax = grau;
+      const grau = chaveGrau(f.properties.grau_risco);
+      if (severidadeGrau(grau) > severidadeGrau(atual.grauMax)) atual.grauMax = grau;
       porCodarea.set(codarea, atual);
     }
     if (semCorrespondencia.size) {
@@ -2685,6 +3033,7 @@
     const colecao = filtrarMalhaPorCodarea(riscoPorCodarea);
 
     camadaChoropleth = L.geoJSON(colecao, {
+      pointToLayer: marcadorPonto,
       style: feature => {
         const r = riscoPorCodarea.get(String(feature.properties.codarea));
         return { fillColor: hachuraPorGrau(r.grauMax), fillOpacity: 0.55, color: corPadrao(), weight: 0.8 };
@@ -2734,15 +3083,33 @@
   // os botões de exportar (lote e por linha) leem daqui em vez de recalcular.
   let tabelaSetoresAtual = [];
 
+  /* Etiqueta da fonte na linha da tabela. Com a CPRM sozinha no recorte não
+     aparece: nomear a única fonte em toda linha seria só ruído. */
+  function etiquetaFonte(p) {
+    if (fontesDaUf.length <= 1) return "";
+    const repetido = repetidoNaCprm(p)
+      ? `<span class="etiqueta-fonte repetido" title="Mais da metade da área já está mapeada pela CPRM, ` +
+        `então este setor não é somado na contagem">também na CPRM</span>`
+      : "";
+    return `<span class="etiqueta-fonte">${escaparHtml(nomeFonte(p.bl_fonte || ID_CPRM))}</span>${repetido}`;
+  }
+
   function setorParaRelatorio(p) {
+    const fonte = infoFonte(p.bl_fonte || ID_CPRM);
     return {
-      nome: `${p.munic} — ${p.num_setor}`,
-      tipo: "Setor de risco geológico (CPRM/SGB)",
+      nome: `${p.munic} · ${p.num_setor}`,
+      tipo: `Setor de risco geológico (${fonte.nome || rotuloFonte(p.bl_fonte)})`,
       classificacao: p.grau_risco,
       chuva24: p.chuva_24h,
       chuva72: p.chuva_72h,
       distanciaKm: p.distancia_km,
       fonteEstacao: p.fonte_estacao,
+      fonte: fonte.nome || rotuloFonte(p.bl_fonte),
+      licenca: fonte.licenca || p.bl_licenca || "",
+      orgao: p.orgao_exec || fonte.orgao || "",
+      // Marcado, nunca omitido: o setor repetido continua no relatório.
+      repetidoNaCprm: repetidoNaCprm(p),
+      sobrepoeCprm: ehCprm(p.bl_fonte) ? null : p.bl_sob_cp === true,
     };
   }
 
@@ -2768,8 +3135,9 @@
       corpo.innerHTML = ordenado.map((r, i) => {
         const p = r.f.properties;
         return `<tr><td><span class="municipio-celula">${escaparHtml(p.munic)}</span><br>` +
-          `<span class="setor-codigo">${escaparHtml(p.num_setor)}</span></td>` +
-          `<td>${escaparHtml(p.grau_risco)}</td>` +
+          `<span class="setor-codigo">${escaparHtml(p.num_setor)}</span>` +
+          etiquetaFonte(p) + `</td>` +
+          `<td>${escaparHtml(rotuloGrau(p.grau_risco))}</td>` +
           `<td class="num mm">${formatarMm(p[campo])}</td>` +
           `<td><button class="botao-exportar-linha" type="button" data-exportar-setor="${i}" title="Exportar este setor (PDF)">` +
           `<svg class="icone"><use href="icons/sprite.svg#icon-printer"></use></svg></button></td></tr>`;
@@ -2786,8 +3154,9 @@
     document.getElementById("tabelaPrevistoCorpo").innerHTML = alertaPrevisto.map(r => {
       const p = r.f.properties;
       return `<tr><td><span class="municipio-celula">${escaparHtml(p.munic)}</span><br>` +
-        `<span class="setor-codigo">${escaparHtml(p.num_setor)}</span></td>` +
-        `<td>${escaparHtml(p.grau_risco)}</td>` +
+        `<span class="setor-codigo">${escaparHtml(p.num_setor)}</span>` +
+        etiquetaFonte(p) + `</td>` +
+        `<td>${escaparHtml(rotuloGrau(p.grau_risco))}</td>` +
         `<td class="mono">${formatarData(r.quando)}</td></tr>`;
     }).join("");
   }
@@ -2894,6 +3263,24 @@
   document.getElementById("cards").addEventListener("click", ev => {
     const botao = ev.target.closest("button[data-filtro]");
     if (botao) alternarFiltro(botao.dataset.filtro);
+  });
+
+  // "N setores também mapeados pela CPRM, não somados": o clique mostra quais,
+  // trocando o filtro de sobreposição, e o clique de volta desfaz.
+  document.getElementById("notaSobreposicao").addEventListener("click", ev => {
+    const botao = ev.target.closest("button[data-sob]");
+    if (botao) escolherSobreposicao(botao.dataset.sob);
+  });
+
+  /* Link para os créditos: abre a aba do Tutorial e desce até o bloco. No
+     celular movel.js já trocou a sub-vista, então aqui só falta rolar. */
+  document.addEventListener("click", ev => {
+    const alvo = ev.target.closest("[data-ancora]");
+    if (!alvo) return;
+    ev.preventDefault();
+    if (!alvo.dataset.mais) document.querySelector('#abas button[data-vista="vistaTutorial"]')?.click();
+    const destino = document.getElementById(alvo.dataset.ancora);
+    if (destino) requestAnimationFrame(() => destino.scrollIntoView({ block: "start" }));
   });
 
   document.getElementById("abas").addEventListener("click", ev => {
