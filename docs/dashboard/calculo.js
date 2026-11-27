@@ -59,12 +59,92 @@
     return ROSA[Math.round(graus / 45) % 8];
   }
 
+  /* --------------------------------------------------- vocabulário de grau
+
+     A LISTA ÚNICA do grau de risco, em ordem de severidade. Mora aqui (sem
+     DOM) porque index.html, perto.js e os testes precisam da mesma: o grau
+     "Médio" entrou em produção e ficou invisível justamente porque havia três
+     listas separadas, nenhuma vinda do dado.
+
+     Grau ausente é um valor do vocabulário, não um buraco: na interface ele é
+     "sem grau". Valor fora da lista continua passando cru, para "não
+     reconhecido" não se confundir com "sem grau". */
+  const GRAUS = ["Muito alto", "Alto", "Médio", "Baixo", "sem grau"];
+  const SEM_GRAU = "sem grau";
+  const CHAVES_GRAU = GRAUS.map(g => g.toLowerCase());
+
+  /* Chave canônica do grau (minúscula), para comparar, filtrar e indexar. */
+  function chaveGrau(grau) {
+    const g = String(grau == null ? "" : grau).trim().toLowerCase();
+    return g || SEM_GRAU;
+  }
+
+  /* Rótulo do grau como ele aparece na tela. */
+  function rotuloGrau(grau) {
+    const chave = chaveGrau(grau);
+    const conhecido = GRAUS.find(g => g.toLowerCase() === chave);
+    return conhecido || (chave.charAt(0).toUpperCase() + chave.slice(1));
+  }
+
+  /* Severidade comparável: maior é pior. Grau desconhecido fica em 0, abaixo
+     de "sem grau", para nunca ganhar de um grau de verdade na comparação. */
+  function severidadeGrau(grau) {
+    const i = CHAVES_GRAU.indexOf(chaveGrau(grau));
+    return i < 0 ? 0 : GRAUS.length - i;
+  }
+
+  /* ------------------------------------------------------- fonte do setor */
+
+  const ID_CPRM = "br-sgb-setorizacao";
+
+  /* Setor da CPRM? Dado antigo não traz `bl_fonte` e é todo da CPRM. */
+  function ehCprm(fonte) {
+    return !fonte || fonte === ID_CPRM;
+  }
+
+  /* `bl_sob_cp` tem TRÊS estados: `true` (a CPRM cobre 1% ou mais da área do
+     setor), `false` (conferido e não cobre) e nulo (é setor da própria CPRM, e
+     a pergunta não se aplica). Lida de JSON a coluna pode voltar como número,
+     então a comparação é `=== true`, nunca truthiness. */
+  function sobrepoeCprm(p) {
+    return p.bl_sob_cp === true;
+  }
+
+  /* Limiar de IDENTIDADE: acima de metade da área coberta, o setor externo é a
+     mesma área de risco que um setor da CPRM e não entra duas vezes na conta.
+     É pergunta diferente da do 1% do BELUGA, que é de detecção ("existe
+     relação entre este setor e a CPRM?") e por isso tem de ser baixa. */
+  const LIMIAR_REPETIDO = 0.5;
+
+  /* Setor que já está contado como área de risco pelo levantamento da CPRM.
+     Continua no mapa, nas tabelas e nos relatórios: só não é somado de novo. */
+  function repetidoNaCprm(p) {
+    return !ehCprm(p.bl_fonte) &&
+      typeof p.bl_cp_frac === "number" && p.bl_cp_frac > LIMIAR_REPETIDO;
+  }
+
+  /* Rótulo curto de uma fonte a partir do id do BELUGA
+     ("mg-juiz-de-fora-sspdc" -> "Juiz de Fora (MG)"). Serve de reserva onde o
+     nome publicado não está à mão (perto.js lê só o índice de pontos, que
+     carrega o id). Onde há `meta_<uf>.json`, o nome dele é que vale. */
+  function rotuloFonte(id) {
+    if (ehCprm(id)) return "CPRM/SGB";
+    const partes = String(id).split("-").filter(Boolean);
+    if (partes.length < 3) return String(id);
+    const uf = partes[0].toUpperCase();
+    const cidade = partes.slice(1, -1)
+      .map(t => (t.length <= 2 ? t : t.charAt(0).toUpperCase() + t.slice(1)))
+      .join(" ");
+    return `${cidade} (${uf})`;
+  }
+
   /* -------------------------------------------- índice de setores (Tarefa 4) */
 
-  const VERSAO_INDICE = 1;
+  const VERSAO_INDICE = 2;
   const CAMPOS_INDICE = [
     "num_setor", "uf", "munic", "grau_risco", "lat", "lon",
     "oeste", "sul", "leste", "norte", "chuva_24h", "chuva_72h",
+    "bl_fonte", "bl_produto",
   ];
 
   /* Lê setores_pontos.json. Monta cada setor pelo nome do campo (não pela
@@ -88,18 +168,39 @@
       caixa: [linha[pos.oeste], linha[pos.sul], linha[pos.leste], linha[pos.norte]],
       chuva_24h: linha[pos.chuva_24h],
       chuva_72h: linha[pos.chuva_72h],
+      bl_fonte: linha[pos.bl_fonte],
+      bl_produto: linha[pos.bl_produto],
     }));
   }
 
-  /* Setores a até `raioKm` do centroide, ou cuja caixa contém o ponto
+  /* Até onde "você está aqui" vale para um setor que é um ponto, e não um
+     polígono. A caixa de um ponto é degenerada (oeste == leste), então a regra
+     de contenção nunca daria verdadeiro e o setor cairia só no raio de 10 km,
+     como se estivesse longe. */
+  const RAIO_PONTO_KM = 0.05;
+
+  /* O ponto (lat, lon) está dentro do setor, ou junto dele?
+
+     Setor com caixa de área nula (ponto de risco, sliver digitalizado) cai na
+     regra de proximidade: contenção numa caixa sem largura é sempre falsa. */
+  function dentroDoSetor(setor, lat, lon, distanciaAoCentroideKm) {
+    const [oeste, sul, leste, norte] = setor.caixa || [];
+    const caixaUtil = [oeste, sul, leste, norte].every(Number.isFinite) &&
+      leste > oeste && norte > sul;
+    if (setor.bl_produto === "ponto_risco" || !caixaUtil) {
+      return distanciaAoCentroideKm <= RAIO_PONTO_KM;
+    }
+    return lon >= oeste && lon <= leste && lat >= sul && lat <= norte;
+  }
+
+  /* Setores a até `raioKm` do centroide, ou que contenham o ponto
      (`dentro`: setor grande com centroide longe ainda é o lugar onde se está).
      Os de `dentro` vêm primeiro; depois, pela distância. */
   function setoresProximos(setores, lat, lon, { raioKm = 10, max = 5 } = {}) {
     const candidatos = [];
     for (const setor of setores) {
-      const [oeste, sul, leste, norte] = setor.caixa;
-      const dentro = lon >= oeste && lon <= leste && lat >= sul && lat <= norte;
       const d = distanciaKm(lat, lon, setor.lat, setor.lon);
+      const dentro = dentroDoSetor(setor, lat, lon, d);
       if (!dentro && d > raioKm) continue;
       candidatos.push({ setor, distanciaKm: d, direcao: direcaoCardinal(lat, lon, setor.lat, setor.lon), dentro });
     }
@@ -197,6 +298,17 @@
 
   window.ORCA = Object.assign(window.ORCA || {}, {
     calculo: Object.assign((window.ORCA && window.ORCA.calculo) || {}, {
+      GRAUS,
+      SEM_GRAU,
+      ID_CPRM,
+      chaveGrau,
+      rotuloGrau,
+      severidadeGrau,
+      ehCprm,
+      sobrepoeCprm,
+      repetidoNaCprm,
+      LIMIAR_REPETIDO,
+      rotuloFonte,
       lerMunicipios,
       municipiosSemCobertura,
       normalizarMunicipio,
