@@ -228,24 +228,28 @@ as contagens e o site no ar.**
 | `main` | Código |
 | `gh-pages` | Dashboard publicado |
 
-O `gh-pages` tem histórico. O deploy deixou de usar `force_orphan` quando o
-cache da Open-Meteo saiu de dentro do `publish_dir`, e com histórico dá para
-reverter uma publicação ruim.
+O `gh-pages` é artefato de build, não história: o deploy usa `force_orphan`, e
+a branch tem sempre um commit só.
 
-**Isso tem custo, e o custo foi medido.** Os dados publicados são 78 MB que se
-reescrevem todo dia, porque a chuva de cada setor mora dentro do
-`setores_<uf>.geojson`. Simulando oito publicações num repositório de teste com
-os arquivos reais, e empacotando com `git gc --aggressive`, o histórico cresce
-**6,9 MB por publicação**, ou cerca de 2,5 GB por ano. O repositório inteiro
-hoje tem 90 MB. Dois terços do crescimento são os `setores_<uf>.geojson`;
-servir a chuva num arquivo à parte por UF cortaria a maior parte, e é trabalho
-para depois.
+O cache da Open-Meteo obrigava isso por um motivo que acabou (ele precisava
+estar dentro do `publish_dir` para sobreviver, e agora é estado de CI), mas o
+`force_orphan` continua valendo por si. **O custo de tirá-lo foi medido**: os
+dados publicados são 78 MB que se reescrevem todo dia, porque a chuva de cada
+setor mora dentro do `setores_<uf>.geojson`. Simulando oito publicações num
+repositório de teste com os arquivos reais, e empacotando com
+`git gc --aggressive`, o histórico cresceria **6,9 MB por publicação**, ou
+cerca de 2,5 GB por ano, num repositório que hoje inteiro tem 90 MB. O que se
+compraria é `git revert` numa publicação ruim, e para isso já existe caminho
+melhor: rodar o workflow de novo.
+
+Se um dia a chuva sair de dentro do `setores_<uf>.geojson` para um arquivo por
+UF, dois terços desse crescimento somem e a conta muda. Aí vale reabrir.
 
 ### Como reverter
 
 | Situação | O que fazer |
 |---|---|
-| Publicação ruim no ar | `git revert` do commit no `gh-pages`, ou rodar o workflow de novo: a publicação é idempotente |
+| Publicação ruim no ar | Rodar o workflow de novo: a publicação é idempotente. Não há `git revert` a fazer, porque o `gh-pages` não guarda histórico |
 | O BELUGA publicou errado e o ORCA recusou | Nada. As UFs ficam com o dado anterior. Corrija no BELUGA e rode de novo |
 | O BELUGA saiu do ar | O download falha alto e nada é publicado. O que está no ar continua |
 | Uma UF saiu da publicação do BELUGA de propósito | A guarda vai recusar, porque o conjunto encolhe. Não há botão para isso: rode a guarda com `--anterior` igual ao conjunto novo, ou publique uma vez com a UF ainda no manifest antes de tirá-la de lá |
@@ -296,8 +300,14 @@ a versão de celular em `movel.js` e `perto.js`; "Minhas áreas" e relatórios e
 O CI roda os quatro a cada push. Rode-os antes de commitar. Toda chamada de
 rede é mockada, inclusive nos casos de falha, então a suíte roda sem internet.
 
-Os cálculos do front-end têm testes em `tests/js/calculo.html`. Eles rodam no
-navegador, porque o projeto não usa Node: sirva a raiz do repositório com
+Os cálculos do front-end têm testes em `tests/js/calculo.html`, numa página,
+porque o projeto não usa Node. **Eles entram no `pytest`**: `tests/test_js.py`
+sobe um servidor local, abre a página no Chrome do sistema e falha se qualquer
+caso falhar ou se o console sujar. Não há passo novo no CI, porque o CI já roda
+`pytest`, e nenhum navegador é baixado.
+
+Para olhar a página com os próprios olhos, sirva a raiz do repositório com
 `python3 -m http.server 8001` e abra
-`http://localhost:8001/tests/js/calculo.html`. A página termina com
-"PASSOU n/n". O resto do dashboard é validado à mão.
+`http://localhost:8001/tests/js/calculo.html`. Ela termina com "PASSOU n/n".
+
+O resto do dashboard é validado à mão.

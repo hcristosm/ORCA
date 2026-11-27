@@ -29,6 +29,9 @@ dev = [
     "ruff>=0.17.5",
     "mypy>=2.4.1",
     "bandit>=1.9.4",
+    # Só para rodar tests/js/calculo.html num navegador (tests/test_js.py).
+    # Usa o Chrome do sistema, então não baixa navegador nenhum.
+    "playwright>=1.56.0",
 ]
 
 [tool.pytest.ini_options]

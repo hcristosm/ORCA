@@ -274,16 +274,23 @@ jobs:
         # "Conferir antes de publicar" barra o conjunto vazio ou menor que o
         # que já está no ar.
         #
-        # Sem `force_orphan`: ele existia para o cache da Open-Meteo sobreviver
-        # dentro do publish_dir, e o cache saiu daqui. Sem ele o gh-pages
-        # guarda histórico, e com histórico dá para reverter uma publicação
-        # ruim.
+        # `force_orphan` fica. O que o cache da Open-Meteo dentro do
+        # publish_dir obrigava era publicar 68 MB de sqlite junto com o site, e
+        # isso acabou: o cache agora é estado de CI. Mas o `gh-pages` continua
+        # sendo artefato de build, não história de ninguém, e sem `force_orphan`
+        # ele cresce 6,9 MB por publicação (medido: 78 MB de dados que se
+        # reescrevem todo dia), o que dá cerca de 2,5 GB por ano num
+        # repositório de 90 MB. O que se compraria com isso seria `git revert`
+        # numa publicação ruim, e para isso já existe caminho melhor: rodar o
+        # workflow de novo, que é idempotente. Pagar 2,5 GB por ano por um
+        # caminho de reversão que ninguém usaria não é simplicidade.
         if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: docs/dashboard
           publish_branch: gh-pages
+          force_orphan: true
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
           commit_message: "chore(dashboard): publicar dados atualizados"
@@ -298,7 +305,7 @@ jobs:
         # `?t=` fura o cache do CDN (max-age=600): sem ele, o teste leria a
         # versão de ontem e passaria sem provar nada.
         #
-        # Falhar aqui não desfaz nada por si, mas deixa
+        # Falhar aqui não desfaz nada (o gh-pages não tem histórico), mas deixa
         # o run vermelho: "publicou e o site não mostra" não pode fechar verde.
         if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
         shell: bash -eo pipefail {0}

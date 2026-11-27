@@ -77,12 +77,15 @@ internet e deve continuar assim. Código novo que fala com uma API externa
 precisa de teste com a resposta mockada, incluindo os casos de falha.
 
 Os cálculos do dashboard que não dependem de DOM ficam em
-`docs/dashboard/calculo.js` e têm testes em `tests/js/calculo.html`. Eles rodam
-no navegador, porque o projeto não usa Node: sirva a raiz do repositório com
+`docs/dashboard/calculo.js` e têm testes em `tests/js/calculo.html`, numa
+página, porque o projeto não usa Node. Eles rodam junto com o `pytest`
+(`tests/test_js.py` abre a página no Chrome do sistema), então não há nada a
+lembrar de rodar à parte. Para olhar a página, sirva a raiz do repositório com
 `python3 -m http.server 8001` e abra
-`http://localhost:8001/tests/js/calculo.html`. A página deve terminar com
-"PASSOU n/n". Lógica nova do front-end que dá para separar do DOM vai para o
-`calculo.js`, com teste.
+`http://localhost:8001/tests/js/calculo.html`.
+
+Lógica nova do front-end que dá para separar do DOM vai para o `calculo.js`,
+com teste.
 
 O resto do dashboard é validado à mão: confira o desktop e o celular (abaixo de
 768px), os temas claro e escuro, e o console sem erro.
