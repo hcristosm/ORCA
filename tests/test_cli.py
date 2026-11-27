@@ -6,6 +6,7 @@ import responses
 from typer.testing import CliRunner
 
 from src.cli import app
+from src.config import caminho_setores_beluga
 from src.ingest.beluga import URL_BASE
 from src.ingest.openmeteo import FORECAST_URL
 
@@ -125,3 +126,7 @@ def test_baixar_beluga_falha_se_alguma_uf_falhar(tmp_path: Path):
     assert resultado.exit_code == 1
     assert "RJ" in resultado.output
     assert "1/2 UF(s) baixada(s)" in resultado.output
+    # Sair com 1 não pode significar jogar fora o que veio: a UF boa tem de
+    # estar gravada, ou a falha de uma UF viraria falha de todas.
+    assert caminho_setores_beluga("SP", tmp_path).exists()
+    assert not caminho_setores_beluga("RJ", tmp_path).exists()

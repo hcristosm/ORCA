@@ -24,7 +24,12 @@ from src.config import (
     caminho_manifesto_beluga,
     caminho_setores_beluga,
 )
-from src.ingest.beluga import URL_BASE, BelugaFetchError, baixar_manifest
+from src.ingest.beluga import (
+    URL_BASE,
+    BelugaFetchError,
+    baixar_manifest,
+    contagens_publicadas,
+)
 from src.storage import ler_setores, salvar_setores
 
 runner = CliRunner()
@@ -160,6 +165,32 @@ def test_baixa_uf_e_grava_gpkg_e_manifesto(tmp_path: Path, anterior: Path):
     assert gravado["bl_fonte"].iloc[0] == "br-sgb-setorizacao"
     manifesto = json.loads(caminho_manifesto_beluga(tmp_path).read_text())
     assert manifesto["contrato"] == "v1"
+
+
+def test_contagens_publicadas_le_o_total_de_cada_meta(tmp_path: Path):
+    (tmp_path / "meta_sp.json").write_text(json.dumps({"total_setores": 907}))
+    (tmp_path / "meta_rj.json").write_text(json.dumps({"total_setores": 346}))
+
+    assert contagens_publicadas(tmp_path) == {"SP": 907, "RJ": 346}
+
+
+def test_contagens_publicadas_sem_diretorio_nao_levanta(tmp_path: Path):
+    # É o estado quando a busca do gh-pages falha. UF sem piso é pior que UF
+    # com piso, mas travar as 27 por isso seria pior ainda: quem barra o
+    # conjunto é a guarda de publicação.
+    assert contagens_publicadas(tmp_path / "nao-existe") == {}
+
+
+def test_contagens_publicadas_ignora_meta_ilegivel_e_total_que_nao_e_inteiro(tmp_path: Path):
+    (tmp_path / "meta_sp.json").write_text(json.dumps({"total_setores": 907}))
+    (tmp_path / "meta_rj.json").write_text("{isto não é json")
+    (tmp_path / "meta_mg.json").write_text(json.dumps({"total_setores": "3695"}))
+    (tmp_path / "meta_ba.json").write_text(json.dumps({"total_setores": True}))
+    (tmp_path / "meta_pe.json").write_text(json.dumps({}))
+
+    # Só SP ganha piso; as outras ficam sem, e sem piso é diferente de piso 0:
+    # piso 0 aceitaria qualquer coisa, inclusive publicação vazia.
+    assert contagens_publicadas(tmp_path) == {"SP": 907}
 
 
 @responses.activate
