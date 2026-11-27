@@ -2696,10 +2696,21 @@
   }
 
   function renderizarCards(filtrados, emAtencao, alertaPrevisto) {
-    const porGrau = contagemPorGrau(filtrados);
+    // Cada área de risco conta UMA vez: setor externo com mais de metade da
+    // área já coberta pela CPRM é o mesmo lugar visto por dois levantamentos.
+    // Ele continua no mapa, na legenda e na tabela, só não é somado de novo.
+    //
+    // Os cards por grau saem do MESMO conjunto que o número do cabeçalho. Se
+    // um contasse os repetidos e o outro não, somar os cards daria um número
+    // diferente do que está escrito ao lado, sem nada na tela explicando a
+    // diferença -- que é a mesma classe de defeito do grau "Médio" que não
+    // aparecia em lugar nenhum.
+    const repetidos = filtrados.filter(r => repetidoNaCprm(r.f.properties)).length;
+    const contados = repetidos ? filtrados.filter(r => !repetidoNaCprm(r.f.properties)) : filtrados;
+    const porGrau = contagemPorGrau(contados);
     // Só os graus presentes no recorte: card zerado de um grau que a fonte não
     // publica (a CPRM quase não publica "Baixo") só faria ruído. Como a lista sai
-    // das chaves presentes, a soma dos cards fecha com o total por construção.
+    // das chaves presentes, a soma dos cards fecha com o cabeçalho por construção.
     const cards = ordenarGraus(porGrau.keys()).map(chave => ({
       filtro: chave,
       icone: "icon-mountain",
@@ -2716,23 +2727,23 @@
     document.getElementById("cards").innerHTML = cards.map(c => {
       const classe = c.destaque ? (c.valor > 0 ? "contador destaque" : "contador zerado") : "contador";
       const visivel = !estado.ocultos.has(c.filtro);
-      return `<button type="button" class="${classe}" data-filtro="${c.filtro}" aria-pressed="${visivel}"` +
+      // `filtro` e `rotulo` carregam o `grau_risco` do dado, que vem de sete
+      // fontes municipais e estaduais e não é validado campo a campo em lugar
+      // nenhum do caminho (o download confere contrato, sha256 e contagem de
+      // feições, não conteúdo). Grau desconhecido passa cru de propósito, para
+      // aparecer na tela em vez de sumir, e é por isso que o escape é aqui.
+      return `<button type="button" class="${classe}" data-filtro="${escaparHtml(c.filtro)}" aria-pressed="${visivel}"` +
         ` title="${visivel ? "Esconder" : "Mostrar"} no mapa">` +
         `<span class="valor">${c.valor}</span>` +
         `<span class="rotulo"><svg class="icone"><use href="icons/sprite.svg#${c.icone}"></use></svg>` +
-        `${c.rotulo}</span></button>`;
+        `${escaparHtml(c.rotulo)}</span></button>`;
     }).join("");
 
     document.getElementById("tituloRecorte").textContent =
       estado.municipio || "Estado inteiro";
 
-    // Cada área de risco conta UMA vez: setor externo com mais de metade da
-    // área já coberta pela CPRM é o mesmo lugar visto por dois levantamentos.
-    // Ele continua no mapa e na tabela, só não é somado de novo.
-    const repetidos = filtrados.filter(r => repetidoNaCprm(r.f.properties)).length;
-    const contados = filtrados.length - repetidos;
     document.getElementById("contagemRecorte").textContent =
-      `${contados} setor${contados === 1 ? "" : "es"}`;
+      `${contados.length} setor${contados.length === 1 ? "" : "es"}`;
 
     const notaSob = document.getElementById("notaSobreposicao");
     notaSob.hidden = !repetidos;
@@ -2774,7 +2785,8 @@
   // `estado.ocultos` dos KPIs): a legenda explica e filtra no mesmo lugar.
   function linhaLegenda(filtro, amostra, rotulo) {
     const visivel = !estado.ocultos.has(filtro);
-    return `<button type="button" data-filtro="${filtro}" aria-pressed="${visivel}"` +
+    // `filtro` pode ser a chave de um grau vindo do dado; ver renderizarCards.
+    return `<button type="button" data-filtro="${escaparHtml(filtro)}" aria-pressed="${visivel}"` +
       ` title="${visivel ? "Esconder" : "Mostrar"} no mapa">${amostra}${rotulo}</button>`;
   }
 

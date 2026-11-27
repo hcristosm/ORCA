@@ -299,6 +299,17 @@
   });
   teste("cobertura: arquivo sem a lista dá lista vazia", () => igual(C().lerMunicipios({}).length, 0));
 
+  // O grau de risco vem de sete fontes e é montado dentro de `data-filtro="..."`
+  // por concatenação de string. Sem escapar a aspa, o atributo fecha e dá para
+  // injetar `onfocus=`, que a CSP da página (com 'unsafe-inline') executaria.
+  teste("escape: aspa dupla vira entidade", () =>
+    igual(window.ORCA.escaparHtml('Alto" onfocus=x'), "Alto&quot; onfocus=x"));
+  teste("escape: aspa simples vira entidade", () =>
+    igual(window.ORCA.escaparHtml("a'b"), "a&#39;b"));
+  teste("escape: sinal de menor vira entidade", () =>
+    igual(window.ORCA.escaparHtml("<img>"), "&lt;img&gt;"));
+  teste("escape: nulo vira string vazia", () => igual(window.ORCA.escaparHtml(null), ""));
+
   window.addEventListener("load", () => {
     const lista = document.getElementById("casos");
     const falhas = [];
