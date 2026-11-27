@@ -31,11 +31,15 @@ from src.config import caminho_indice_setores
 
 logger = logging.getLogger(__name__)
 
-VERSAO_INDICE = 1
+# Campo novo entra NO FIM e sobe a versão: `calculo.js` monta o registro por
+# nome de campo, não por posição, então o front antigo em cache continua
+# lendo o que conhece.
+VERSAO_INDICE = 2
 CASAS_DECIMAIS = 5
 CAMPOS = [
     "num_setor", "uf", "munic", "grau_risco", "lat", "lon",
     "oeste", "sul", "leste", "norte", "chuva_24h", "chuva_72h",
+    "bl_fonte", "bl_produto",
 ]
 
 
@@ -85,6 +89,7 @@ def _registro(uf: str, feicao: dict[str, Any]) -> list[Any] | None:
         props.get("num_setor"), uf, props.get("munic"), props.get("grau_risco"),
         r(centro.y), r(centro.x), r(oeste), r(sul), r(leste), r(norte),
         props.get("chuva_24h"), props.get("chuva_72h"),
+        props.get("bl_fonte"), props.get("bl_produto"),
     ]
 
 

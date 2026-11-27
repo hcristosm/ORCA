@@ -11,28 +11,32 @@ do projeto.
 
 - **Bugs**: descreva o comportamento esperado e o observado, e como
   reproduzir (comando rodado, UF, critério usado, mensagem de erro completa).
-  Se envolver uma fonte de dados (CPRM/SGB, Open-Meteo), confira antes se não
-  é uma instabilidade pontual: as duas têm limite de requisições e mudam sem
-  aviso (ver [Limitações conhecidas](README.md#limitações-conhecidas)).
-- **Ideias e funcionalidades novas**: olhe o [Roadmap](README.md#roadmap)
-  primeiro. Comente na issue correspondente (ou abra uma) antes de começar a
-  codar, para alinhar o escopo.
+  Se envolver uma fonte de dados (BELUGA, Open-Meteo), confira antes se não é
+  uma instabilidade pontual (ver
+  [Limitações conhecidas](README.md#limitações-conhecidas)). Setor errado ou
+  faltando é assunto do [BELUGA](https://github.com/hcristosm/BELUGA), que é
+  quem coleta e valida os setores; o ORCA só consome a publicação v1.
+- **Ideias e funcionalidades novas**: comente na issue correspondente (ou abra
+  uma) antes de começar a codar, para alinhar o escopo.
 - **Dúvidas de uso**: abra uma issue. Não há fórum separado.
 
 ## A prioridade é confiabilidade
 
-O pipeline depende de fontes `.gov.br` que caem, mudam de formato e devolvem
-resposta vazia com HTTP 200. **Funcionar sem quebrar vale mais que qualquer
+O pipeline depende de fontes que caem, mudam de formato e devolvem resposta
+vazia com HTTP 200. **Funcionar sem quebrar vale mais que qualquer
 funcionalidade nova.** Ao mexer em ingestão, assuma que a fonte vai falhar e
-trate o caso: lista vazia, página cortada, erro com status 200.
+trate o caso: arquivo truncado, sha256 que não bate, publicação que encolheu,
+erro com status 200. Todo caso de falha tem teste com a rede mockada.
 
 Duas regras valem para todo o código:
 
 - **Caminhos moram em `src/config.py`.** Nunca monte um caminho de `data/` à
-  mão; use `caminho_setores()`, `caminho_manifesto_cprm()` e os demais.
-- **Publicar menos do que já está no ar é proibido.** O deploy usa
-  `force_orphan`, então o `gh-pages` vira exatamente o conteúdo de
-  `docs/dashboard/`: publicar com `data/` vazio apaga as 27 UFs. A guarda em
+  mão; use `caminho_setores_beluga()`, `caminho_manifesto_beluga()` e os
+  demais. O prefixo `beluga_` do GeoPackage é load-bearing: o escopo da mescla
+  é medido por ele, e escopo vazio desliga o piso de cobertura.
+- **Publicar menos do que já está no ar é proibido.** O deploy apaga do
+  `gh-pages` o que não está em `docs/dashboard/`: publicar com `data/` vazio
+  apaga as 27 UFs. A guarda em
   `scripts/conferir_publicacao.py` recusa esse caso, sempre grava
   `publicar=false` antes de sair com 1 (o output pula a publicação; o exit 1
   deixa a recusa visível) e é coberta por `tests/test_conferir_publicacao.py`.
@@ -73,12 +77,15 @@ internet e deve continuar assim. Código novo que fala com uma API externa
 precisa de teste com a resposta mockada, incluindo os casos de falha.
 
 Os cálculos do dashboard que não dependem de DOM ficam em
-`docs/dashboard/calculo.js` e têm testes em `tests/js/calculo.html`. Eles rodam
-no navegador, porque o projeto não usa Node: sirva a raiz do repositório com
+`docs/dashboard/calculo.js` e têm testes em `tests/js/calculo.html`, numa
+página, porque o projeto não usa Node. Eles rodam junto com o `pytest`
+(`tests/test_js.py` abre a página no Chrome do sistema), então não há nada a
+lembrar de rodar à parte. Para olhar a página, sirva a raiz do repositório com
 `python3 -m http.server 8001` e abra
-`http://localhost:8001/tests/js/calculo.html`. A página deve terminar com
-"PASSOU n/n". Lógica nova do front-end que dá para separar do DOM vai para o
-`calculo.js`, com teste.
+`http://localhost:8001/tests/js/calculo.html`.
+
+Lógica nova do front-end que dá para separar do DOM vai para o `calculo.js`,
+com teste.
 
 O resto do dashboard é validado à mão: confira o desktop e o celular (abaixo de
 768px), os temas claro e escuro, e o console sem erro.

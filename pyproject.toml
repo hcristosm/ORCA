@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "orca"
 version = "2.6.0"
-description = "Dashboard estático que cruza setorização de risco geológico (CPRM/SGB) com chuva recente (Open-Meteo)"
+description = "Dashboard estático que cruza setores de risco geológico do Brasil (BELUGA) com chuva recente (Open-Meteo)"
 requires-python = ">=3.11"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
@@ -13,7 +13,7 @@ dependencies = [
     "geopandas>=1.2.0",
     "shapely>=2.2.0",
     "requests>=2.34.2",
-    "typer>=0.27.3",
+    "typer>=0.29.1",
 ]
 
 [project.scripts]
@@ -26,9 +26,12 @@ include = ["src*"]
 dev = [
     "pytest>=9.2.0",
     "responses>=0.26.3",
-    "ruff>=0.17.3",
+    "ruff>=0.17.5",
     "mypy>=2.4.1",
     "bandit>=1.9.4",
+    # Só para rodar tests/js/calculo.html num navegador (tests/test_js.py).
+    # Usa o Chrome do sistema, então não baixa navegador nenhum.
+    "playwright>=1.56.0",
 ]
 
 [tool.pytest.ini_options]

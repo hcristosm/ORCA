@@ -1,13 +1,12 @@
-"""CLI unificada do ORCA: ingestão de setores e exportação do dashboard.
+"""CLI unificada do ORCA: download dos setores e exportação do dashboard.
 
-Os dois comandos invocados pelos workflows:
+Os dois comandos invocados pelo workflow diário:
 
-    python -m src.cli ingerir-setores --diretorio data   # mensal (CPRM/SGB)
-    python -m src.cli atualizar-nacional --ufs SP,RJ     # diário (Open-Meteo)
+    python -m src.cli baixar-beluga --diretorio data     # setores (BELUGA v1)
+    python -m src.cli atualizar-nacional --ufs SP,RJ     # chuva (Open-Meteo)
 
-Comandos por UF, de uso manual/pontual:
+Comando por UF, de uso manual/pontual:
 
-    python -m src.cli ingest-cprm --uf SP
     python -m src.cli exportar-dashboard --uf SP
 """
 
@@ -23,30 +22,64 @@ from src.config import (
     DATA_DIR,
     UFS_VALIDAS,
     caminho_cache_openmeteo,
-    caminho_setores,
 )
 from src.export.dashboard_data import exportar_dashboard
 from src.export.indice_setores import gerar_indice_setores
 from src.export.nacional import ORCAMENTO_ALVO_PADRAO, exportar_nacional
-from src.ingest.cprm import ingerir_uf as ingerir_cprm
+from src.ingest.beluga import BelugaFetchError, baixar_setores, contagens_publicadas
 from src.storage_cache_openmeteo import CacheOpenMeteo
 
 app = typer.Typer(add_completion=False)
 
 
-@app.command("ingest-cprm")
-def ingest_cprm(
-    uf: str = typer.Option(..., "--uf", help="Sigla da UF, ex.: SP"),
-    output: Path = typer.Option(
-        None, "--output", help="Caminho do GeoPackage de saída (padrão: data/risco_<uf>.gpkg)"
+@app.command("baixar-beluga")
+def baixar_beluga_cmd(
+    ufs: str = typer.Option(
+        ",".join(sorted(UFS_VALIDAS)), "--ufs",
+        help="UFs separadas por vírgula. Padrão: todas as 27.",
     ),
-    timeout: float = typer.Option(30.0, help="Timeout por requisição, em segundos"),
-    max_retries: int = typer.Option(3, help="Número máximo de tentativas por página"),
+    diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
+    publicado: Path = typer.Option(
+        None, "--publicado",
+        help=(
+            "Diretório com os meta_<uf>.json já publicados (gh-pages), de onde sai "
+            "o piso de setores por UF. Sem ele, não há piso por UF."
+        ),
+    ),
+    timeout: float = typer.Option(120.0, "--timeout", help="Timeout por requisição, em segundos"),
 ) -> None:
-    """Baixa os setores de risco geológico da CPRM/SGB para uma UF."""
-    out = output or caminho_setores(uf, DATA_DIR)
-    gdf = ingerir_cprm(uf, out, timeout=timeout, max_retries=max_retries)
-    typer.echo(f"{len(gdf)} setores de risco salvos em {out}")
+    """Baixa os setores de risco da publicação v1 do BELUGA.
+
+    Confere o contrato, as 27 UFs, o sha256 e a contagem de feições de cada
+    arquivo, e recusa UF que venha com menos setores que a publicação anterior
+    do ORCA. Sai com 1 se qualquer UF falhar: a UF afetada fica com o dado
+    anterior e o run tem de ficar vermelho, porque setor congelado em silêncio
+    é o jeito de a coleta parar por meses sem ninguém ver.
+    """
+    lista_ufs = [u.strip().upper() for u in ufs.split(",") if u.strip()]
+    anteriores = contagens_publicadas(publicado) if publicado else {}
+
+    try:
+        baixadas, falhas = baixar_setores(
+            lista_ufs, diretorio, anteriores=anteriores, timeout=timeout,
+        )
+    except BelugaFetchError as exc:
+        # Falha no manifest: nenhuma UF foi tocada, todas ficam com o dado anterior.
+        typer.echo(f"FALHA no manifest do BELUGA: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    total = sum(baixadas.values())
+    typer.echo(f"{len(baixadas)}/{len(lista_ufs)} UF(s) baixada(s) do BELUGA, {total} setores.")
+    if falhas:
+        # O motivo vai para o log do run, não só o nome da UF: o CONTRIBUTING
+        # manda medir o resultado nos logs, e "falhou" não distingue sha256 de
+        # arquivo truncado nem de publicação que encolheu.
+        for uf_falha, motivo in falhas.items():
+            typer.echo(f"  FALHA no BELUGA ({uf_falha}): {motivo}", err=True)
+        typer.echo(
+            f"Falha no BELUGA: {', '.join(falhas)} (ficam com o dado anterior)", err=True
+        )
+        raise typer.Exit(code=1)
 
 
 @app.command("exportar-dashboard")
@@ -83,9 +116,8 @@ def atualizar_nacional_cmd(
     """Exporta o dashboard para várias UFs de uma vez, compartilhando 1 grade
     espacial nacional para caber no rate limit da Open-Meteo.
 
-    Não ingere os setores: eles devem ter sido ingeridos antes, pelo comando
-    mensal `ingerir-setores` (a CPRM/SGB é instável e passou a rodar separada
-    da atualização diária).
+    Não baixa os setores: eles devem ter sido baixados antes, pelo comando
+    `baixar-beluga`, que roda no mesmo workflow mas num passo próprio e fatal.
 
     `--orcamento-alvo` calibra só os pontos de grade dos setores; a série por
     município não entra nessa conta. As UFs são exportadas concorrentemente;
@@ -131,44 +163,6 @@ def indexar_setores_cmd(
         raise typer.Exit(code=1)
     n_ufs = len(json.loads((dados / "ufs_disponiveis.json").read_text()))
     typer.echo(f"Índice de setores: {total} setores de {n_ufs} UF(s).")
-
-
-@app.command("ingerir-setores")
-def ingerir_setores_cmd(
-    ufs: str = typer.Option(",".join(sorted(UFS_VALIDAS)), "--ufs", help="UFs separadas por vírgula. Padrão: todas as 27."),
-    diretorio: Path = typer.Option(DATA_DIR, "--diretorio", help="Diretório de dados local"),
-    backoff_factor: float = typer.Option(5.0, "--backoff-factor", help="Fator de backoff entre tentativas (0 nos testes)"),
-) -> None:
-    """Ingere os setores de risco da CPRM/SGB para o branch `dados-base`.
-
-    Roda mensalmente, separado da atualização diária: setor de risco é
-    resultado de levantamento de campo e muda em escala de meses, então
-    rebaixá-lo todo dia só expunha o dashboard à instabilidade da SGB.
-    Sai com código 1 se qualquer UF falhar -- dado congelado por um mês é
-    pior que uma notificação a mais.
-    """
-    lista_ufs = [u.strip().upper() for u in ufs.split(",") if u.strip()]
-    falhas = []
-    for uf in lista_ufs:
-        try:
-            # `permitir_cache=False`: o cache local aqui é o próprio
-            # `dados-base` recém-extraído pelo workflow, então aceitá-lo
-            # transformaria a SGB fora do ar em 27 sucessos silenciosos.
-            ingerir_cprm(
-                uf, caminho_setores(uf, diretorio),
-                backoff_factor=backoff_factor, permitir_cache=False,
-            )
-        except Exception as exc:  # noqa: BLE001 - ver comentário abaixo
-            # Qualquer exceção (gpkg corrompido, schema novo da SGB), não só
-            # CPRMFetchError: uma UF ruim interrompia o laço e as seguintes
-            # ficavam um mês sem ingestão. O exit 1 abaixo mantém a falha visível.
-            typer.echo(f"  FALHA na CPRM/SGB ({uf}): {exc!r}", err=True)
-            falhas.append(uf)
-
-    typer.echo(f"{len(lista_ufs) - len(falhas)}/{len(lista_ufs)} UF(s) ingerida(s).")
-    if falhas:
-        typer.echo(f"Falha na ingestão CPRM: {', '.join(falhas)}", err=True)
-        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

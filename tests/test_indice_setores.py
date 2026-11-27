@@ -9,9 +9,12 @@ from src.cli import app
 from src.config import caminho_indice_setores
 from src.export.indice_setores import gerar_indice_setores
 
+# O contrato com o front-end: estes nomes, nesta ordem. Campo novo entra no
+# fim e sobe `versao`.
 CAMPOS = [
     "num_setor", "uf", "munic", "grau_risco", "lat", "lon",
     "oeste", "sul", "leste", "norte", "chuva_24h", "chuva_72h",
+    "bl_fonte", "bl_produto",
 ]
 
 
@@ -27,6 +30,7 @@ def _feicao(num: str, cx: float, cy: float, geometria: dict | None = None) -> di
         "properties": {
             "num_setor": num, "munic": "CIDADE X", "grau_risco": "Alto",
             "chuva_24h": 1.5, "chuva_72h": 4.25,
+            "bl_fonte": "br-sgb-setorizacao", "bl_produto": "setorizacao_risco",
         },
         "geometry": _quadrado(cx, cy) if geometria is None else geometria,
     }
@@ -63,7 +67,7 @@ def test_indice_um_registro_por_setor_das_ufs_publicadas(tmp_path: Path):
     assert total == 3
     assert len(indice["setores"]) == 3
     assert indice["campos"] == CAMPOS
-    assert indice["versao"] == 1
+    assert indice["versao"] == 2
 
 
 def test_indice_ignora_geojson_de_uf_fora_do_ufs_disponiveis(tmp_path: Path):
@@ -91,6 +95,8 @@ def test_indice_centroide_arredondado_e_caixa_contem_centroide(tmp_path: Path):
     assert registro["sul"] < registro["lat"] < registro["norte"]
     assert registro["chuva_72h"] == 4.25
     assert registro["munic"] == "CIDADE X"
+    assert registro["bl_fonte"] == "br-sgb-setorizacao"
+    assert registro["bl_produto"] == "setorizacao_risco"
 
 
 def test_indice_feicao_sem_geometria_e_pulada(tmp_path: Path):

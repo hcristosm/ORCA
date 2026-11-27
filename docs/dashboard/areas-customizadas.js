@@ -186,7 +186,7 @@
 
   function cardAreaHTML(area) {
     const badge = area.classificacao
-      ? `<span class="selo-autodeclarado">Classificação informada pelo usuário (${escaparHtml(area.classificacao)}), não avaliada pela CPRM/IPT</span>`
+      ? `<span class="selo-autodeclarado">Classificação informada pelo usuário (${escaparHtml(area.classificacao)}), não avaliada pela CPRM/SGB nem por defesa civil</span>`
       : "";
 
     let corpo;

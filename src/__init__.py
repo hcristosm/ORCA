@@ -1,4 +1,4 @@
-"""ORCA: dashboard local de risco geológico x chuva (CPRM/SGB + INMET)."""
+"""ORCA: dashboard local de risco geológico x chuva (BELUGA + Open-Meteo)."""
 
 import logging
 import os

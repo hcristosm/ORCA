@@ -72,23 +72,32 @@
   teste("direção leste", () => igual(C().direcaoCardinal(0, 0, 0, 1), "L"));
   teste("direção sudoeste", () => igual(C().direcaoCardinal(0, 0, -1, -1), "SO"));
 
-  const CAMPOS = ["num_setor","uf","munic","grau_risco","lat","lon","oeste","sul","leste","norte","chuva_24h","chuva_72h"];
+  // Contrato do setores_pontos.json versão 2: a ordem destes campos é a do
+  // arquivo publicado, e `lerIndice` monta por NOME, não por posição.
+  const CAMPOS = ["num_setor","uf","munic","grau_risco","lat","lon","oeste","sul","leste","norte",
+                  "chuva_24h","chuva_72h","bl_fonte","bl_produto"];
   const exemploIndice = {
-    versao: 1, campos: CAMPOS,
-    setores: [["RJ_NF_SR_064_CPRM","rj","NOVA FRIBURGO","Muito alto",-22.28123,-42.53311,-42.5345,-22.2826,-42.5318,-22.2799,8.9,17.8]],
+    versao: 2, campos: CAMPOS,
+    setores: [["RJ_NF_SR_064_CPRM","rj","NOVA FRIBURGO","Muito alto",-22.28123,-42.53311,-42.5345,-22.2826,-42.5318,-22.2799,8.9,17.8,"br-sgb-setorizacao","setorizacao_risco"]],
   };
-  teste("lerIndice com versão desconhecida lança", () => lanca(() => C().lerIndice({ ...exemploIndice, versao: 2 })));
+  teste("lerIndice com versão desconhecida lança", () => lanca(() => C().lerIndice({ ...exemploIndice, versao: 1 })));
   teste("lerIndice sem um campo esperado lança", () => lanca(() => C().lerIndice({ ...exemploIndice, campos: CAMPOS.slice(1) })));
   teste("lerIndice monta pelo nome do campo, não pela posição", () => {
-    const trocado = { versao: 1, campos: ["uf", "num_setor", ...CAMPOS.slice(2)],
-      setores: [["rj", "X_1", "C", "Alto", 0, 0, 0, 0, 0, 0, null, 1]] };
+    const trocado = { versao: 2, campos: ["uf", "num_setor", ...CAMPOS.slice(2)],
+      setores: [["rj", "X_1", "C", "Alto", 0, 0, 0, 0, 0, 0, null, 1, "pe-recife-sedec", "ponto_risco"]] };
     igual(C().lerIndice(trocado)[0].num_setor, "X_1");
+    igual(C().lerIndice(trocado)[0].bl_produto, "ponto_risco");
   });
   teste("lerIndice devolve caixa de 4 números", () => {
     const s = C().lerIndice(exemploIndice)[0];
     igual(s.caixa.length, 4);
     igual(s.caixa[0], -42.5345);
     igual(s.chuva_72h, 17.8);
+  });
+  teste("lerIndice traz a fonte e o produto do setor", () => {
+    const s = C().lerIndice(exemploIndice)[0];
+    igual(s.bl_fonte, "br-sgb-setorizacao");
+    igual(s.bl_produto, "setorizacao_risco");
   });
 
   const KM_POR_GRAU = 111.195;
@@ -112,6 +121,99 @@
     igual(r[0].dentro, true);
   });
   teste("setoresProximos respeita max", () => igual(C().setoresProximos(setores, 0, 0, { raioKm: 10, max: 1 }).length, 1));
+
+  /* -------------------------------- setor que é PONTO, com caixa degenerada
+
+     A caixa de um ponto tem oeste == leste e sul == norte, então a regra de
+     contenção é sempre falsa: sem tratamento, um ponto de risco debaixo dos
+     pés contava como "a 40 m ao norte" e nunca como "você está aqui". */
+  const pontoDeRisco = (num, lat, lon) => ({
+    num_setor: num, uf: "pe", munic: "RECIFE", grau_risco: "Alto", lat, lon,
+    caixa: [lon, lat, lon, lat], chuva_24h: null, chuva_72h: null,
+    bl_fonte: "pe-recife-sedec", bl_produto: "ponto_risco",
+  });
+  teste("ponto de risco a 20 m conta como dentro, apesar da caixa degenerada", () => {
+    const p = pontoDeRisco("P1", 0.00018, 0);   // ~20 m ao norte
+    const r = C().setoresProximos([p], 0, 0, { raioKm: 10 });
+    igual(r[0].dentro, true);
+  });
+  teste("ponto de risco a 500 m não conta como dentro", () => {
+    const r = C().setoresProximos([pontoDeRisco("P2", 0.0045, 0)], 0, 0, { raioKm: 10 });
+    igual(r[0].dentro, false);
+  });
+  teste("polígono com caixa de área nula cai na regra de proximidade", () => {
+    const sliver = { ...setorAoNorte("S", 0.02), caixa: [0, 0.00018, 0, 0.00018] };
+    igual(C().setoresProximos([sliver], 0, 0, { raioKm: 10 })[0].dentro, true);
+  });
+  teste("ponto de risco longe continua fora do raio", () =>
+    igual(C().setoresProximos([pontoDeRisco("P3", 0.5, 0)], 0, 0, { raioKm: 10 }).length, 0));
+
+  /* ------------------------------------------- lista única do grau de risco
+
+     O grau "Médio" ficou invisível em produção (473 setores) porque havia três
+     listas separadas e nenhuma delas vinha do dado. Estes casos existem para
+     um grau fora de "Alto"/"Muito alto" nunca mais passar sem nada apontar. */
+  teste("GRAUS está em ordem de severidade, com sem grau no fim", () =>
+    igual(C().GRAUS.join("|"), "Muito alto|Alto|Médio|Baixo|sem grau"));
+  teste("grau Médio tem chave e rótulo próprios", () => {
+    igual(C().chaveGrau("Médio"), "médio");
+    igual(C().rotuloGrau("médio"), "Médio");
+  });
+  teste("grau Baixo tem chave e rótulo próprios", () => {
+    igual(C().chaveGrau("Baixo"), "baixo");
+    igual(C().rotuloGrau("BAIXO"), "Baixo");
+  });
+  teste("grau nulo é a chave 'sem grau', não a string vazia", () => {
+    igual(C().chaveGrau(null), "sem grau");
+    igual(C().chaveGrau(""), "sem grau");
+    igual(C().chaveGrau(undefined), "sem grau");
+  });
+  teste("grau nulo aparece como 'sem grau', e não como travessão", () =>
+    igual(C().rotuloGrau(null), "sem grau"));
+  teste("severidade: muito alto > alto > médio > baixo > sem grau", () => {
+    const s = C().severidadeGrau;
+    igual(s("Muito alto") > s("Alto"), true);
+    igual(s("Alto") > s("Médio"), true);
+    igual(s("Médio") > s("Baixo"), true);
+    igual(s("Baixo") > s("sem grau"), true);
+  });
+  teste("severidade: grau nulo vale o mesmo que 'sem grau'", () =>
+    igual(C().severidadeGrau(null), C().severidadeGrau("sem grau")));
+  teste("severidade: valor inesperado fica abaixo de 'sem grau'", () =>
+    igual(C().severidadeGrau("altíssimo") < C().severidadeGrau("sem grau"), true));
+  teste("grau inesperado não é confundido com 'sem grau'", () => {
+    igual(C().chaveGrau("Altíssimo"), "altíssimo");
+    igual(C().rotuloGrau("altíssimo"), "Altíssimo");
+  });
+
+  /* ------------------------------------ sobreposição com a CPRM (seção 8) */
+  const externo = (frac, sob) => ({ bl_fonte: "mg-juiz-de-fora-sspdc", bl_cp_frac: frac, bl_sob_cp: sob });
+  teste("ehCprm: setor sem bl_fonte é da CPRM (dado antigo)", () => {
+    igual(C().ehCprm(undefined), true);
+    igual(C().ehCprm("br-sgb-setorizacao"), true);
+    igual(C().ehCprm("pe-recife-sedec"), false);
+  });
+  teste("sobrepoeCprm compara com true, não por truthiness", () => {
+    igual(C().sobrepoeCprm({ bl_sob_cp: true }), true);
+    igual(C().sobrepoeCprm({ bl_sob_cp: 1 }), false);
+    igual(C().sobrepoeCprm({ bl_sob_cp: false }), false);
+    igual(C().sobrepoeCprm({ bl_sob_cp: null }), false);
+  });
+  teste("repetido: acima de metade da área coberta não é somado", () =>
+    igual(C().repetidoNaCprm(externo(0.8, true)), true));
+  teste("repetido: 5% coberto continua sendo somado", () =>
+    igual(C().repetidoNaCprm(externo(0.05, true)), false));
+  teste("repetido: exatamente 50% ainda é somado (o limiar é 'mais da metade')", () =>
+    igual(C().repetidoNaCprm(externo(0.5, true)), false));
+  teste("repetido: setor da própria CPRM nunca é repetido", () =>
+    igual(C().repetidoNaCprm({ bl_fonte: "br-sgb-setorizacao", bl_cp_frac: 0.9, bl_sob_cp: null }), false));
+  teste("repetido: ponto (fração nula) não é repetido", () =>
+    igual(C().repetidoNaCprm(externo(null, true)), false));
+  teste("rotuloFonte: id do BELUGA vira nome curto", () => {
+    igual(C().rotuloFonte("br-sgb-setorizacao"), "CPRM/SGB");
+    igual(C().rotuloFonte("mg-juiz-de-fora-sspdc"), "Juiz de Fora (MG)");
+    igual(C().rotuloFonte("pe-recife-sedec"), "Recife (PE)");
+  });
 
   const HORA = 3600000;
   const T0 = Date.UTC(2026, 10, 1, 0);
@@ -196,6 +298,17 @@
     igual(lidos[0].lon, -43.2);
   });
   teste("cobertura: arquivo sem a lista dá lista vazia", () => igual(C().lerMunicipios({}).length, 0));
+
+  // O grau de risco vem de sete fontes e é montado dentro de `data-filtro="..."`
+  // por concatenação de string. Sem escapar a aspa, o atributo fecha e dá para
+  // injetar `onfocus=`, que a CSP da página (com 'unsafe-inline') executaria.
+  teste("escape: aspa dupla vira entidade", () =>
+    igual(window.ORCA.escaparHtml('Alto" onfocus=x'), "Alto&quot; onfocus=x"));
+  teste("escape: aspa simples vira entidade", () =>
+    igual(window.ORCA.escaparHtml("a'b"), "a&#39;b"));
+  teste("escape: sinal de menor vira entidade", () =>
+    igual(window.ORCA.escaparHtml("<img>"), "&lt;img&gt;"));
+  teste("escape: nulo vira string vazia", () => igual(window.ORCA.escaparHtml(null), ""));
 
   window.addEventListener("load", () => {
     const lista = document.getElementById("casos");

@@ -8,7 +8,7 @@ import pytest
 import responses
 from shapely.geometry import Polygon
 
-from src.config import caminho_setores
+from src.config import caminho_setores_beluga
 from src.export import nacional
 from src.export.dashboard_data import ExportacaoDashboardError
 from src.export.nacional import exportar_nacional
@@ -57,8 +57,8 @@ def _resposta_openmeteo_ancorada_em_agora(n_pontos: int) -> list[dict]:
 
 
 def test_exportar_nacional_gera_arquivos_por_uf_e_manifesto(tmp_path: Path):
-    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
-    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores_beluga("SP", tmp_path))
+    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores_beluga("RJ", tmp_path))
 
     saida = tmp_path / "export"
     with responses.RequestsMock() as rsps:
@@ -87,7 +87,7 @@ def test_exportar_nacional_segunda_execucao_pede_menos_historico(tmp_path: Path)
     sempre buscada ao vivo), mas o past_days de cada chamada encolhe porque o
     histórico da 1a execução já está cacheado.
     """
-    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores_beluga("SP", tmp_path))
     cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
     saida = tmp_path / "export"
 
@@ -113,7 +113,7 @@ def test_exportar_nacional_segunda_execucao_pede_menos_historico(tmp_path: Path)
 
 
 def test_exportar_nacional_pula_uf_sem_setores_ingeridos(tmp_path: Path):
-    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores_beluga("SP", tmp_path))
 
     saida = tmp_path / "export"
     with responses.RequestsMock() as rsps:
@@ -137,8 +137,8 @@ def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path:
     segunda tentativa, em série e ao final, dá tempo pra isso passar e
     recupera a UF em vez de ela sair faltando do dashboard.
     """
-    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
-    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores_beluga("SP", tmp_path))
+    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores_beluga("RJ", tmp_path))
 
     chamadas: dict[str, int] = {"SP": 0, "RJ": 0}
 
@@ -159,7 +159,7 @@ def test_exportar_nacional_reexporta_uf_que_falhou_na_primeira_passada(tmp_path:
 
 
 def test_exportar_nacional_reexportacao_tambem_falha_mantem_uf_de_fora(tmp_path: Path, monkeypatch):
-    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores_beluga("SP", tmp_path))
 
     def sempre_falha(uf, diretorio_dados, saida_dir, pontos_grade, cache_openmeteo=None):
         raise ExportacaoDashboardError("falha simulada persistente")
@@ -193,9 +193,9 @@ def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypa
     """
     monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "acquire", lambda: None)
     monkeypatch.setattr(openmeteo.LIMITER_PADRAO, "release", lambda: None)
-    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
-    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
-    salvar_setores(_setores_uf("MG", "MG1", -44.00, -19.90), caminho_setores("MG", tmp_path))
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores_beluga("SP", tmp_path))
+    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores_beluga("RJ", tmp_path))
+    salvar_setores(_setores_uf("MG", "MG1", -44.00, -19.90), caminho_setores_beluga("MG", tmp_path))
 
     barreira = threading.Barrier(3, timeout=30)
     quebrou: list[str] = []
@@ -224,9 +224,9 @@ def test_exportar_nacional_exporta_ufs_concorrentemente(tmp_path: Path, monkeypa
 def test_exportar_nacional_erro_inesperado_numa_uf_nao_derruba_as_outras(tmp_path: Path, monkeypatch):
     """KeyError (schema da CPRM mudou) numa UF e GeoPackage ilegível noutra
     escapavam da lista fechada de exceções e abortavam a exportação inteira."""
-    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores("SP", tmp_path))
-    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores("RJ", tmp_path))
-    caminho_setores("MG", tmp_path).write_text("não é um GeoPackage")
+    salvar_setores(_setores_uf("SP", "SP1", -46.60, -23.50), caminho_setores_beluga("SP", tmp_path))
+    salvar_setores(_setores_uf("RJ", "RJ1", -43.20, -22.90), caminho_setores_beluga("RJ", tmp_path))
+    caminho_setores_beluga("MG", tmp_path).write_text("não é um GeoPackage")
 
     def fake_exportar_dashboard(uf, diretorio_dados, saida_dir, pontos_grade, cache_openmeteo=None):
         if uf == "SP":

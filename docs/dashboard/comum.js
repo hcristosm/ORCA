@@ -10,7 +10,12 @@
   function escaparHtml(texto) {
     const div = document.createElement("div");
     div.textContent = texto == null ? "" : String(texto);
-    return div.innerHTML;
+    // O innerHTML de um nó de texto NÃO escapa aspas, então sozinho ele serve
+    // a texto e não a atributo: `data-x="${escaparHtml(v)}"` com uma aspa no
+    // valor ainda fecha o atributo e deixa injetar `onfocus=`. Como a página
+    // tem 'unsafe-inline' no script-src, isso executaria. Em posição de texto
+    // as entidades voltam a ser aspas na tela, então escapar sempre é de graça.
+    return div.innerHTML.replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
 
   /* Lê uma custom property do CSS (ex.: "--risco-alto"). O tema vive todo no

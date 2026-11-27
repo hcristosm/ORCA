@@ -1,5 +1,6 @@
 /* Tela "Perto de mim" (celular): veredito de risco para o ponto onde se está
-   e os setores oficiais da CPRM mais próximos.
+   e os setores oficiais mapeados mais próximos (CPRM/SGB e defesas civis
+   municipais).
 
    Tudo no aparelho: GPS do navegador, índice estático de setores
    (data/setores_pontos.json) e UMA chamada à Open-Meteo com o ponto e os
@@ -50,8 +51,10 @@
     return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1).replace(".", ",")} km`;
   }
 
+  // Grau e nome de fonte saem da lista única de calculo.js: aqui não há uma
+  // segunda tabela de graus para sair de sincronia com a do painel.
   function rotuloGrau(grau) {
-    return grau ? grau.charAt(0).toUpperCase() + grau.slice(1) : "—";
+    return calc().rotuloGrau(grau);
   }
 
   function criterio() {
@@ -200,6 +203,7 @@
       }
       return {
         num: p.setor.num_setor, uf: p.setor.uf, munic: p.setor.munic, grau: p.setor.grau_risco,
+        fonte: calc().rotuloFonte(p.setor.bl_fonte),
         distanciaKm: p.distanciaKm, direcao: p.direcao, dentro: p.dentro,
         estado: r.estado, observadoMm: r.observadoMm, quandoMs: r.quandoMs, nota,
       };
@@ -267,16 +271,17 @@
       `<span>${typeof pico === "number" ? `${mm(pico)} prev.` : "sem previsão"}</span></div>`;
   }
 
-  /* "Fora de setor" não é "sem risco": a CPRM não mapeou São Paulo, Rio,
-     Petrópolis e outras centenas de cidades. A nota diz isso com todas as letras. */
+  /* "Fora de setor" não é "sem risco": nem a CPRM nem as defesas civis
+     municipais mapearam São Paulo, Rio, Petrópolis e outras centenas de
+     cidades. A nota diz isso com todas as letras. */
   function notaCobertura(m) {
     let texto = "";
     if (m.municipioSemSetor) {
-      texto = `A CPRM não mapeou setores de risco em ${m.municipioSemSetor}. ` +
+      texto = `Nenhuma das fontes do ORCA tem setor de risco mapeado em ${m.municipioSemSetor}. ` +
         "Isso não quer dizer que não há risco. O alerta aqui é só pela chuva.";
     } else if (m.foraDeSetor) {
-      texto = "Este ponto não está num setor mapeado pela CPRM. Isso não quer dizer que não há risco: " +
-        "a CPRM não mapeou todas as cidades. O alerta aqui é só pela chuva.";
+      texto = "Este ponto não está num setor mapeado. Isso não quer dizer que não há risco: " +
+        "o mapeamento oficial não cobre todas as cidades. O alerta aqui é só pela chuva.";
     }
     return texto ? `<p class="perto-nota">${escaparHtml(texto)}</p>` : "";
   }
@@ -293,6 +298,12 @@
     caixa.innerHTML = `<p>${escaparHtml(texto)}</p>` +
       (botao ? `<button type="button" class="perto-botao" data-localizar>${escaparHtml(botao)}</button>` : "");
     el("pertoListaBloco").hidden = true;
+  }
+
+  /* Linha de baixo do item: quem mapeou o setor e a nota do dado publicado. */
+  function rodapeItem(it) {
+    const partes = [it.fonte, it.nota].filter(Boolean);
+    return partes.length ? `<span class="nota">${escaparHtml(partes.join(" · "))}</span>` : "";
   }
 
   function desenhar(modelo) {
@@ -342,8 +353,8 @@
     }
     if (!m.itens.length) {
       lista.innerHTML = "";
-      vazio.textContent = "Nenhum setor mapeado pela CPRM a menos de 10 km. " +
-        "A CPRM não mapeou todas as cidades, então isso não quer dizer que não há risco. " +
+      vazio.textContent = "Nenhum setor mapeado a menos de 10 km. " +
+        "O mapeamento oficial não cobre todas as cidades, então isso não quer dizer que não há risco. " +
         "Em emergência, ligue 199 (Defesa Civil).";
       vazio.hidden = false;
       return;
@@ -359,7 +370,8 @@
         `<span class="faixa"></span>` +
         `<span class="texto"><b>${escaparHtml(it.munic)} · <span class="mono">${escaparHtml(it.num)}</span></b>` +
         `<span>${etiqueta} ${escaparHtml(rotuloGrau(it.grau))} · ${mm(it.observadoMm)} / ${m.limiar} mm</span>` +
-        (it.nota ? `<span class="nota">${escaparHtml(it.nota)}</span>` : "") + `</span>` +
+        // `it.fonte` falta nos modelos guardados antes desta versão.
+        rodapeItem(it) + `</span>` +
         `<span class="onde">${onde}</span></button></li>`;
     }).join("");
   }

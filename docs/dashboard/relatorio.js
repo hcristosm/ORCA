@@ -4,8 +4,11 @@
   const { escaparHtml } = window.ORCA;
 
   // Formato normalizado consumido por este módulo:
-  // { nome, tipo, classificacao, chuva24, chuva72, distanciaKm, fonteEstacao, trajetoria }
+  // { nome, tipo, classificacao, chuva24, chuva72, distanciaKm, fonteEstacao,
+  //   fonte, licenca, orgao, sobrepoeCprm, repetidoNaCprm, trajetoria }
   // trajetoria é opcional: [[isoDate, mmOuNull], ...]
+  // fonte/licenca/orgao vêm do levantamento que mapeou o setor; sobrepoeCprm é
+  // true, false ou null (não se aplica: o setor é da própria CPRM).
 
   function formatarMm(valor) {
     return typeof valor === "number" ? `${valor.toFixed(1)}mm` : "—";
@@ -19,10 +22,21 @@
     return typeof valor === "number" ? Math.round(valor * 100) / 100 : valor;
   }
 
+  /* `sobrepoeCprm` tem três valores no CSV, como no dado: "sim", "nao" e vazio
+     (não se aplica, porque o setor é da própria CPRM). */
+  function sobreposicaoCSV(it) {
+    if (it.sobrepoeCprm === true) return "sim";
+    if (it.sobrepoeCprm === false) return "nao";
+    return "";
+  }
+
   function paraCSV(itens) {
-    const colunas = ["nome", "tipo", "classificacao", "chuva_24h_mm", "chuva_72h_mm", "distancia_km", "fonte_estacao"];
+    const colunas = ["nome", "tipo", "classificacao", "chuva_24h_mm", "chuva_72h_mm", "distancia_km",
+      "fonte_estacao", "fonte_setor", "orgao_setor", "licenca_setor", "sobrepoe_cprm", "contado"];
     const linhas = itens.map(it =>
-      [it.nome, it.tipo, it.classificacao, arredondar2(it.chuva24), arredondar2(it.chuva72), arredondar2(it.distanciaKm), it.fonteEstacao]
+      [it.nome, it.tipo, it.classificacao || "sem grau", arredondar2(it.chuva24), arredondar2(it.chuva72),
+        arredondar2(it.distanciaKm), it.fonteEstacao, it.fonte, it.orgao, it.licenca,
+        sobreposicaoCSV(it), it.repetidoNaCprm ? "nao" : "sim"]
         .map(campoCSV)
         .join(",")
     );
@@ -58,11 +72,19 @@
 
     const linhas = [
       ["Tipo", item.tipo],
-      item.classificacao ? ["Classificação", item.classificacao] : null,
+      // "sem grau" impresso, e não a linha omitida: setor sem classificação
+      // existe (Belo Horizonte publica 804 deles) e omitir a linha fazia o PDF
+      // parecer incompleto em vez de dizer o que a fonte diz.
+      ["Classificação", item.classificacao || "sem grau"],
       ["Chuva 24h", formatarMm(item.chuva24)],
       ["Chuva 72h", formatarMm(item.chuva72)],
       typeof item.distanciaKm === "number" ? ["Distância da estação", `${item.distanciaKm.toFixed(1)}km`] : null,
       item.fonteEstacao ? ["Fonte da chuva", item.fonteEstacao] : null,
+      item.orgao ? ["Órgão do mapeamento", item.orgao] : null,
+      item.licenca ? ["Licença do mapeamento", item.licenca] : null,
+      item.sobrepoeCprm === true ? ["Também mapeado pela CPRM", "sim"] : null,
+      item.repetidoNaCprm
+        ? ["Na contagem", "não somado: mais da metade da área já está mapeada pela CPRM"] : null,
     ].filter(Boolean);
 
     return (
@@ -70,6 +92,24 @@
       `<table>${linhas.map(([rotulo, valor]) => `<tr><td>${escaparHtml(rotulo)}</td><td>${escaparHtml(valor)}</td></tr>`).join("")}</table>` +
       linhaTrajetoria
     );
+  }
+
+  /* Crédito de quem mapeou os setores DESTE recorte, com a licença de cada um.
+     Sai dos próprios itens, e não de uma lista fixa: fonte de licença
+     compartilha-igual (a ODbL do Recife) obriga quem redistribui, então o
+     relatório tem de dizer de onde cada setor veio. */
+  function creditoFontes(itens) {
+    const vistas = new Map();
+    for (const it of itens) {
+      if (!it.fonte || vistas.has(it.fonte)) continue;
+      vistas.set(it.fonte, it.licenca || "licença não declarada pela fonte");
+    }
+    const partes = [...vistas].map(([fonte, licenca]) => `${fonte} (${licenca})`);
+    // Área enviada pelo usuário não tem fonte de setor: nesse caso o relatório
+    // não credita mapeamento nenhum, em vez de creditar a CPRM por engano.
+    return (partes.length ? `Setores: ${partes.join("; ")}. ` : "") +
+      "Chuva: Open-Meteo (CC-BY 4.0). Município e malha: IBGE. " +
+      "ORCA sob AGPL-3.0-or-later";
   }
 
   function abrirRelatorioImpressao(itens, titulo) {
@@ -90,7 +130,8 @@
         @media print { .rodape { position: fixed; bottom: 0; } }
       </style></head><body>` +
       `<h1>${escaparHtml(titulo)}</h1>` +
-      `<p class="rodape">Gerado em ${escaparHtml(agora)} · dados públicos CPRM/SGB + Open-Meteo · hcristosm.github.io/ORCA</p>` +
+      `<p class="rodape">Gerado em ${escaparHtml(agora)} · ${escaparHtml(creditoFontes(itens))} · ` +
+      `hcristosm.github.io/ORCA</p>` +
       itens.map(blocoRelatorioHTML).join("") +
       `</body></html>`;
 
@@ -102,5 +143,5 @@
     janela.print();
   }
 
-  window.ORCA_relatorio = { paraCSV, exportarCSV, abrirRelatorioImpressao };
+  window.ORCA_relatorio = { paraCSV, exportarCSV, abrirRelatorioImpressao, creditoFontes };
 })();

@@ -762,6 +762,30 @@ td.mm { color: var(--sinal); font-weight: 500; }
   border: var(--fio) solid var(--tinta-fraca);
 }
 .legenda .nota { color: var(--tinta-fraca); display: block; margin-top: var(--s2); max-width: 210px; }
+/* Fonte do mapeamento: é identidade de origem, não grau, então vai por traço
+ * (contorno cheio para a CPRM, tracejado para as demais) e não por cor nem por
+ * hachura, que já estão ocupadas. */
+.legenda .amostra-fonte {
+  background: transparent;
+  border: 2px dashed var(--tinta-media);
+}
+.legenda .amostra-fonte.cprm { border-style: solid; }
+.legenda .n { color: var(--tinta-fraca); margin-left: auto; padding-left: var(--s2); }
+.legenda .titulo + button { margin-top: 0; }
+.legenda .legenda-opcoes { display: flex; flex-wrap: wrap; gap: var(--s1); margin-bottom: var(--s2); }
+.legenda button.opcao {
+  width: auto;
+  padding: 2px var(--s2);
+  border: var(--fio) solid var(--fio-cor);
+  border-radius: var(--raio);
+  color: var(--tinta-media);
+}
+.legenda button.opcao.ativa {
+  color: var(--tinta);
+  border-color: var(--tinta-media);
+  background: var(--superficie-2);
+}
+.legenda button.opcao[aria-pressed="false"] { opacity: 1; text-decoration: none; }
 /* Botão de recolher: só existe para o celular (ver bloco "celular"). */
 .legenda .legenda-alternar { display: none; }
 
@@ -863,6 +887,72 @@ td.mm { color: var(--sinal); font-weight: 500; }
 .pin-setor { color: var(--contorno-atencao); }
 .pin-setor svg { width: 20px; height: 20px; }
 .pin-setor.previsto svg { stroke-dasharray: 3 2; fill: none; }
+
+/* Setor que a fonte publica como ponto, e não como polígono (Recife,
+ * Contagem). O preenchimento continua sendo a hachura do grau, aplicada pelo
+ * mesmo `style` dos polígonos; aqui só o contorno diz "isto é um ponto, não
+ * uma área delimitada". */
+.marcador-ponto {
+  stroke-dasharray: 2 2;
+  stroke-linecap: round;
+}
+
+/* ------------------------------------------- sobreposição e fonte do setor */
+
+/* "N setores também mapeados pela CPRM, não somados": fica logo abaixo dos
+ * contadores porque explica a diferença entre a soma dos cards e o total. */
+.nota-sobreposicao { margin: 0; padding: 0 var(--s4); font-size: var(--micro); }
+.nota-sobreposicao button {
+  font: inherit;
+  color: var(--tinta-media);
+  background: none;
+  border: 0;
+  border-bottom: var(--fio) dashed var(--fio-cor);
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.nota-sobreposicao button:hover { color: var(--agua); }
+.nota-sobreposicao button[aria-pressed="true"] { color: var(--agua); border-bottom-style: solid; }
+
+/* Fonte do setor na linha da tabela: contexto, não dado principal. */
+.etiqueta-fonte {
+  display: inline-block;
+  margin: 2px var(--s1) 0 0;
+  font-size: var(--micro);
+  color: var(--tinta-fraca);
+}
+.etiqueta-fonte.repetido {
+  border: var(--fio) solid var(--fio-cor);
+  border-radius: var(--raio);
+  padding: 0 4px;
+}
+
+/* Proveniência na ficha do setor (celular): rótulo e valor em duas colunas. */
+.cartao-ficha {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--s3);
+  margin: 0 0 var(--s3);
+  font-size: var(--micro);
+}
+.cartao-ficha dt { color: var(--tinta-fraca); }
+.cartao-ficha dd { margin: 0; color: var(--tinta-media); }
+
+/* Créditos e licenças, no fim do Tutorial (alcançável pelo rodapé no desktop
+ * e pela aba "Mais" no celular). */
+.creditos-lista { max-width: 78ch; font-size: var(--step-0); line-height: 1.6; }
+.creditos-lista li { margin-bottom: var(--s3); }
+.creditos-lista a { color: var(--agua); overflow-wrap: anywhere; }
+.creditos-fontes p { color: var(--tinta-media); }
+.tutorial h4 {
+  font-family: var(--font-cond);
+  font-size: var(--step-0);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+  margin-bottom: var(--s2);
+}
 
 /* ------------------------------------------------------------ minhas áreas */
 
