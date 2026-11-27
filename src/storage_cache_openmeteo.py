@@ -9,9 +9,11 @@ módulo (aqui só existe leitura/escrita por chave exata).
 Armazenamento interno é compacto (`WITHOUT ROWID`, coordenadas/datas como
 inteiro, variável normalizada numa tabela auxiliar) porque o volume real de
 produção (cobertura nacional, ~2,4 milhões de linhas na primeira população)
-faz o schema "óbvio" (tudo TEXT, rowid implícito) passar de 300MB -- acima
-do limite que o workflow aceita publicar no gh-pages. A interface pública
-(strings ISO, floats) não muda; só a codificação em disco.
+faz o schema "óbvio" (tudo TEXT, rowid implícito) passar de 300MB. O cache
+viaja no `actions/cache`, com uma entrada nova por run e teto de 10 GB por
+repositório, então o tamanho decide quantos dias de histórico cabem antes da
+eviction. A interface pública (strings ISO, floats) não muda; só a
+codificação em disco.
 
 Se o arquivo estiver ausente, corrompido ou ilegível, o módulo degrada para
 cache vazio (loga um warning, nunca levanta exceção) — o cache nunca pode

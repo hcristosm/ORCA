@@ -18,13 +18,6 @@ CAMADA_SETORES = "setores_risco"
 
 LIMIAR_ATENCAO_MM_PADRAO = 100.0
 
-# Acima desta fração de área coberta pela CPRM, um setor de outra fonte
-# (`bl_cp_frac` do BELUGA) é a mesma área de risco vista por dois
-# levantamentos, e não entra na contagem para não contar duas vezes. O limiar
-# de 1% do BELUGA responde outra pergunta ("existe relação?"); este responde
-# "é o mesmo lugar?". O front-end usa o mesmo número.
-LIMIAR_SETOR_REPETIDO = 0.5
-
 
 def validar_uf(uf: str) -> str:
     uf_norm = uf.strip().upper()

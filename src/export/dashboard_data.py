@@ -51,8 +51,9 @@ DIAS_HISTORICO_CRUZAMENTO = 4
 # Contrato com o front-end: estes nomes, nesta ordem. Os `bl_*` e o
 # `orgao_exec` vêm do GeoPackage do BELUGA (docs/esquema-setores.md dele) e são
 # o que deixa o dashboard dizer de onde veio cada setor, com qual licença, e
-# se ele repete área já mapeada pela CPRM (`bl_cp_frac`, ver
-# LIMIAR_SETOR_REPETIDO em src/config.py).
+# se ele repete área já mapeada pela CPRM (`bl_cp_frac`). Quem decide o que
+# repete é o front-end, em `LIMIAR_REPETIDO` (docs/dashboard/calculo.js): é
+# decisão de apresentação, e o pipeline não conta setor.
 PROPRIEDADES_SETOR = [
     "num_setor", "munic", "grau_risco",
     "chuva_24h", "chuva_72h", "distancia_km", "fonte_estacao", "codigo_estacao",

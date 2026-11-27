@@ -47,9 +47,13 @@ licença).
 | contagem de feições diferente da declarada | GeoJSON truncado, que é o jeito de um arquivo chegar menor sem erro de rede |
 | UF com menos setores que a publicação anterior do ORCA | Publicar menos do que está no ar é proibido |
 
-Uma UF que falha fica com o dado anterior e o comando sai com 1, nomeando o
-motivo de cada falha. O run fica vermelho, mas as outras 26 UFs seguem: a
-exportação pula UF sem GeoPackage sem interromper as demais.
+Uma UF que falha não ganha GeoPackage e o comando sai com 1, nomeando o motivo
+de cada falha. O run fica vermelho, mas as outras 26 seguem: a exportação pula
+UF sem GeoPackage sem interromper as demais.
+
+O que mantém a UF que falhou no ar não é o disco: no runner, `data/` começa
+vazio em todo run. É a mescla com o `gh-pages`, que copia de volta os arquivos
+publicados daquela UF. Ela envelhece em vez de sumir, que é o princípio §3.2.
 
 ### Colunas que vêm do BELUGA
 
@@ -77,11 +81,15 @@ no arquivo, não o que o pandas devolve.
 
 Um setor de fonte municipal pode cobrir a mesma encosta que um setor da CPRM.
 O BELUGA marca a sobreposição a partir de 1% de área, que responde "existe
-relação?". Para contar, o ORCA usa outro limiar, `LIMIAR_SETOR_REPETIDO = 0.5`
-em `src/config.py`, que responde "é o mesmo lugar?".
+relação?". Para contar, o front-end usa outro limiar, `LIMIAR_REPETIDO = 0.5`
+em `docs/dashboard/calculo.js`, que responde "é o mesmo lugar?". O número mora
+só ali: o pipeline não conta setor, só publica `bl_cp_frac`.
 
-A contagem do cabeçalho é, então, **os setores da CPRM mais os externos com
-`bl_cp_frac <= 0.5`**. Os demais continuam no mapa, com a relação na ficha, e
+A contagem do cabeçalho deixa de fora, então, **o setor externo cujo
+`bl_cp_frac` é um número maior que 0.5**. Todo o resto conta, inclusive o setor
+externo com `bl_cp_frac` nulo, que é a maioria: fração de área não se mede em
+ponto, e Recife e Contagem são pontos. Os de fora continuam no mapa, com a
+relação na ficha, e
 uma linha abaixo do contador diz quantos ficaram de fora da soma. Nenhum setor
 é escondido; nenhum é somado duas vezes em silêncio.
 
@@ -123,9 +131,9 @@ de pontos distintos caber em `--orcamento-alvo` (padrão 6.000). Setores
 vizinhos, mesmo em UFs diferentes, dividem a mesma consulta.
 
 Isso quer dizer que **setor novo custa resolução, não cota**: os 2.521 setores
-que o BELUGA acrescentou não geraram uma chamada a mais. Fora do orçamento
-fica a série por município, um ponto por município com setor, que cresceu em
-três (Belo Horizonte, Recife e Suzano).
+a mais que o ORCA passou a mostrar (18.908 antes, 21.429 agora) não geraram uma
+chamada a mais. Fora do orçamento fica a série por município, um ponto por
+município com setor, que cresceu em três (Belo Horizonte, Recife e Suzano).
 
 `src/storage_cache_openmeteo.py` guarda a chuva já baixada, e só hora passada,
 para previsão não virar chuva observada.
@@ -156,9 +164,12 @@ Um workflow só, [`atualizar-dados.yml`](../.github/workflows/atualizar-dados.ym
 dos passos importa:
 
 1. **Cache da Open-Meteo** (`actions/cache`). A chave tem o id do run, então
-   nunca dá acerto exato e o cache é salvo no fim de todo run; `restore-keys`
-   restaura o mais recente. Cache ausente degrada para uma reconstrução fria,
-   que é segura.
+   nunca dá acerto exato, e `restore-keys` restaura o mais recente. O
+   `restore` e o `save` são passos separados, e o `save` roda com
+   `!cancelled()`: o `actions/cache` de um passo só grava num post com
+   `post-if: success()`, e aí o cache seria descartado justamente no dia em que
+   uma UF falha. Cache ausente degrada para uma reconstrução fria, que é
+   segura.
 2. **Buscar o `gh-pages` e extrair o publicado** em `publicado/data`. Daqui
    saem duas coisas: a contagem publicada, que é o insumo da guarda, e o piso
    por UF do download.
@@ -182,10 +193,21 @@ envelhecer: a UF que falhou continua no ar com o dado da véspera.
 **O piso de cobertura da mescla** (`ORCA_PISO_COBERTURA`, 0.6) é o detector de
 run degenerado. Ele precisa existir justamente porque a mescla torna
 `atual >= publicado` verdadeiro por construção, e sem ele a guarda
-anti-regressão passaria a aprovar qualquer run. O escopo é medido pelos
-`beluga_<uf>.gpkg` em `data/`, e **escopo vazio desliga o piso**: por isso o
-prefixo do arquivo é load-bearing, e há um teste amarrando-o a
-`caminho_setores_beluga`.
+anti-regressão passaria a aprovar qualquer run.
+
+O escopo sai do `ufs` do manifest do BELUGA, que é o que a fonte publica hoje,
+e não dos GeoPackages baixados. A diferença separa "esta UF saiu da publicação"
+de "esta UF falhou hoje": medido pelos GeoPackages, uma UF com sha256 errado
+sairia do escopo, não seria preservada, e a guarda recusaria a publicação das
+27 por regressão, todo dia, enquanto a falha durasse. Sem manifest legível, o
+escopo cai para os GeoPackages, e **escopo vazio desliga o piso**: por isso os
+dois nomes de arquivo são load-bearing, e há um teste amarrando-os a
+`caminho_manifesto_beluga` e `caminho_setores_beluga`.
+
+O `setores_pontos.json` é preservado como os arquivos por UF. Ele é nacional, a
+guarda conta UFs e não o enxerga, e `indexar-setores` é `continue-on-error` de
+propósito: sem preservá-lo, uma falha dele tiraria a tela "Perto de mim" do ar
+para todo mundo com o run fechando verde.
 
 **A guarda** (`conferir_publicacao.py`) compara o conjunto a publicar com o
 que está no ar e recusa publicar menos, publicar abaixo do piso ou publicar
@@ -210,6 +232,15 @@ O `gh-pages` tem histórico. O deploy deixou de usar `force_orphan` quando o
 cache da Open-Meteo saiu de dentro do `publish_dir`, e com histórico dá para
 reverter uma publicação ruim.
 
+**Isso tem custo, e o custo foi medido.** Os dados publicados são 78 MB que se
+reescrevem todo dia, porque a chuva de cada setor mora dentro do
+`setores_<uf>.geojson`. Simulando oito publicações num repositório de teste com
+os arquivos reais, e empacotando com `git gc --aggressive`, o histórico cresce
+**6,9 MB por publicação**, ou cerca de 2,5 GB por ano. O repositório inteiro
+hoje tem 90 MB. Dois terços do crescimento são os `setores_<uf>.geojson`;
+servir a chuva num arquivo à parte por UF cortaria a maior parte, e é trabalho
+para depois.
+
 ### Como reverter
 
 | Situação | O que fazer |
@@ -217,7 +248,7 @@ reverter uma publicação ruim.
 | Publicação ruim no ar | `git revert` do commit no `gh-pages`, ou rodar o workflow de novo: a publicação é idempotente |
 | O BELUGA publicou errado e o ORCA recusou | Nada. As UFs ficam com o dado anterior. Corrija no BELUGA e rode de novo |
 | O BELUGA saiu do ar | O download falha alto e nada é publicado. O que está no ar continua |
-| Uma UF encolheu de propósito | A guarda vai recusar. Republique com o escopo novo deliberadamente |
+| Uma UF saiu da publicação do BELUGA de propósito | A guarda vai recusar, porque o conjunto encolhe. Não há botão para isso: rode a guarda com `--anterior` igual ao conjunto novo, ou publique uma vez com a UF ainda no manifest antes de tirá-la de lá |
 
 ## Estrutura do repositório
 

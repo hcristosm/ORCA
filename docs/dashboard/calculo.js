@@ -113,7 +113,9 @@
   /* Limiar de IDENTIDADE: acima de metade da área coberta, o setor externo é a
      mesma área de risco que um setor da CPRM e não entra duas vezes na conta.
      É pergunta diferente da do 1% do BELUGA, que é de detecção ("existe
-     relação entre este setor e a CPRM?") e por isso tem de ser baixa. */
+     relação entre este setor e a CPRM?") e por isso tem de ser baixa.
+     Este é o único lugar onde o número mora: o pipeline não conta setor, só
+     publica `bl_cp_frac`. */
   const LIMIAR_REPETIDO = 0.5;
 
   /* Setor que já está contado como área de risco pelo levantamento da CPRM.
