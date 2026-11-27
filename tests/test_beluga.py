@@ -8,6 +8,7 @@ levanta ConnectionError.
 
 import hashlib
 import json
+import sqlite3
 from pathlib import Path
 
 import geopandas as gpd
@@ -18,6 +19,7 @@ from typer.testing import CliRunner
 
 from src.cli import app
 from src.config import (
+    CAMADA_SETORES,
     UFS_VALIDAS,
     caminho_manifesto_beluga,
     caminho_setores_beluga,
@@ -158,6 +160,35 @@ def test_baixa_uf_e_grava_gpkg_e_manifesto(tmp_path: Path, anterior: Path):
     assert gravado["bl_fonte"].iloc[0] == "br-sgb-setorizacao"
     manifesto = json.loads(caminho_manifesto_beluga(tmp_path).read_text())
     assert manifesto["contrato"] == "v1"
+
+
+@responses.activate
+def test_sob_cp_fica_booleano_no_gpkg_e_nao_texto(tmp_path: Path, anterior: Path):
+    # Em JavaScript `"False"` é verdadeiro. Se `bl_sob_cp` virar texto no
+    # GeoPackage, o `to_file(driver="GeoJSON")` do dashboard repassa a string e
+    # o filtro de sobreposição marca TODO setor externo como repetido, sem
+    # erro nenhum no caminho. Confere o tipo DECLARADO no arquivo, não o que o
+    # pandas devolve: coluna TEXT lida pelo pandas também vira `object`.
+    colecao = json.loads(_geojson(3))
+    for feicao, valor in zip(colecao["features"], [True, False, None]):
+        feicao["properties"]["bl_sob_cp"] = valor
+    corpo = json.dumps(colecao)
+    responses.add(responses.GET, URL_MANIFEST, json=_manifest(corpo, setores=3), status=200)
+    responses.add(responses.GET, URL_SP, body=corpo, status=200)
+
+    assert _invocar(tmp_path).exit_code == 0
+
+    with sqlite3.connect(caminho_setores_beluga("SP", tmp_path)) as conexao:
+        ddl = conexao.execute(
+            "select sql from sqlite_master where name = ?", (CAMADA_SETORES,)
+        ).fetchone()[0]
+        assert '"bl_sob_cp" BOOLEAN' in ddl, ddl
+        tipos = dict(
+            conexao.execute(
+                f"select typeof(bl_sob_cp), count(*) from {CAMADA_SETORES} group by 1"
+            ).fetchall()
+        )
+    assert tipos == {"integer": 2, "null": 1}, tipos
 
 
 @responses.activate

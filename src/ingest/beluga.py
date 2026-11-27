@@ -178,6 +178,16 @@ def baixar_uf(
         )
 
     gdf = gpd.GeoDataFrame.from_features(feicoes, crs="EPSG:4326")
+    # `bl_sob_cp` é booleano com nulo (nulo = setor da própria CPRM, para quem
+    # a pergunta não se aplica). Vindo do JSON ele cai numa coluna `object` com
+    # True/False/None, e o pyogrio grava coluna `object` mista como TEXTO: o
+    # GeoPackage ficava com as strings 'True'/'False', que o
+    # `to_file(driver="GeoJSON")` do dashboard repassava como string. Em
+    # JavaScript `"False"` é verdadeiro, então o filtro de sobreposição
+    # marcaria TODO setor externo como repetido, sem erro nenhum no caminho.
+    # O dtype anulável do pandas faz o pyogrio gravar BOOLEAN com NULL.
+    if "bl_sob_cp" in gdf.columns:
+        gdf["bl_sob_cp"] = gdf["bl_sob_cp"].astype("boolean")
     destino = caminho_setores_beluga(uf_norm, diretorio)
     salvar_setores(gdf, destino)
     logger.info("%s: %d setores do BELUGA gravados em %s", uf_norm, len(gdf), destino)
