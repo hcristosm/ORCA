@@ -122,9 +122,17 @@ jobs:
         # conferência de contrato, de sha256 e da contagem de feições de cada
         # UF, mais o piso contra os setores já publicados aqui.
         #
-        # Continua fatal, pela mesma razão de antes: sem setores a exportação
-        # não tem o que cruzar e o dashboard sairia vazio. UF que falha fica
-        # com o dado anterior e o comando sai com 1 dizendo por quê.
+        # UF que falha fica com o dado anterior e o comando sai com 1,
+        # dizendo por quê: setor congelado em silêncio é o jeito de a coleta
+        # parar por meses sem ninguém ver, então o run TEM de ficar vermelho.
+        #
+        # Mas vermelho não é motivo para congelar as outras 26. Diferente da
+        # branch dados-base, que vinha inteira ou não vinha, aqui a falha é
+        # por UF, e `exportar_nacional` pula UF sem GeoPackage sem
+        # interromper as demais. Por isso os dois passos seguintes rodam com
+        # `!cancelled()`: um sha256 que não bate em RR não pode deixar SP sem
+        # a chuva de hoje. Quem barra a publicação vazia continua sendo a
+        # guarda de "Conferir antes de publicar".
         run: >
           python -m src.cli baixar-beluga
           ${{ github.event.inputs.ufs && format('--ufs {0}', github.event.inputs.ufs) || '' }}
@@ -136,6 +144,7 @@ jobs:
         # sem correspondência faz o `ls` sair 2, o pipeline herda 2 e o
         # `errexit` mataria o passo ANTES do `if` -- deixando o operador sem
         # a anotação ::error:: que explica o quê.
+        if: "!cancelled()"
         shell: bash -eo pipefail {0}
         run: |
           TOTAL=$(find data -maxdepth 1 -name 'beluga_*.gpkg' | wc -l)
@@ -146,6 +155,7 @@ jobs:
           fi
 
       - name: Rodar atualização nacional
+        if: "!cancelled()"
         run: >
           python -m src.cli atualizar-nacional
           ${{ github.event.inputs.ufs && format('--ufs {0}', github.event.inputs.ufs) || '' }}
