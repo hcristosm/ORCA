@@ -346,9 +346,13 @@ def test_exportar_dashboard_propaga_campos_do_beluga_para_o_geojson(tmp_path: Pa
         bl_produto=["setorizacao_risco", "ponto_risco"],
         bl_licenca=["não declarada no serviço", "não declarada"],
         orgao_exec=["SGB/CPRM", "SSPDC"],
-        bl_sob_cp=[None, True],
         bl_cp_frac=[None, 0.8123],
     )
+    # Mesmo dtype que `baixar_uf` grava (ver src/ingest/beluga.py): coluna
+    # `object` com True/False/None faz o pyogrio gravar TEXTO no GeoPackage, e
+    # aí o GeoJSON sairia com a string "True", que em JavaScript é verdadeira
+    # tanto quanto "False".
+    setores["bl_sob_cp"] = pd.Series([None, True], index=setores.index).astype("boolean")
     salvar_setores(setores, caminho_setores_beluga("SP", tmp_path))
     saida = tmp_path / "export"
     with _openmeteo_stubbado():
@@ -362,6 +366,14 @@ def test_exportar_dashboard_propaga_campos_do_beluga_para_o_geojson(tmp_path: Pa
     ]
     assert gdf["bl_produto"].tolist() == ["setorizacao_risco", "ponto_risco"]
     assert gdf["bl_cp_frac"].tolist()[1] == pytest.approx(0.8123)
+
+    # `bl_sob_cp` conferido no JSON CRU, não pelo geopandas: o pandas lê
+    # coluna booleana com nulo como float64, então `read_file` devolve 1.0 e
+    # 0.0 tanto para `true` quanto para `1.0` no arquivo. O front-end compara
+    # com `=== true` (`sobrepoeCprm` em docs/dashboard/calculo.js), e com
+    # `1.0` todo setor sobreposto apareceria como NÃO sobreposto.
+    bruto = json.loads((saida / "setores_sp.geojson").read_text())
+    assert [f["properties"]["bl_sob_cp"] for f in bruto["features"]] == [None, True]
 
 
 def test_exportar_dashboard_lista_municipios_no_meta(tmp_path: Path, setores):

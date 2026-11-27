@@ -70,6 +70,14 @@ def _exportar_setores(cruzado: pd.DataFrame, caminho: Path) -> None:
     for coluna in ("chuva_24h", "chuva_72h", "distancia_km"):
         if coluna in reduzido.columns:
             reduzido[coluna] = reduzido[coluna].round(2)
+    # `bl_sob_cp` é BOOLEAN com NULL no GeoPackage, mas o pandas lê coluna
+    # booleana com nulo como float64: 1.0, 0.0 e NaN. Escrito assim, o GeoJSON
+    # sai com `1.0` em vez de `true`, e o front-end compara com `=== true`
+    # (ver `sobrepoeCprm` em docs/dashboard/calculo.js), então TODO setor
+    # sobreposto apareceria como não sobreposto. O dtype anulável devolve
+    # true/false/null no JSON.
+    if "bl_sob_cp" in reduzido.columns:
+        reduzido["bl_sob_cp"] = reduzido["bl_sob_cp"].astype("boolean")
     if caminho.exists():
         caminho.unlink()
     reduzido.to_file(caminho, driver="GeoJSON")
