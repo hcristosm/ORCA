@@ -1,0 +1,60 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 192,
+  "total_municipios": 31,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:39:58.626305+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2025-07-31",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 192
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:39:58.626305+00:00"
+  },
+  "municipios": [
+    "ALAGOA GRANDE",
+    "ALAGOINHA",
+    "ARARA",
+    "ARAÇAGI",
+    "AREIA",
+    "BANANEIRAS",
+    "BAYEUX",
+    "BAÍA DA TRAIÇÃO",
+    "CAAPORÃ",
+    "CABEDELO",
+    "CAMPINA GRANDE",
+    "COREMAS",
+    "GUARABIRA",
+    "INGÁ",
+    "JOÃO PESSOA",
+    "LUCENA",
+    "MATARACA",
+    "MULUNGU",
+    "NATUBA",
+    "PATOS",
+    "PILÕES",
+    "PITIMBU",
+    "POMBAL",
+    "RIO TINTO",
+    "SANTA RITA",
+    "SAPÉ",
+    "SERRA REDONDA",
+    "SOLÂNEA",
+    "SOUSA",
+    "SÃO BENTO",
+    "SÃO JOÃO DO RIO DO PEIXE"
+  ]
+}

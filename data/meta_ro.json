@@ -1,0 +1,57 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 143,
+  "total_municipios": 28,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:41:16.959550+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2024-03-20",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 143
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:41:16.959550+00:00"
+  },
+  "municipios": [
+    "ALTA FLORESTA D'OESTE",
+    "ALTO ALEGRE DOS PARECIS",
+    "ALVORADA D'OESTE",
+    "ARIQUEMES",
+    "BURITIS",
+    "CACOAL",
+    "CANDEIAS DO JAMARI",
+    "CHUPINGUAIA",
+    "COLORADO DO OESTE",
+    "COSTA MARQUES",
+    "ESPIGÃO D'OESTE",
+    "GUAJARÁ-MIRIM",
+    "ITAPUÃ DO OESTE",
+    "JARU",
+    "JI-PARANÁ",
+    "MACHADINHO D'OESTE",
+    "MINISTRO ANDREAZZA",
+    "NOVA BRASILÂNDIA D'OESTE",
+    "NOVA MAMORÉ",
+    "OURO PRETO DO OESTE",
+    "PARECIS",
+    "PIMENTA BUENO",
+    "PIMENTEIRAS DO OESTE",
+    "PORTO VELHO",
+    "ROLIM DE MOURA",
+    "SANTA LUZIA D'OESTE",
+    "TEIXEIRÓPOLIS",
+    "VILHENA"
+  ]
+}

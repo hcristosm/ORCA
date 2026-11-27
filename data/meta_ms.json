@@ -1,0 +1,47 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 42,
+  "total_municipios": 18,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:36:08.910582+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2022-05-24",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 42
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:36:08.910582+00:00"
+  },
+  "municipios": [
+    "ANASTÁCIO",
+    "AQUIDAUANA",
+    "BATAGUASSU",
+    "BATAYPORÃ",
+    "BELA VISTA",
+    "BONITO",
+    "CAMAPUÃ",
+    "CAMPO GRANDE",
+    "CORUMBÁ",
+    "COXIM",
+    "DOURADOS",
+    "GUIA LOPES DA LAGUNA",
+    "IVINHEMA",
+    "LADÁRIO",
+    "MIRANDA",
+    "NIOAQUE",
+    "PONTA PORÃ",
+    "PORTO MURTINHO"
+  ]
+}

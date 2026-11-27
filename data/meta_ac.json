@@ -1,0 +1,47 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 164,
+  "total_municipios": 18,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:32:17.098085+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2026-05-22",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 164
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:32:17.098085+00:00"
+  },
+  "municipios": [
+    "ASSIS BRASIL",
+    "BRASILÉIA",
+    "CRUZEIRO DO SUL",
+    "EPITACIOLÂNDIA",
+    "FEIJÓ",
+    "JORDÃO",
+    "MANOEL URBANO",
+    "MARECHAL THAUMATURGO",
+    "PLÁCIDO DE CASTRO",
+    "PORTO ACRE",
+    "PORTO WALTER",
+    "RIO BRANCO",
+    "RODRIGUES ALVES",
+    "SANTA ROSA DO PURUS",
+    "SENA MADUREIRA",
+    "SENADOR GUIOMARD",
+    "TARAUACÁ",
+    "XAPURI"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 231,
+  "total_municipios": 19,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:34:57.583147+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2025-03-19",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 231
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:34:57.583147+00:00"
+  },
+  "municipios": [
+    "ALEXÂNIA",
+    "ANÁPOLIS",
+    "APARECIDA DE GOIÂNIA",
+    "CALDAS NOVAS",
+    "CERES",
+    "FORMOSA",
+    "GOIÁS",
+    "GOIÂNIA",
+    "ITAJÁ",
+    "JATAÍ",
+    "LAGOA SANTA",
+    "MINEIROS",
+    "NOVO GAMA",
+    "PIRENÓPOLIS",
+    "QUIRINÓPOLIS",
+    "SANTA HELENA DE GOIÁS",
+    "SANTA RITA DO ARAGUAIA",
+    "SENADOR CANEDO",
+    "SILVÂNIA"
+  ]
+}

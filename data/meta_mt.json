@@ -1,0 +1,55 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 189,
+  "total_municipios": 26,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:37:10.447076+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2026-04-22",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 189
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:37:10.447076+00:00"
+  },
+  "municipios": [
+    "ARENÁPOLIS",
+    "BARRA DO BUGRES",
+    "BARRA DO GARÇAS",
+    "COLNIZA",
+    "COMODORO",
+    "CUIABÁ",
+    "LUCAS DO RIO VERDE",
+    "LUCIARA",
+    "NOBRES",
+    "NOSSA SENHORA DO LIVRAMENTO",
+    "NOVA MUTUM",
+    "NOVA OLÍMPIA",
+    "NOVA XAVANTINA",
+    "PARANATINGA",
+    "PEIXOTO DE AZEVEDO",
+    "PONTES E LACERDA",
+    "PORTO ESPERIDIÃO",
+    "PRIMAVERA DO LESTE",
+    "RONDONÓPOLIS",
+    "SANTA TEREZINHA",
+    "SANTO ANTÔNIO DO LEVERGER",
+    "SINOP",
+    "SORRISO",
+    "SÃO FÉLIX DO ARAGUAIA",
+    "VÁRZEA GRANDE",
+    "ÁGUA BOA"
+  ]
+}

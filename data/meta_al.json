@@ -1,0 +1,65 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 220,
+  "total_municipios": 36,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:32:17.299306+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2025-10-23",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 220
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:32:17.299306+00:00"
+  },
+  "municipios": [
+    "ARAPIRACA",
+    "ATALAIA",
+    "BARRA DE SANTO ANTÔNIO",
+    "BARRA DE SÃO MIGUEL",
+    "BATALHA",
+    "BRANQUINHA",
+    "CAJUEIRO",
+    "CAMPESTRE",
+    "CAPELA",
+    "COLÔNIA LEOPOLDINA",
+    "COQUEIRO SECO",
+    "CORURIPE",
+    "FELIZ DESERTO",
+    "JEQUIÁ DA PRAIA",
+    "JOAQUIM GOMES",
+    "LIMOEIRO DE ANADIA",
+    "MACEIÓ",
+    "MARAGOGI",
+    "MARECHAL DEODORO",
+    "MATRIZ DE CAMARAGIBE",
+    "MURICI",
+    "PARIPUEIRA",
+    "PAULO JACINTO",
+    "PILAR",
+    "POÇO DAS TRINCHEIRAS",
+    "QUEBRANGULO",
+    "RIO LARGO",
+    "SANTANA DO IPANEMA",
+    "SANTANA DO MUNDAÚ",
+    "SATUBA",
+    "SÃO JOSÉ DA LAJE",
+    "SÃO LUÍS DO QUITUNDE",
+    "SÃO MIGUEL DOS CAMPOS",
+    "TRAIPU",
+    "UNIÃO DOS PALMARES",
+    "VIÇOSA"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 244,
+  "total_municipios": 38,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:41:11.960171+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2024-12-30",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 244
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:41:11.960171+00:00"
+  },
+  "municipios": [
+    "ALMIRANTE TAMANDARÉ",
+    "ANTONINA",
+    "ARAUCÁRIA",
+    "BARRACÃO",
+    "BOA VISTA DA APARECIDA",
+    "BOCAIÚVA DO SUL",
+    "CAMPINA GRANDE DO SUL",
+    "CAMPO LARGO",
+    "CAMPO MAGRO",
+    "CAPITÃO LEÔNIDAS MARQUES",
+    "CERRO AZUL",
+    "COLOMBO",
+    "CURITIBA",
+    "FAZENDA RIO GRANDE",
+    "FOZ DO IGUAÇU",
+    "FRANCISCO BELTRÃO",
+    "GENERAL CARNEIRO",
+    "GUARANIAÇU",
+    "GUARAQUEÇABA",
+    "GUARATUBA",
+    "ITAPERUÇU",
+    "JAGUARIAÍVA",
+    "LOANDA",
+    "PARANAGUÁ",
+    "PATO BRANCO",
+    "PINHAIS",
+    "PIRAQUARA",
+    "REALEZA",
+    "RIO BONITO DO IGUAÇU",
+    "RIO BRANCO DO SUL",
+    "RIO NEGRO",
+    "SANTA LÚCIA",
+    "SAUDADE DO IGUAÇU",
+    "SÃO JOSÉ DOS PINHAIS",
+    "SÃO MATEUS DO SUL",
+    "SÃO MIGUEL DO IGUAÇU",
+    "UMUARAMA",
+    "UNIÃO DA VITÓRIA"
+  ]
+}

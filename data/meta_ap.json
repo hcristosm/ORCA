@@ -1,0 +1,37 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T18:00:00+00:00",
+  "total_setores": 48,
+  "total_municipios": 8,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T18:32:16.840506+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2017-06-13",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 48
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T18:00:00+00:00",
+    "consultado_em": "2026-11-27T18:32:16.840506+00:00"
+  },
+  "municipios": [
+    "CALÇOENE",
+    "FERREIRA GOMES",
+    "LARANJAL DO JARI",
+    "MACAPÁ",
+    "PEDRA BRANCA DO AMAPARI",
+    "PORTO GRANDE",
+    "SANTANA",
+    "VITÓRIA DO JARI"
+  ]
+}

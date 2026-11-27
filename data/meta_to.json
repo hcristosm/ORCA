@@ -1,0 +1,35 @@
+{
+  "fonte": "openmeteo",
+  "referencia": "2026-11-27T19:00:00+00:00",
+  "total_setores": 9,
+  "total_municipios": 6,
+  "horizonte_previsao_horas": 72,
+  "gerado_em": "2026-11-27T19:02:25.060382+00:00",
+  "setores": {
+    "coletado_em": "2026-11-27T15:26:44+00:00",
+    "mais_recente": "2019-07-01",
+    "contrato": "v1",
+    "fontes": [
+      {
+        "id": "br-sgb-setorizacao",
+        "nome": "Setorização de Risco Geológico (CPRM/SGB)",
+        "orgao": "Serviço Geológico do Brasil (SGB/CPRM)",
+        "licenca": "não declarada no serviço",
+        "setores": 9
+      }
+    ]
+  },
+  "chuva": {
+    "fonte": "openmeteo",
+    "ate": "2026-11-27T19:00:00+00:00",
+    "consultado_em": "2026-11-27T19:02:25.060382+00:00"
+  },
+  "municipios": [
+    "ARAGUANÃ",
+    "ARAGUAÍNA",
+    "PEIXE",
+    "PORTO NACIONAL",
+    "SÃO MIGUEL DO TOCANTINS",
+    "XAMBIOÁ"
+  ]
+}
