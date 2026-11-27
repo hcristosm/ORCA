@@ -26,7 +26,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from src.config import caminho_setores
+from src.config import caminho_setores_beluga
 from src.export.dashboard_data import exportar_dashboard
 from src.processing.cruzamento import centroides_4326
 from src.processing.grade_espacial import calibrar_tamanho_celula, mapear_para_grade
@@ -56,7 +56,7 @@ def exportar_nacional(
 ) -> dict[str, dict]:
     """Exporta o dashboard (fonte Open-Meteo) para várias UFs, com 1 grade nacional.
 
-    UFs sem setores ingeridos localmente (`ingest-cprm` ainda não rodou para
+    UFs sem setores baixados localmente (`baixar-beluga` ainda não rodou para
     elas) são puladas com um aviso, não interrompem as demais. O mesmo vale
     para UFs cuja exportação individual falhar (ex.: Open-Meteo indisponível
     para aquele lote) — mas essas ganham uma 2a tentativa em série, ao final
@@ -88,7 +88,7 @@ def exportar_nacional(
     """
     setores_por_uf = {}
     for uf in ufs:
-        caminho = caminho_setores(uf, diretorio_dados)
+        caminho = caminho_setores_beluga(uf, diretorio_dados)
         if not caminho.exists():
             logger.warning("Setores de %s não encontrados em %s; pulando.", uf, caminho)
             continue
@@ -99,7 +99,7 @@ def exportar_nacional(
             logger.exception("Setores de %s ilegíveis em %s; pulando.", uf, caminho)
 
     if not setores_por_uf:
-        raise ValueError("Nenhuma das UFs pedidas tem setores ingeridos localmente.")
+        raise ValueError("Nenhuma das UFs pedidas tem setores baixados localmente.")
 
     todos_pontos: list[tuple[float, float]] = []
     fatias: dict[str, tuple[int, int]] = {}
@@ -122,7 +122,7 @@ def exportar_nacional(
             )
         except Exception:
             # Qualquer exceção, não uma lista fechada: um KeyError por mudança
-            # de schema da CPRM numa UF escapava do `executor.map` e derrubava
+            # de esquema dos setores numa UF escapava do `executor.map` e derrubava
             # a exportação das 27. Run degenerado (o mesmo defeito em todas as
             # UFs) continua barrado pelo piso de scripts/mesclar_publicado.py.
             logger.exception("Falha ao exportar %s", uf)

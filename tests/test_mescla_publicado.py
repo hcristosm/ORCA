@@ -66,7 +66,7 @@ def test_indice_nao_regride_quando_run_cresce(tmp_path):
 
 
 def test_uf_fora_do_escopo_sai_do_dashboard(tmp_path):
-    # Uma UF legitimamente retirada do dados-base precisa poder sumir:
+    # Uma UF legitimamente retirada da publicação do BELUGA precisa poder sumir:
     # preservar tudo pra sempre congelaria dado morto no ar.
     pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
     assert mp.mesclar(pub, atual, {"sp"})[0] == []
@@ -133,14 +133,14 @@ def test_main_mescla_e_usa_os_gpkg_como_escopo(tmp_path):
     escopo = tmp_path / "data"
     escopo.mkdir()
     for uf in ("mg", "rj", "sp"):
-        (escopo / f"risco_{uf}.gpkg").write_bytes(b"")
+        (escopo / f"beluga_{uf}.gpkg").write_bytes(b"")
     assert mp.main(["--publicado", str(pub), "--atual", str(atual), "--escopo", str(escopo)]) == 0
     assert json.loads((atual / mp.INDICE).read_text()) == ["mg", "rj", "sp"]
 
 
 def test_ufs_no_escopo_le_os_gpkg(tmp_path):
-    (tmp_path / "risco_sp.gpkg").write_bytes(b"")
-    (tmp_path / "risco_rj.gpkg").write_bytes(b"")
+    (tmp_path / "beluga_sp.gpkg").write_bytes(b"")
+    (tmp_path / "beluga_rj.gpkg").write_bytes(b"")
     (tmp_path / "chuva_sp_2026.csv").write_text("")
     assert mp.ufs_no_escopo(tmp_path) == {"sp", "rj"}
 
@@ -152,7 +152,7 @@ def _escopo(base: Path, ufs: list[str]) -> Path:
     escopo = base / "escopo"
     escopo.mkdir(parents=True, exist_ok=True)
     for uf in ufs:
-        (escopo / f"risco_{uf}.gpkg").write_bytes(b"")
+        (escopo / f"beluga_{uf}.gpkg").write_bytes(b"")
     return escopo
 
 
@@ -203,7 +203,7 @@ def test_piso_vem_do_ambiente(tmp_path, monkeypatch):
 
 def test_piso_nao_bloqueia_quando_escopo_e_desconhecido(tmp_path):
     # Sem GeoPackages não dá para medir cobertura; quem barra esse caso é o
-    # passo "Baixar setores da branch dados-base", que é fatal.
+    # passo "Baixar setores do BELUGA", que é fatal.
     todas = ["ac", "al"]
     pub, atual = _montar(tmp_path, todas, ["ac"])
     escopo = tmp_path / "vazio"
@@ -295,13 +295,24 @@ def test_numerador_do_piso_ignora_uf_fora_do_escopo(tmp_path):
     assert mp.main(argv) == 1
 
 
+def test_escopo_usa_o_mesmo_nome_de_arquivo_que_o_download(tmp_path):
+    # Se o prefixo divergir de `caminho_setores_beluga`, o escopo vem vazio, o
+    # piso de cobertura desliga em silêncio e o único detector de run
+    # degenerado que sobra deixa de existir.
+    from src.config import caminho_setores_beluga
+
+    caminho_setores_beluga("SP", tmp_path).write_bytes(b"")
+
+    assert mp.ufs_no_escopo(tmp_path) == {"sp"}
+
+
 def test_aviso_de_escopo_reduzido_orienta_o_operador(tmp_path, capsys):
     pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
     mp.mesclar(pub, atual, {"sp"})
     saida = capsys.readouterr().out
     assert "::warning::" in saida
     assert "rj" in saida
-    assert "ingerir-setores.yml" in saida
+    assert "download do BELUGA" in saida
     assert "regressão" in saida
 
 

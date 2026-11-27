@@ -9,11 +9,12 @@ import pytest
 import responses
 from shapely.geometry import Polygon
 
-from src.config import caminho_manifesto_cprm, caminho_setores
+from src.config import caminho_manifesto_beluga, caminho_setores_beluga
 from src.export.dashboard_data import (
     ExportacaoDashboardError,
     _calcular_chuva_openmeteo,
     _municipios_com_chuva_relevante,
+    data_setor_mais_recente,
     exportar_dashboard,
 )
 from src.storage import salvar_setores
@@ -114,7 +115,7 @@ def test_exportar_dashboard_fonte_openmeteo_fim_a_fim(tmp_path: Path, setores):
 
     from src.ingest.openmeteo import FORECAST_URL
 
-    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    salvar_setores(setores, caminho_setores_beluga("SP", tmp_path))
 
     agora = pd.Timestamp.now(tz="UTC").floor("h")
     horas = pd.date_range(agora - pd.Timedelta(hours=47), periods=48, freq="h", tz="UTC")
@@ -140,6 +141,8 @@ def test_exportar_dashboard_fonte_openmeteo_fim_a_fim(tmp_path: Path, setores):
     gdf = gpd.read_file(saida / "setores_sp.geojson")
     assert set(gdf["fonte_estacao"]) == {"openmeteo"}
     assert set(gdf["codigo_estacao"]) == {"openmeteo"}
+    # Dado morto: nenhum consumidor do dashboard lia `nome_estacao`.
+    assert "nome_estacao" not in gdf.columns
 
     series = json.loads((saida / "series_sp.json").read_text())
     assert set(series.keys()) == {"CIDADE A", "CIDADE B"}
@@ -151,7 +154,7 @@ def test_exportar_dashboard_openmeteo_triagem_municipio_por_chuva_prevista(tmp_p
     from src.export.dashboard_data import DIAS_HISTORICO_CRUZAMENTO, JANELA_SERIE_DIAS
     from src.ingest.openmeteo import FORECAST_URL
 
-    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    salvar_setores(setores, caminho_setores_beluga("SP", tmp_path))
 
     agora = pd.Timestamp.now(tz="UTC").floor("h")
     # S1 (CIDADE A) recebe uma janela com chuva forte o bastante pra passar
@@ -210,7 +213,7 @@ def test_exportar_dashboard_aceita_cache_openmeteo(tmp_path: Path, setores):
     from src.ingest.openmeteo import FORECAST_URL
     from src.storage_cache_openmeteo import CacheOpenMeteo
 
-    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    salvar_setores(setores, caminho_setores_beluga("SP", tmp_path))
     cache = CacheOpenMeteo(tmp_path / "cache.sqlite")
 
     agora = pd.Timestamp.now(tz="UTC").floor("h")
@@ -257,7 +260,7 @@ def test_exportar_dashboard_fonte_openmeteo_gera_previsao(tmp_path: Path, setore
 
     from src.ingest.openmeteo import FORECAST_URL
 
-    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    salvar_setores(setores, caminho_setores_beluga("SP", tmp_path))
 
     agora = pd.Timestamp.now(tz="UTC").floor("h")
     horas = pd.date_range(agora - pd.Timedelta(hours=47), periods=48, freq="h", tz="UTC")
@@ -285,28 +288,80 @@ def test_exportar_dashboard_fonte_openmeteo_gera_previsao(tmp_path: Path, setore
 def _exportar_minimo(tmp_path: Path, setores) -> dict:
     """Exporta uma vez com a Open-Meteo stubbada e devolve o meta gerado.
 
-    Para os testes que se importam com o conteúdo do meta (datas da CPRM,
+    Para os testes que se importam com o conteúdo do meta (bloco `setores`,
     lista de municípios), não com a chuva em si.
     """
-    salvar_setores(setores, caminho_setores("SP", tmp_path))
+    salvar_setores(setores, caminho_setores_beluga("SP", tmp_path))
     saida = tmp_path / "export"
     with _openmeteo_stubbado():
         exportar_dashboard("SP", tmp_path, saida)
     return json.loads((saida / "meta_sp.json").read_text())
 
 
-def test_exportar_dashboard_grava_datas_por_fonte_no_meta(tmp_path: Path, setores):
-    setores = setores.assign(data_setor=["2021-06-15", "2024-03-02"])
-    caminho_manifesto_cprm("SP", tmp_path).write_text(json.dumps({
-        "last_objectid": 2, "last_data_setor": "2024-03-02", "ingerido_em": "2026-09-01T03:10:00+00:00",
+def _manifesto_beluga(tmp_path: Path, por_fonte: dict[str, int]) -> None:
+    caminho_manifesto_beluga(tmp_path).write_text(json.dumps({
+        "contrato": "v1",
+        "gerado_em": "2026-11-27T03:03:37+00:00",
+        "ufs": {"sp": {"arquivo": "setores_sp.geojson", "setores": sum(por_fonte.values()),
+                       "por_fonte": por_fonte}},
+        "fontes": [
+            {"id": "br-sgb-setorizacao", "nome": "Setorização de Risco (CPRM/SGB)",
+             "orgao": "SGB/CPRM", "licenca": {"nome": "não declarada no serviço"}},
+            {"id": "sp-suzano-defesa-civil", "nome": "Setorização de Suzano",
+             "orgao": "Defesa Civil de Suzano", "licenca": {"nome": "CC-BY-4.0"}},
+            {"id": "mg-belo-horizonte-pbh", "nome": "Áreas de risco de BH",
+             "orgao": "PBH", "licenca": {"nome": "CC-BY-4.0"}},
+        ],
     }))
+
+
+def test_exportar_dashboard_grava_bloco_setores_no_meta(tmp_path: Path, setores):
+    setores = setores.assign(data_setor=["2021-06-15", "2024-03-02"])
+    _manifesto_beluga(tmp_path, {"br-sgb-setorizacao": 2, "sp-suzano-defesa-civil": 7})
 
     meta = _exportar_minimo(tmp_path, setores)
 
-    assert meta["cprm"] == {"ingerido_em": "2026-09-01T03:10:00+00:00", "setor_mais_recente": "2024-03-02"}
+    assert meta["setores"]["coletado_em"] == "2026-11-27T03:03:37+00:00"
+    assert meta["setores"]["mais_recente"] == "2024-03-02"
+    assert meta["setores"]["contrato"] == "v1"
+    # Só as fontes presentes nesta UF (BH não aparece), da maior para a menor.
+    assert meta["setores"]["fontes"] == [
+        {"id": "sp-suzano-defesa-civil", "nome": "Setorização de Suzano",
+         "orgao": "Defesa Civil de Suzano", "licenca": "CC-BY-4.0", "setores": 7},
+        {"id": "br-sgb-setorizacao", "nome": "Setorização de Risco (CPRM/SGB)",
+         "orgao": "SGB/CPRM", "licenca": "não declarada no serviço", "setores": 2},
+    ]
+    assert "cprm" not in meta
     assert meta["chuva"]["fonte"] == "openmeteo"
     assert meta["chuva"]["ate"] == meta["referencia"]
     assert meta["chuva"]["consultado_em"] == meta["gerado_em"]
+
+
+def test_exportar_dashboard_propaga_campos_do_beluga_para_o_geojson(tmp_path: Path, setores):
+    # Contrato com o front-end: estes campos têm de chegar às propriedades do
+    # setores_<uf>.geojson, ou o dashboard não consegue dizer de onde veio cada
+    # setor nem distinguir setor repetido da CPRM (bl_cp_frac).
+    setores = setores.assign(
+        bl_fonte=["br-sgb-setorizacao", "mg-juiz-de-fora-sspdc"],
+        bl_produto=["setorizacao_risco", "ponto_risco"],
+        bl_licenca=["não declarada no serviço", "não declarada"],
+        orgao_exec=["SGB/CPRM", "SSPDC"],
+        bl_sob_cp=[None, True],
+        bl_cp_frac=[None, 0.8123],
+    )
+    salvar_setores(setores, caminho_setores_beluga("SP", tmp_path))
+    saida = tmp_path / "export"
+    with _openmeteo_stubbado():
+        exportar_dashboard("SP", tmp_path, saida)
+
+    gdf = gpd.read_file(saida / "setores_sp.geojson")
+    assert list(gdf.columns) == [
+        "num_setor", "munic", "grau_risco", "chuva_24h", "chuva_72h", "distancia_km",
+        "fonte_estacao", "codigo_estacao", "bl_fonte", "bl_produto", "bl_licenca",
+        "orgao_exec", "bl_sob_cp", "bl_cp_frac", "geometry",
+    ]
+    assert gdf["bl_produto"].tolist() == ["setorizacao_risco", "ponto_risco"]
+    assert gdf["bl_cp_frac"].tolist()[1] == pytest.approx(0.8123)
 
 
 def test_exportar_dashboard_lista_municipios_no_meta(tmp_path: Path, setores):
@@ -321,20 +376,33 @@ def test_exportar_dashboard_lista_municipios_no_meta(tmp_path: Path, setores):
     assert meta["municipios"] == ["CIDADE A", "CIDADE B"]
 
 
-def test_exportar_dashboard_datas_cprm_indisponiveis_viram_none(tmp_path: Path, setores):
-    # Sem manifesto e sem coluna data_setor (dado antigo): o meta sai com None,
-    # e o front-end mostra "data indisponível" em vez de quebrar.
+def test_exportar_dashboard_sem_manifesto_do_beluga_nao_quebra(tmp_path: Path, setores):
+    # Sem manifesto e sem coluna data_setor: o bloco sai com None, o front-end
+    # mostra "data indisponível" e a exportação não quebra.
     meta = _exportar_minimo(tmp_path, setores)
 
-    assert meta["cprm"] == {"ingerido_em": None, "setor_mais_recente": None}
+    assert meta["setores"] == {
+        "coletado_em": None, "mais_recente": None, "contrato": None, "fontes": [],
+    }
 
 
-def test_exportar_dashboard_manifesto_cprm_corrompido_nao_quebra(tmp_path: Path, setores):
-    caminho_manifesto_cprm("SP", tmp_path).write_text("{não é json")
+def test_exportar_dashboard_manifesto_do_beluga_corrompido_nao_quebra(tmp_path: Path, setores):
+    caminho_manifesto_beluga(tmp_path).write_text("{não é json")
 
     meta = _exportar_minimo(tmp_path, setores)
 
-    assert meta["cprm"]["ingerido_em"] is None
+    assert meta["setores"]["coletado_em"] is None
+    assert meta["setores"]["fontes"] == []
+
+
+def test_data_setor_mais_recente_le_milissegundos_do_arcgis():
+    # Veio de src/ingest/cprm.py com a migração para o BELUGA, que entrega a
+    # data como texto. O caminho numérico fica: a CPRM/SGB entregava
+    # milissegundos desde 1970 e, lido como nanossegundos, tudo virava
+    # 01/01/1970.
+    assert data_setor_mais_recente(pd.Series([1711497600000, 1769731200000])) == "2026-01-30"
+    assert data_setor_mais_recente(pd.Series(["2020-01-01", "2021-06-15"])) == "2021-06-15"
+    assert data_setor_mais_recente(pd.Series([None, None], dtype="float64")) is None
 
 
 def test_calcular_chuva_openmeteo_deduplica_pontos_repetidos(tmp_path: Path, setores):
@@ -398,7 +466,6 @@ def test_calcular_chuva_openmeteo_grade_reporta_distancia_real_ate_a_celula(
             setores, janelas=(24, 72), agora=agora, pontos=pontos_grade
         )
 
-    assert set(resultado["nome_estacao"]) == {"Open-Meteo (célula de grade)"}
     # setor 1: o ponto de grade É o seu próprio centroide
     assert resultado.iloc[0]["distancia_km"] == pytest.approx(0.0, abs=0.05)
     # setor 2: distância real, ordem de ~69 km (0,5° lat + 0,4° lon nessa latitude)
@@ -427,8 +494,8 @@ def test_calcular_chuva_openmeteo_sem_pontos_mantem_centro_do_setor(tmp_path: Pa
         )
         resultado, _ = _calcular_chuva_openmeteo(setores, janelas=(24, 72), agora=agora)
 
-    assert set(resultado["nome_estacao"]) == {"Open-Meteo (centro do setor)"}
     assert set(resultado["distancia_km"]) == {0.0}
+    assert "nome_estacao" not in resultado.columns
 
 
 def test_calcular_chuva_openmeteo_pontos_de_tamanho_diferente_levanta_erro(setores):

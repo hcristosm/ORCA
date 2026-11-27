@@ -1,10 +1,10 @@
 """Mescla o dashboard publicado no que este run gerou (spec §4.5).
 
-Existe porque a publicação usa `force_orphan`: o gh-pages passa a ser
-EXATAMENTE o conteúdo de `docs/dashboard`, então uma UF que a Open-Meteo
-não entregou hoje simplesmente sumiria do ar. A cobertura diária oscila
-entre 70% e 100% (18 runs, 2026-08-10 a 08-23), ou seja, sumiço seria o
-caso comum, não a exceção.
+Existe porque o deploy apaga do gh-pages o que não está em
+`docs/dashboard`, então uma UF que a Open-Meteo não entregou hoje
+simplesmente sumiria do ar. A cobertura diária oscila entre 70% e 100%
+(18 runs, 2026-08-10 a 08-23), ou seja, sumiço seria o caso comum, não a
+exceção.
 
 Mesclando, degradar vira envelhecer (princípio §3.2): a UF que falhou
 continua publicada com o dado da véspera, e a guarda anti-regressão do
@@ -14,7 +14,7 @@ normal.
 Duas decisões que a mescla NÃO toma sozinha:
 
 1. Só preserva UF que ainda está no escopo desta execução, medido pelos
-   GeoPackages em `--escopo` (que vêm da branch dados-base). Uma mescla
+   GeoPackages em `--escopo` (que vêm do download do BELUGA). Uma mescla
    que preservasse tudo para sempre seria tão errada quanto não preservar
    nada: uma UF legitimamente retirada do escopo ficaria imortal no
    dashboard, congelada, sem nenhum jeito de sair.
@@ -88,8 +88,14 @@ def escrever_indice(caminho: Path, ufs: list[str]) -> None:
 
 
 def ufs_no_escopo(escopo_dir: Path) -> set[str]:
-    """UFs que esta execução tinha o direito de exportar (risco_<uf>.gpkg)."""
-    return {p.stem.removeprefix("risco_").lower() for p in escopo_dir.glob("risco_*.gpkg")}
+    """UFs que esta execução tinha o direito de exportar (beluga_<uf>.gpkg).
+
+    O prefixo acompanha `caminho_setores_beluga` em src/config.py. Se ele
+    divergir, o escopo vem vazio, e escopo vazio DESLIGA o piso de cobertura
+    abaixo -- que é o único detector de run degenerado que sobra depois que a
+    mescla torna `atual >= publicado` verdadeiro por construção.
+    """
+    return {p.stem.removeprefix("beluga_").lower() for p in escopo_dir.glob("beluga_*.gpkg")}
 
 
 def mesclar(publicado_dir: Path, atual_dir: Path, escopo: set[str]) -> tuple[list[str], list[str]]:
@@ -125,7 +131,7 @@ def mesclar(publicado_dir: Path, atual_dir: Path, escopo: set[str]) -> tuple[lis
 
     if fora_do_escopo:
         # A guarda do workflow vai recusar por regressão, com a MESMA
-        # mensagem que aparece quando o dados-base veio pela metade.
+        # mensagem que aparece quando o download do BELUGA veio pela metade.
         # Causas opostas, ações opostas: sem esta anotação o operador não
         # tem como saber qual das duas está vendo.
         print(
@@ -133,9 +139,9 @@ def mesclar(publicado_dir: Path, atual_dir: Path, escopo: set[str]) -> tuple[lis
             f"({', '.join(fora_do_escopo)}): estão publicadas mas não têm "
             "GeoPackage em data/. O conjunto publicável encolhe e a guarda "
             "vai recusar por regressão. Se a redução foi deliberada "
-            "(UF removida do dados-base), republique com o escopo novo de "
-            "propósito; se NÃO foi, o dados-base veio incompleto -- não "
-            "rode ingerir-setores.yml, apenas execute este workflow de novo."
+            "(UF que saiu da publicação do BELUGA), republique com o escopo "
+            "novo de propósito; se NÃO foi, o download do BELUGA veio "
+            "incompleto -- apenas execute este workflow de novo."
         )
 
     escrever_indice(atual_dir / INDICE, sorted(atuais | set(preservadas)))
@@ -186,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Mescla o dashboard publicado no run atual.")
     parser.add_argument("--publicado", required=True, type=Path, help="data/ extraído do gh-pages")
     parser.add_argument("--atual", required=True, type=Path, help="docs/dashboard/data deste run")
-    parser.add_argument("--escopo", required=True, type=Path, help="diretório com os risco_<uf>.gpkg")
+    parser.add_argument("--escopo", required=True, type=Path, help="diretório com os beluga_<uf>.gpkg")
     # `default=None` e resolução depois de `parse_args`: com o `float(...)`
     # no `default=`, avaliado ansiosamente, um valor inválido no ambiente
     # derrubava o script com traceback cru mesmo quando `--piso` era passado
@@ -226,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
 
     escopo = ufs_no_escopo(args.escopo)
     # Escopo desconhecido (nenhum GeoPackage) não é medível: quem barra
-    # esse caso é o passo "Baixar setores da branch dados-base", que é
+    # esse caso é o passo "Baixar setores do BELUGA", que é
     # fatal. Recusar aqui de novo só trocaria a mensagem certa por uma
     # confusa.
     if escopo:

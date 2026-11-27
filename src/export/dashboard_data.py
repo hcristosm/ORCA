@@ -19,10 +19,9 @@ from shapely.geometry import Point
 
 from src.config import (
     LIMIAR_ATENCAO_MM_PADRAO,
-    caminho_manifesto_cprm,
-    caminho_setores,
+    caminho_manifesto_beluga,
+    caminho_setores_beluga,
 )
-from src.ingest.cprm import data_setor_mais_recente
 from src.ingest.openmeteo import OpenMeteoFetchError, fetch_precipitacao_batch
 from src.processing.cruzamento import (
     CRS_METRICO,
@@ -49,9 +48,15 @@ JANELA_SERIE_DIAS = 30
 # usa JANELA_SERIE_DIAS.
 DIAS_HISTORICO_CRUZAMENTO = 4
 
+# Contrato com o front-end: estes nomes, nesta ordem. Os `bl_*` e o
+# `orgao_exec` vêm do GeoPackage do BELUGA (docs/esquema-setores.md dele) e são
+# o que deixa o dashboard dizer de onde veio cada setor, com qual licença, e
+# se ele repete área já mapeada pela CPRM (`bl_cp_frac`, ver
+# LIMIAR_SETOR_REPETIDO em src/config.py).
 PROPRIEDADES_SETOR = [
-    "num_setor", "munic", "grau_risco", "distancia_km",
-    "chuva_24h", "chuva_72h", "fonte_estacao", "codigo_estacao", "nome_estacao",
+    "num_setor", "munic", "grau_risco",
+    "chuva_24h", "chuva_72h", "distancia_km", "fonte_estacao", "codigo_estacao",
+    "bl_fonte", "bl_produto", "bl_licenca", "orgao_exec", "bl_sob_cp", "bl_cp_frac",
 ]
 
 
@@ -114,12 +119,11 @@ def _calcular_chuva_openmeteo(
     reaproveitada por todos os setores que compartilham o ponto, o que é o
     mecanismo real de economia de chamadas da grade.
 
-    Sem estação: `codigo_estacao`/`nome_estacao` identificam a fonte, não uma
-    estação real. Sem `pontos` (consulta no próprio centroide do setor),
-    `distancia_km` é 0.0 por construção. Com `pontos` (modo grade), o ponto
-    consultado pode estar a quilômetros do centroide real do setor, então
-    `distancia_km` traz a distância real centroide-do-setor → ponto de grade
-    e `nome_estacao` deixa claro que a leitura veio de uma célula de grade.
+    Sem estação: `codigo_estacao` identifica a fonte, não uma estação real.
+    Sem `pontos` (consulta no próprio centroide do setor), `distancia_km` é
+    0.0 por construção. Com `pontos` (modo grade), o ponto consultado pode
+    estar a quilômetros do centroide real do setor, e `distancia_km` traz a
+    distância real centroide-do-setor → ponto de grade.
     `agora` é parametrizável para tornar testes determinísticos, em produção
     usa o instante atual.
 
@@ -158,10 +162,8 @@ def _calcular_chuva_openmeteo(
     resultado = setores.copy()
     if modo_grade:
         resultado["distancia_km"] = _distancias_km(centroides, pontos)
-        resultado["nome_estacao"] = "Open-Meteo (célula de grade)"
     else:
         resultado["distancia_km"] = 0.0
-        resultado["nome_estacao"] = "Open-Meteo (centro do setor)"
     resultado["codigo_estacao"] = "openmeteo"
     resultado["fonte_estacao"] = "openmeteo"
 
@@ -278,28 +280,82 @@ def _exportar_openmeteo(
     return cruzado, series, previsao, meta
 
 
-def _datas_cprm(setores: gpd.GeoDataFrame, uf: str, diretorio_dados: Path) -> dict:
-    """Datas dos setores de risco: quando a ingestão consultou a CPRM/SGB e o setor mais recente.
+def data_setor_mais_recente(datas: pd.Series) -> str | None:
+    """Maior `data_setor` como AAAA-MM-DD, ou `None` se nenhuma for legível.
 
-    Qualquer ausência (manifesto inexistente/corrompido, ingestão anterior a
-    `ingerido_em`, coluna `data_setor` faltando) vira `None`: a data some do
-    selo, a exportação não quebra.
+    O BELUGA entrega `data_setor` como texto `AAAA-MM-DD`, mas o caminho
+    numérico fica: o ArcGIS da CPRM/SGB entregava a data como milissegundos
+    desde 1970 e, sem `unit="ms"`, o pandas lê o número como nanossegundos e
+    tudo vira 01/01/1970. Custa nada e documenta a armadilha.
     """
-    ingerido_em = None
-    caminho = caminho_manifesto_cprm(uf, diretorio_dados)
-    if caminho.exists():
-        try:
-            manifesto = json.loads(caminho.read_text())
-            if isinstance(manifesto, dict):
-                ingerido_em = manifesto.get("ingerido_em")
-        except (json.JSONDecodeError, OSError):
-            logger.warning("Manifesto da CPRM ilegível em %s; data de ingestão indisponível.", caminho)
+    if pd.api.types.is_numeric_dtype(datas):
+        convertidas = pd.to_datetime(datas, unit="ms", errors="coerce")
+    else:
+        convertidas = pd.to_datetime(datas, errors="coerce")
+    if not convertidas.notna().any():
+        return None
+    return convertidas.max().strftime("%Y-%m-%d")
 
-    setor_mais_recente = None
+
+def _manifesto_beluga(diretorio_dados: Path) -> dict:
+    caminho = caminho_manifesto_beluga(diretorio_dados)
+    if not caminho.exists():
+        logger.warning("Manifesto do BELUGA ausente em %s; selo de frescor sem data.", caminho)
+        return {}
+    try:
+        manifesto = json.loads(caminho.read_text())
+    except (json.JSONDecodeError, OSError):
+        logger.warning("Manifesto do BELUGA ilegível em %s; selo de frescor sem data.", caminho)
+        return {}
+    return manifesto if isinstance(manifesto, dict) else {}
+
+
+def _bloco_setores(setores: gpd.GeoDataFrame, uf: str, diretorio_dados: Path) -> dict:
+    """Bloco `setores` do meta: quando o BELUGA coletou, qual o setor mais
+    recente e quais fontes aparecem nesta UF.
+
+    `coletado_em` vem do `gerado_em` do manifest do BELUGA, que é gravado
+    depois de todos os GeoJSON, então é carimbo confiável da coleta. Não vem do
+    dado, e é por isso que ele tem de vir de algum lugar: o detector de dado
+    velho do front-end só avisa quando a data existe, então data ausente seria
+    coleta parada sem ninguém ver.
+
+    `fontes` lista só as fontes presentes nesta UF, da que tem mais setores
+    para a que tem menos. Qualquer ausência vira `None`/lista vazia: o selo
+    perde detalhe, a exportação não quebra.
+    """
+    manifesto = _manifesto_beluga(diretorio_dados)
+    entrada = manifesto.get("ufs", {}).get(uf.lower()) or {}
+    por_fonte = entrada.get("por_fonte") or {}
+    catalogo = {
+        f["id"]: f for f in manifesto.get("fontes", [])
+        if isinstance(f, dict) and isinstance(f.get("id"), str)
+    }
+
+    fontes = []
+    for id_fonte, setores_da_fonte in sorted(por_fonte.items(), key=lambda kv: (-kv[1], kv[0])):
+        ficha = catalogo.get(id_fonte, {})
+        # No manifest a licença é um objeto {nome, url, observacao}; o contrato
+        # permite texto simples, então os dois casos entram.
+        licenca = ficha.get("licenca")
+        fontes.append({
+            "id": id_fonte,
+            "nome": ficha.get("nome"),
+            "orgao": ficha.get("orgao"),
+            "licenca": licenca.get("nome") if isinstance(licenca, dict) else licenca,
+            "setores": setores_da_fonte,
+        })
+
+    mais_recente = None
     if "data_setor" in setores.columns:
-        setor_mais_recente = data_setor_mais_recente(setores["data_setor"])
+        mais_recente = data_setor_mais_recente(setores["data_setor"])
 
-    return {"ingerido_em": ingerido_em, "setor_mais_recente": setor_mais_recente}
+    return {
+        "coletado_em": manifesto.get("gerado_em"),
+        "mais_recente": mais_recente,
+        "contrato": manifesto.get("contrato"),
+        "fontes": fontes,
+    }
 
 
 def exportar_dashboard(
@@ -312,7 +368,7 @@ def exportar_dashboard(
     """Pré-computa a chuva por setor e grava os arquivos estáticos do dashboard.
 
     Consulta a Open-Meteo no centroide de cada setor; só precisa dos
-    setores já ingeridos da CPRM/SGB.
+    setores já baixados do BELUGA.
 
     `pontos_grade`, se informado, substitui o centroide de cada setor pelo
     ponto de grade compartilhado (ver `src/processing/grade_espacial.py` e
@@ -326,11 +382,11 @@ def exportar_dashboard(
     de `meta_<uf>.json`.
     """
     uf_norm = uf.strip().upper()
-    caminho_setores_path = caminho_setores(uf_norm, diretorio_dados)
+    caminho_setores_path = caminho_setores_beluga(uf_norm, diretorio_dados)
     if not caminho_setores_path.exists():
         raise ExportacaoDashboardError(
             f"Setores de risco não encontrados em {caminho_setores_path}; "
-            f"rode `ingest-cprm --uf {uf_norm}` primeiro."
+            f"rode `baixar-beluga --ufs {uf_norm}` primeiro."
         )
     setores = ler_setores(caminho_setores_path)
     saida_dir.mkdir(parents=True, exist_ok=True)
@@ -341,7 +397,7 @@ def exportar_dashboard(
     meta["gerado_em"] = datetime.now(UTC).isoformat()
     # Blocos por fonte para o selo de atualização do dashboard. `referencia` e
     # `gerado_em` continuam no topo para front-ends antigos ainda em cache.
-    meta["cprm"] = _datas_cprm(setores, uf_norm, diretorio_dados)
+    meta["setores"] = _bloco_setores(setores, uf_norm, diretorio_dados)
     meta["chuva"] = {
         "fonte": "openmeteo", "ate": meta.get("referencia"), "consultado_em": meta["gerado_em"],
     }
