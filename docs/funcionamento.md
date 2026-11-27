@@ -45,7 +45,7 @@ licença).
 | manifest com menos de 27 UFs | Publicação parcial do lado de lá; as UFs que faltam não teriam contra o que ser comparadas |
 | sha256 do arquivo recebido não bate | Download corrompido ou publicação trocada no meio |
 | contagem de feições diferente da declarada | GeoJSON truncado, que é o jeito de um arquivo chegar menor sem erro de rede |
-| UF com menos setores que a publicação anterior do ORCA | Publicar menos do que está no ar é proibido |
+| UF com menos setores DISTINTOS que a publicação anterior do ORCA | Publicar menos do que está no ar é proibido |
 
 Uma UF que falha não ganha GeoPackage e o comando sai com 1, nomeando o motivo
 de cada falha. O run fica vermelho, mas as outras 26 seguem: a exportação pula
@@ -111,6 +111,13 @@ python -m src.cli indexar-setores --dados docs/dashboard/data
 
 `--publicado` aponta para o `data/` do que já está no ar. É de lá que sai o
 piso por UF. Sem ele, não há piso por UF.
+
+O piso conta **setores distintos**, lidos dos `num_setor` do
+`setores_<uf>.geojson` publicado, e não feições. Um setor mapeado em partes
+separadas aparece como várias feições de mesmo código, e contar feições
+inflaria o piso: a SGB publica `RO_PORTOVE_SR_12_CPRM` em 21 feições, e um
+piso por feições recusava RO inteira por causa disso, sem que faltasse um
+único setor.
 
 ### Variáveis de ambiente
 
@@ -252,7 +259,8 @@ UF, dois terços desse crescimento somem e a conta muda. Aí vale reabrir.
 | Publicação ruim no ar | Rodar o workflow de novo: a publicação é idempotente. Não há `git revert` a fazer, porque o `gh-pages` não guarda histórico |
 | O BELUGA publicou errado e o ORCA recusou | Nada. As UFs ficam com o dado anterior. Corrija no BELUGA e rode de novo |
 | O BELUGA saiu do ar | O download falha alto e nada é publicado. O que está no ar continua |
-| Uma UF saiu da publicação do BELUGA de propósito | A guarda vai recusar, porque o conjunto encolhe. Não há botão para isso: rode a guarda com `--anterior` igual ao conjunto novo, ou publique uma vez com a UF ainda no manifest antes de tirá-la de lá |
+| A fonte reduziu uma UF de propósito (remapeamento) | Confira a diferença código a código contra a fonte e dispare o workflow à mão com `aceitar_reducao`. É de uma vez: no dia seguinte o piso já compara com o número novo |
+| Uma UF saiu inteira da publicação do BELUGA | A guarda de publicação vai recusar, porque o conjunto de UFs encolhe. Rode a guarda com `--anterior` igual ao conjunto novo, ou publique uma vez com a UF ainda no manifest antes de tirá-la de lá |
 
 ## Estrutura do repositório
 
