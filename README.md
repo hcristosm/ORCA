@@ -11,6 +11,7 @@
 [![Dashboard ao vivo](https://img.shields.io/badge/dashboard-ao%20vivo%20no%20GitHub%20Pages-c0472f)](https://hcristosm.github.io/ORCA/)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Licença](https://img.shields.io/badge/licença-AGPL--3.0-blue)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24606726.svg)](https://doi.org/10.5281/zenodo.24606726)
 
 *[Read in English](README.en.md)*
 
@@ -263,7 +264,7 @@ Issues, PRs e sugestões são bem-vindos. Veja o
 
 Se o ORCA entrar num trabalho, relatório ou artigo, use o botão **Cite this
 repository**, no topo da página do GitHub. Ele lê o
-[`CITATION.cff`](CITATION.cff) e entrega a referência em APA e BibTeX. Cite
+[`CITATION.cff`](CITATION.cff) e entrega a referência em APA e BibTeX. O DOI permanente, que sempre aponta para a versão mais recente, é [10.5281/zenodo.24606726](https://doi.org/10.5281/zenodo.24606726). Cite
 também o [BELUGA](https://github.com/hcristosm/BELUGA) e a fonte primária dos
 setores: o levantamento de campo é da CPRM/SGB ou do órgão que mapeou.
 
