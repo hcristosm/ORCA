@@ -17,6 +17,7 @@ authors:
     alias: hcristosm
 version: 3.0.1
 date-released: "2026-11-27"
+doi: 10.5281/zenodo.24606726
 license: AGPL-3.0-or-later
 repository-code: "https://github.com/hcristosm/ORCA"
 url: "https://hcristosm.github.io/ORCA/"

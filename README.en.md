@@ -11,6 +11,7 @@
 [![Live dashboard](https://img.shields.io/badge/dashboard-live%20on%20GitHub%20Pages-c0472f)](https://hcristosm.github.io/ORCA/)
 [![CI](https://github.com/hcristosm/ORCA/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24606726.svg)](https://doi.org/10.5281/zenodo.24606726)
 
 *[Leia em português](README.md)*
 
@@ -267,7 +268,7 @@ Issues, PRs and suggestions are welcome. See the
 
 If ORCA ends up in a paper, report or thesis, use the **Cite this repository**
 button at the top of the GitHub page. It reads [`CITATION.cff`](CITATION.cff)
-and gives the reference in APA and BibTeX. Please also cite
+and gives the reference in APA and BibTeX. The permanent DOI, which always points to the latest version, is [10.5281/zenodo.24606726](https://doi.org/10.5281/zenodo.24606726). Please also cite
 [BELUGA](https://github.com/hcristosm/BELUGA) and the primary source of the
 sectors: the field survey belongs to CPRM/SGB or to the agency that mapped them.
 
