@@ -56,7 +56,7 @@ jobs:
         # vermelho -- e o run seguinte reconstruiria frio, contra a cota
         # diária. Status de job não decide nada aqui, pela mesma regra da casa
         # que manda não julgar um run pelo status.
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: data/cache
           key: openmeteo-${{ github.run_id }}
@@ -190,7 +190,7 @@ jobs:
         # Depois da exportação e fora do passo post: a chuva buscada hoje vale
         # para o run de amanhã mesmo que a publicação de hoje seja recusada.
         if: "!cancelled()"
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: data/cache
           key: openmeteo-${{ github.run_id }}
