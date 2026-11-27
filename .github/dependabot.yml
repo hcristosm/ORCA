@@ -1,11 +1,19 @@
 version: 2
 updates:
+  # Um PR por ecossistema, por mês. Semanal e sem agrupamento, o dependabot
+  # abria um PR por dependência e a fila virava ruído.
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      pip:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns: ["*"]

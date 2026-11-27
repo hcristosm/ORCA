@@ -1,8 +1,10 @@
 name: Atualizar dados do ORCA
 
 on:
-  # A ingestão CPRM/SGB saiu do caminho diário (agora lê a branch dados-base),
-  # então uma queda da SGB não afeta mais esta execução agendada.
+  # Os setores vêm prontos da publicação v1 do BELUGA, que coleta e valida as
+  # fontes (CPRM/SGB inclusive) num ritmo próprio: uma queda da SGB não afeta
+  # esta execução agendada, e o pior caso aqui é o BELUGA não ter publicado
+  # nada de novo.
   schedule:
     # 09:00 UTC (06:00 em São Paulo) todo dia; os setores de risco mudam em
     # escala de meses e a chuva da Open-Meteo é quase em tempo real, então
@@ -36,63 +38,50 @@ jobs:
 
       - uses: ./.github/actions/preparar-python
 
-      - name: Baixar setores da branch dados-base
-        # Diferente do cache da Open-Meteo, que é só um empurrão inicial, os
-        # setores são obrigatórios: sem eles a exportação não tem o que
-        # cruzar e o dashboard sai vazio. Por isso os dois casos são fatais.
-        uses: ./.github/actions/baixar-branch
+      - name: Cache da Open-Meteo
+        # Antes o cache viajava dentro do gh-pages (era por isso que o deploy
+        # precisava de force_orphan). Aqui ele é estado de CI, não conteúdo do
+        # site: a chave tem o id do run, então nunca dá hit exato e o cache é
+        # salvo no fim de todo run bem-sucedido; `restore-keys` restaura o mais
+        # recente do prefixo. Cache ausente degrada para uma reconstrução
+        # fria, que é segura.
+        uses: actions/cache@v4
         with:
-          branch: dados-base
-          destino: data
-          ausente-e-fatal: "true"
-          falha-e-fatal: "true"
-          mensagem-ausente: "Rode o workflow ingerir-setores.yml antes."
-
-      - name: Conferir setores baixados
-        # `find | wc -l` e não `ls data/*.gpkg | wc -l`: sob `pipefail` o glob
-        # sem correspondência faz o `ls` sair 2, o pipeline herda 2 e o
-        # `errexit` mataria o passo ANTES do `if` -- deixando o operador sem
-        # a anotação ::error:: que explica o quê.
-        shell: bash -eo pipefail {0}
-        run: |
-          TOTAL=$(find data -maxdepth 1 -name '*.gpkg' | wc -l)
-          echo "Setores carregados: $TOTAL UF(s)."
-          if [ "$TOTAL" -eq 0 ]; then
-            echo "::error::Nenhum GeoPackage em dados-base."
-            exit 1
-          fi
+          path: data/cache
+          key: openmeteo-${{ github.run_id }}
+          restore-keys: |
+            openmeteo-
 
       - name: Buscar branch gh-pages
         id: ghpages
-        # Nada aqui é fatal: o cache publicado é só um empurrão inicial e, se
-        # não vier, a atualização nacional reconstrói do zero. Mas `motivo`
-        # importa para o passo seguinte -- "ausente" é legitimamente zero
-        # (1a publicação), "falha" é indeterminado.
+        # Nada aqui é fatal, porque quem recusa é a guarda: sem o gh-pages a
+        # contagem publicada fica indeterminada e a publicação é barrada mais
+        # adiante. Mas `motivo` importa para o passo seguinte -- "ausente" é
+        # legitimamente zero (1a publicação), "falha" é indeterminado.
         uses: ./.github/actions/baixar-branch
         with:
           branch: gh-pages
           ausente-e-fatal: "false"
           falha-e-fatal: "false"
 
-      - name: Ler cache e contagem já publicados
+      - name: Ler contagem publicada e extrair o publicado
         id: publicado
-        # O cache é opcional: ausente ou corrompido vira cache vazio
-        # (src/storage_cache_openmeteo.py trata os dois casos), e a execução
-        # degrada para uma reconstrução fria, que é segura.
+        # A contagem publicada é o insumo da guarda anti-regressão. Se não
+        # conseguirmos lê-la, `publicado` sai vazio e a guarda recusa (falha
+        # fechada). SÓ "branch gh-pages não existe" vira legitimamente 0 -- é a
+        # 1a publicação e não há nada a destruir. Branch presente sem
+        # `data/ufs_disponiveis.json` NÃO é 0: é estado indeterminado, e
+        # tratá-lo como 0 deixaria passar um conjunto de 1 UF por cima do que
+        # quer que esteja publicado.
         #
-        # A contagem publicada NÃO é opcional: é o insumo da guarda
-        # anti-regressão. Se não conseguirmos lê-la, `publicado` sai vazio e
-        # a guarda recusa (falha fechada). SÓ "branch gh-pages não existe"
-        # vira legitimamente 0 -- é a 1a publicação e não há nada a destruir.
-        # Branch presente sem `data/ufs_disponiveis.json` NÃO é 0: é estado
-        # indeterminado, e tratá-lo como 0 deixaria passar um conjunto de 1
-        # UF por cima do que quer que esteja publicado.
+        # A árvore publicada é extraída UMA vez aqui, em `publicado/data`, e
+        # serve a dois passos: o piso por UF do download do BELUGA e a mescla
+        # que preserva as UFs não regeneradas.
         shell: bash -eo pipefail {0}
         env:
           DISPONIVEL: ${{ steps.ghpages.outputs.disponivel }}
           MOTIVO: ${{ steps.ghpages.outputs.motivo }}
         run: |
-          mkdir -p data/cache
           publicado=""
 
           if [ "$DISPONIVEL" != "true" ]; then
@@ -106,23 +95,55 @@ jobs:
             exit 0
           fi
 
-
-          if git show origin/gh-pages:cache/openmeteo.sqlite > data/cache/openmeteo.sqlite 2>/dev/null; then
-            echo "Cache publicado baixado com sucesso."
-          else
-            # O redirecionamento cria o arquivo mesmo quando `git show` falha;
-            # remove pra não publicar um sqlite de 0 byte.
-            rm -f data/cache/openmeteo.sqlite
-            echo "gh-pages existe mas ainda não tem cache publicado; seguindo com cache vazio."
-          fi
-
           if git show origin/gh-pages:data/ufs_disponiveis.json > ufs_publicadas.json 2>/dev/null; then
             echo "Índice publicado baixado."
           else
             rm -f ufs_publicadas.json
             echo "gh-pages existe mas não tem data/ufs_disponiveis.json -- estado publicado indeterminado; a guarda vai recusar em vez de autorizar sobrescrever no escuro."
           fi
+
+          mkdir -p publicado
+          # `git archive` falha se o caminho não existir na árvore (gh-pages
+          # sem data/); e sem o pipefail acima o tar sairia 0 com entrada
+          # vazia, escondendo isso. stderr silenciado porque esse caso é
+          # normal e esperado: três linhas de `fatal:`/`tar:` num passo que
+          # fecha verde ensinam o operador a ignorar log.
+          if git archive origin/gh-pages data 2>/dev/null | tar -x -C publicado 2>/dev/null; then
+            echo "Publicado extraído em publicado/data."
+            find publicado/data -maxdepth 1 -name 'meta_*.json' | wc -l | xargs echo "Metas publicados:"
+          else
+            echo "gh-pages existe mas não tem data/ publicado; sem piso por UF e sem nada a preservar."
+          fi
           echo "publicado=" >> "$GITHUB_OUTPUT"
+
+      - name: Baixar setores do BELUGA
+        # Antes vinha da branch dados-base, ingerida da CPRM/SGB por um
+        # workflow mensal próprio. Agora vem da publicação v1 do BELUGA, com
+        # conferência de contrato, de sha256 e da contagem de feições de cada
+        # UF, mais o piso contra os setores já publicados aqui.
+        #
+        # Continua fatal, pela mesma razão de antes: sem setores a exportação
+        # não tem o que cruzar e o dashboard sairia vazio. UF que falha fica
+        # com o dado anterior e o comando sai com 1 dizendo por quê.
+        run: >
+          python -m src.cli baixar-beluga
+          ${{ github.event.inputs.ufs && format('--ufs {0}', github.event.inputs.ufs) || '' }}
+          --diretorio data
+          --publicado publicado/data
+
+      - name: Conferir setores baixados
+        # `find | wc -l` e não `ls data/*.gpkg | wc -l`: sob `pipefail` o glob
+        # sem correspondência faz o `ls` sair 2, o pipeline herda 2 e o
+        # `errexit` mataria o passo ANTES do `if` -- deixando o operador sem
+        # a anotação ::error:: que explica o quê.
+        shell: bash -eo pipefail {0}
+        run: |
+          TOTAL=$(find data -maxdepth 1 -name 'beluga_*.gpkg' | wc -l)
+          echo "Setores carregados: $TOTAL UF(s)."
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "::error::Nenhum GeoPackage do BELUGA em data/."
+            exit 1
+          fi
 
       - name: Rodar atualização nacional
         run: >
@@ -130,9 +151,9 @@ jobs:
           ${{ github.event.inputs.ufs && format('--ufs {0}', github.event.inputs.ufs) || '' }}
 
       - name: Preservar UFs não regeneradas (mescla com o gh-pages)
-        # Spec §4.5. Com force_orphan, o gh-pages vira EXATAMENTE
-        # docs/dashboard: uma UF que a Open-Meteo não entregou hoje sumiria
-        # do ar. E como a cobertura diária oscila entre 70% e 100% (18 runs,
+        # Spec §4.5. O deploy sobrescreve o destino com o conteúdo de
+        # docs/dashboard, então uma UF que a Open-Meteo não entregou hoje
+        # sumiria do ar. E como a cobertura diária oscila entre 70% e 100% (18 runs,
         # 2026-08-10 a 08-23), sumir seria o caso comum -- a guarda
         # anti-regressão abaixo viraria uma catraca travada no melhor dia já
         # publicado, recusando cerca de um terço das execuções e congelando o
@@ -147,30 +168,20 @@ jobs:
         # dado velho, e a guarda o aprovaria como se fosse novo. Sem índice,
         # o conjunto atual continua vazio e a guarda recusa, que é o certo.
         #
-        # Reaproveita o `origin/gh-pages` já buscado acima: sem ele (1a
-        # publicação, ou fetch que falhou) não há nada a preservar.
+        # Reaproveita a árvore publicada extraída em `publicado/data`: sem ela
+        # (1a publicação, ou fetch que falhou) não há nada a preservar.
         shell: bash -eo pipefail {0}
         if: "!cancelled()"
         env:
           # Vazio no cron (todas as UFs); no dispatch, o piso mede contra as pedidas.
           UFS_PEDIDAS: ${{ github.event.inputs.ufs }}
         run: |
-          if ! git rev-parse --verify --quiet refs/remotes/origin/gh-pages > /dev/null; then
-            echo "gh-pages não disponível localmente (1a publicação ou fetch falhou); nada a preservar."
-            exit 0
-          fi
-          publicado_dir=$(mktemp -d)
-          # `git archive` falha se o caminho não existir na árvore (gh-pages
-          # sem data/); e sem o pipefail acima o tar sairia 0 com entrada
-          # vazia, escondendo isso. stderr silenciado porque esse caso é
-          # normal e esperado: três linhas de `fatal:`/`tar:` num passo que
-          # fecha verde ensinam o operador a ignorar log.
-          if ! git archive origin/gh-pages data 2>/dev/null | tar -x -C "$publicado_dir" 2>/dev/null; then
-            echo "gh-pages não tem data/ publicado; nada a preservar."
+          if [ ! -d publicado/data ]; then
+            echo "Sem publicado/data (1a publicação, fetch falhou ou gh-pages sem data/); nada a preservar."
             exit 0
           fi
           python3 scripts/mesclar_publicado.py \
-            --publicado "$publicado_dir/data" \
+            --publicado publicado/data \
             --atual docs/dashboard/data \
             --escopo data \
             --pedidas "$UFS_PEDIDAS"
@@ -188,10 +199,9 @@ jobs:
       - name: Conferir antes de publicar
         id: conferir
         # Invariante da spec: nenhuma publicação destrói dado bom. O deploy
-        # usa force_orphan, então o gh-pages passa a ser EXATAMENTE o
-        # conteúdo de docs/dashboard -- publicar com data/ vazio apaga as 27
-        # UFs e o cache publicado de quebra. Foi assim que o run #29 destruiu
-        # 25 UFs de forma irrecuperável.
+        # apaga do destino o que não está em docs/dashboard, então publicar
+        # com data/ vazio apaga as 27 UFs. Foi assim que o run #29 destruiu 25
+        # UFs de forma irrecuperável.
         #
         # `!cancelled()` em vez de `always()` para que a conferência rode
         # mesmo com passo anterior falho (publicação parcial vale a pena),
@@ -199,8 +209,8 @@ jobs:
         #
         # A lógica e as duas propriedades da recusa (grava `publicar=false`
         # ANTES de sair com 1; toda recusa sai com 1) vivem em
-        # scripts/conferir_publicacao.py, compartilhado com
-        # ingerir-setores.yml e coberto por tests/test_conferir_publicacao.py.
+        # scripts/conferir_publicacao.py, coberto por
+        # tests/test_conferir_publicacao.py.
         if: "!cancelled()"
         shell: bash -eo pipefail {0}
         env:
@@ -219,47 +229,36 @@ jobs:
             "${anterior[@]}" \
             --rotulo "UF(s)"
 
-      - name: Preparar cache para publicação
-        # `peaceiris/actions-gh-pages` com force_orphan publica só o que
-        # estiver dentro de publish_dir no momento do deploy; o cache precisa
-        # estar copiado pra lá pra sobreviver ao próximo run. Publica o que
-        # existir em data/cache/openmeteo.sqlite neste ponto, sem se importar
-        # se veio do download do início do job ou foi reconstruído do zero
-        # (ambos produzem um cache válido; não publicar o reconstruído só
-        # pioraria as coisas, deixando o gh-pages sem cache nenhum). Só não
-        # publica acima de 80MB (o GitHub rejeita push acima de 100MB; melhor
-        # publicar sem cache do que quebrar o deploy do dashboard inteiro).
+      - name: Marcar a versão publicada
+        # Grava o marcador `versao.txt` com o id deste run: é o que o teste de
+        # fumaça pós-deploy procura na URL pública para saber que o que está no
+        # ar é ESTE deploy, e não o de ontem (que também tem 27 UFs).
         #
-        # Grava também o marcador `versao.txt` com o id deste run: é o que o
-        # teste de fumaça pós-deploy procura na URL pública para saber que o
-        # que está no ar é ESTE deploy, e não o de ontem (que também tem 27 UFs).
+        # O cache da Open-Meteo não é mais copiado para cá: ele vive em
+        # actions/cache. O `cache/openmeteo.sqlite` que ficou publicado na
+        # última versão do gh-pages sai do ar no próximo deploy, porque o
+        # deploy não usa `keep_files` e apaga do destino o que não está em
+        # publish_dir.
         if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
-        run: |
-          echo "$GITHUB_RUN_ID" > docs/dashboard/versao.txt
-          mkdir -p docs/dashboard/cache
-          if [ -f data/cache/openmeteo.sqlite ]; then
-            cp data/cache/openmeteo.sqlite docs/dashboard/cache/openmeteo.sqlite
-            TAMANHO=$(stat -c%s docs/dashboard/cache/openmeteo.sqlite)
-            LIMITE=$((80 * 1024 * 1024))
-            if [ "$TAMANHO" -gt "$LIMITE" ]; then
-              echo "Cache maior que 80MB ($TAMANHO bytes); não publicando pra evitar falha no push do gh-pages." >&2
-              rm -f docs/dashboard/cache/openmeteo.sqlite
-            fi
-          fi
+        run: echo "$GITHUB_RUN_ID" > docs/dashboard/versao.txt
 
       - name: Publicar dashboard no GitHub Pages
-        # `always()` aqui era o defeito do run #29: com force_orphan, publicar
-        # depois de uma falha reescreve o gh-pages com o que sobrou (às vezes
-        # nada). `!cancelled()` mantém a publicação parcial útil, e a guarda
-        # de "Conferir antes de publicar" barra o conjunto vazio ou menor que
-        # o que já está no ar.
+        # `always()` aqui era o defeito do run #29: publicar depois de uma
+        # falha reescreve o gh-pages com o que sobrou (às vezes nada).
+        # `!cancelled()` mantém a publicação parcial útil, e a guarda de
+        # "Conferir antes de publicar" barra o conjunto vazio ou menor que o
+        # que já está no ar.
+        #
+        # Sem `force_orphan`: ele existia para o cache da Open-Meteo sobreviver
+        # dentro do publish_dir, e o cache saiu daqui. Sem ele o gh-pages
+        # guarda histórico, e com histórico dá para reverter uma publicação
+        # ruim.
         if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: docs/dashboard
           publish_branch: gh-pages
-          force_orphan: true
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
           commit_message: "chore(dashboard): publicar dados atualizados"
@@ -274,7 +273,7 @@ jobs:
         # `?t=` fura o cache do CDN (max-age=600): sem ele, o teste leria a
         # versão de ontem e passaria sem provar nada.
         #
-        # Falhar aqui não desfaz nada (force_orphan não tem histórico), mas deixa
+        # Falhar aqui não desfaz nada por si, mas deixa
         # o run vermelho: "publicou e o site não mostra" não pode fechar verde.
         if: "!cancelled() && steps.conferir.outputs.publicar == 'true'"
         shell: bash -eo pipefail {0}
