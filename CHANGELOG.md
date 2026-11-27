@@ -10,7 +10,7 @@ O projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 Versões até a 1.0.0 usam o formato anterior, com seções
 `Added`/`Changed`/`Fixed` do [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
-## [Unreleased]
+## [3.0.0] - 2026-11-27
 
 ### FEATURES
 - feat(ingest): os setores de risco passam a vir da publicação v1 do [BELUGA](https://github.com/hcristosm/BELUGA), e o ORCA deixa de falar com a CPRM/SGB. São 21.429 setores em 27 UFs, de sete fontes, contra 18.908 de uma só. Entram Belo Horizonte (665 áreas sem grau, estudo de 1996), Juiz de Fora (994), Recife (364 pontos), Contagem (265 pontos), Suzano (178) e Congonhas (73): cidades que a CPRM não cobre ou cobre com dado mais antigo. `baixar-beluga` recusa, sem tocar no dado que já está no disco, contrato diferente de `v1`, manifest com menos de 27 UFs, sha256 que não bate, contagem de feições diferente da declarada e UF que viria menor que a publicação anterior do ORCA. UF que falha fica com o dado anterior, o motivo de cada falha vai para o log e o run fica vermelho sem congelar as outras 26
@@ -41,6 +41,7 @@ Versões até a 1.0.0 usam o formato anterior, com seções
 - docs: os READMEs ficam com propósito, uso do dashboard, fontes e créditos, limitações e licença; o funcionamento técnico (pipeline, comandos, workflows, guardas e como reverter) vai inteiro para `docs/funcionamento.md`
 - docs(readme): o topo dos dois READMEs troca o ícone do app por um header com a orca, o nome e curvas de nível (`docs/logo/orca-header.webp`). O ícone e o logo do app não mudam
 - chore(deps): incorpora as atualizações de ruff e typer e agrupa o dependabot num PR por ecossistema, por mês
+- chore(deps): `actions/cache` sobe de 4 para 6, o que também tira o aviso de descontinuação do Node 20 no run diário, e o grupo do pip incorpora typer, ruff e playwright
 
 ## [2.6.0] - 2026-11-21
 
