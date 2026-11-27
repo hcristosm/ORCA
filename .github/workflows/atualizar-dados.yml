@@ -16,6 +16,11 @@ on:
         description: "UFs a atualizar, separadas por vírgula (vazio = todas as 27)"
         required: false
         default: ""
+      aceitar_reducao:
+        description: "A fonte reduziu de propósito: aceitar UF com menos setores (confira UMA a UMA antes)"
+        type: boolean
+        required: false
+        default: false
 
 # Impede duas execuções (agendada + manual) rodando ao mesmo tempo: além de
 # disputar cota de rate limit da Open-Meteo (observado em 22/08/2026), duas
@@ -139,11 +144,26 @@ jobs:
         # `!cancelled()`: um sha256 que não bate em RR não pode deixar SP sem
         # a chuva de hoje. Quem barra a publicação vazia continua sendo a
         # guarda de "Conferir antes de publicar".
+        #
+        # `aceitar_reducao` tira SÓ este piso, SÓ num disparo manual, e fica
+        # no log do run para sempre. Existe porque "a fonte encolheu de
+        # propósito" é um estado real e sem saída: quando a SGB remapeia um
+        # município e publica menos setores que antes, o piso recusa aquela UF
+        # todo dia, para sempre, e o ORCA fica com dado que a própria fonte já
+        # apagou. Foi o caso de SC em 2026-11 (Nova Trento, 31 setores sem
+        # data viraram 23 datados).
+        #
+        # Quem liga isto tem de ter conferido a diferença UF a UF, código a
+        # código, contra a fonte. É botão de uma vez, não de todo dia, e o
+        # padrão é desligado. As outras conferências do download (contrato, as
+        # 27 UFs, sha256, contagem de feições declarada) continuam valendo, e
+        # a guarda de publicação e o piso de cobertura da mescla também: esta
+        # chave não os alcança.
         run: >
           python -m src.cli baixar-beluga
           ${{ github.event.inputs.ufs && format('--ufs {0}', github.event.inputs.ufs) || '' }}
           --diretorio data
-          --publicado publicado/data
+          ${{ github.event.inputs.aceitar_reducao == 'true' && ' ' || '--publicado publicado/data' }}
 
       - name: Conferir setores baixados
         # `find | wc -l` e não `ls data/*.gpkg | wc -l`: sob `pipefail` o glob
