@@ -44,6 +44,17 @@ PREFIXOS = (
 
 INDICE = "ufs_disponiveis.json"
 
+# Índice nacional dos setores, lido pela tela "Perto de mim" do celular. É
+# preservado como os arquivos por UF: ele não é coberto pela guarda, que conta
+# UFs, e o deploy apaga do gh-pages o que não está em docs/dashboard. Sem isto,
+# uma falha do passo `indexar-setores` (que é `continue-on-error` de propósito)
+# tiraria o índice do ar para todo mundo, com o run fechando VERDE.
+NACIONAIS = ("setores_pontos.json",)
+
+# Manifest do BELUGA deste run, de onde sai o escopo. Acompanha
+# `caminho_manifesto_beluga` em src/config.py.
+MANIFESTO_BELUGA = "beluga_manifest.json"
+
 # Fração mínima do escopo que este run precisa ter exportado SOZINHO para
 # que a mescla seja permitida (ruling R-12).
 #
@@ -88,13 +99,35 @@ def escrever_indice(caminho: Path, ufs: list[str]) -> None:
 
 
 def ufs_no_escopo(escopo_dir: Path) -> set[str]:
-    """UFs que esta execução tinha o direito de exportar (beluga_<uf>.gpkg).
+    """UFs que esta execução tinha o direito de exportar.
 
-    O prefixo acompanha `caminho_setores_beluga` em src/config.py. Se ele
-    divergir, o escopo vem vazio, e escopo vazio DESLIGA o piso de cobertura
-    abaixo -- que é o único detector de run degenerado que sobra depois que a
-    mescla torna `atual >= publicado` verdadeiro por construção.
+    Sai do `ufs` do manifest do BELUGA, que é a lista do que a fonte publica
+    hoje, e NÃO dos GeoPackages baixados. A diferença é o que separa "esta UF
+    saiu da publicação" de "esta UF falhou hoje": pelos GeoPackages, uma UF com
+    sha256 errado ficaria fora do escopo, não seria preservada do gh-pages, e a
+    guarda recusaria a publicação das 27 por regressão. Uma falha de uma UF
+    pararia a atualização de todas as outras, todo dia, enquanto durasse.
+    Pelo manifest, ela continua no escopo, é preservada com o dado da véspera e
+    envelhece em vez de sumir, que é o princípio §3.2.
+
+    Sem manifest legível (o download abortou antes de gravá-lo), cai para os
+    GeoPackages. Nesse caso não há gpkg nenhum, o escopo vem vazio, e escopo
+    vazio DESLIGA o piso de cobertura abaixo -- que é o único detector de run
+    degenerado que sobra depois que a mescla torna `atual >= publicado`
+    verdadeiro por construção. Quem barra esse caso é o passo de download, que
+    é fatal.
+
+    Os dois nomes de arquivo acompanham `caminho_manifesto_beluga` e
+    `caminho_setores_beluga` em src/config.py, e um teste amarra os três.
     """
+    manifesto = escopo_dir / MANIFESTO_BELUGA
+    try:
+        ufs = json.loads(manifesto.read_text())["ufs"]
+        if isinstance(ufs, dict) and ufs:
+            return {str(uf).lower() for uf in ufs}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    print(f"Sem {manifesto} legível; escopo medido pelos GeoPackages baixados.", file=sys.stderr)
     return {p.stem.removeprefix("beluga_").lower() for p in escopo_dir.glob("beluga_*.gpkg")}
 
 
@@ -137,12 +170,18 @@ def mesclar(publicado_dir: Path, atual_dir: Path, escopo: set[str]) -> tuple[lis
         print(
             f"::warning::{len(fora_do_escopo)} UF(s) saíram do escopo "
             f"({', '.join(fora_do_escopo)}): estão publicadas mas não têm "
-            "GeoPackage em data/. O conjunto publicável encolhe e a guarda "
-            "vai recusar por regressão. Se a redução foi deliberada "
-            "(UF que saiu da publicação do BELUGA), republique com o escopo "
-            "novo de propósito; se NÃO foi, o download do BELUGA veio "
-            "incompleto -- apenas execute este workflow de novo."
+            "saíram do manifest do BELUGA. O conjunto publicável encolhe e a "
+            "guarda vai recusar por regressão. Se a redução foi deliberada, a "
+            "republicação com o escopo novo é manual: rode a guarda com "
+            "--anterior igual ao conjunto novo, ou publique uma vez com a UF "
+            "ainda no manifest do BELUGA antes de tirá-la de lá."
         )
+
+    for nome in NACIONAIS:
+        origem = publicado_dir / nome
+        if origem.is_file() and not (atual_dir / nome).is_file():
+            shutil.copy2(origem, atual_dir / nome)
+            print(f"{nome} preservado do gh-pages; este run não o gerou.")
 
     escrever_indice(atual_dir / INDICE, sorted(atuais | set(preservadas)))
     return preservadas, fora_do_escopo
@@ -192,7 +231,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Mescla o dashboard publicado no run atual.")
     parser.add_argument("--publicado", required=True, type=Path, help="data/ extraído do gh-pages")
     parser.add_argument("--atual", required=True, type=Path, help="docs/dashboard/data deste run")
-    parser.add_argument("--escopo", required=True, type=Path, help="diretório com os beluga_<uf>.gpkg")
+    parser.add_argument(
+        "--escopo", required=True, type=Path,
+        help="diretório do download do BELUGA (manifest e beluga_<uf>.gpkg)",
+    )
     # `default=None` e resolução depois de `parse_args`: com o `float(...)`
     # no `default=`, avaliado ansiosamente, um valor inválido no ambiente
     # derrubava o script com traceback cru mesmo quando `--piso` era passado

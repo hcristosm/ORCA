@@ -295,15 +295,67 @@ def test_numerador_do_piso_ignora_uf_fora_do_escopo(tmp_path):
     assert mp.main(argv) == 1
 
 
-def test_escopo_usa_o_mesmo_nome_de_arquivo_que_o_download(tmp_path):
-    # Se o prefixo divergir de `caminho_setores_beluga`, o escopo vem vazio, o
-    # piso de cobertura desliga em silêncio e o único detector de run
+def test_escopo_usa_os_mesmos_nomes_de_arquivo_que_o_download(tmp_path):
+    # Se qualquer um dos dois nomes divergir de src/config.py, o escopo vem
+    # vazio, o piso de cobertura desliga em silêncio e o único detector de run
     # degenerado que sobra deixa de existir.
-    from src.config import caminho_setores_beluga
+    from src.config import caminho_manifesto_beluga, caminho_setores_beluga
 
     caminho_setores_beluga("SP", tmp_path).write_bytes(b"")
+    assert mp.ufs_no_escopo(tmp_path) == {"sp"}, "nome do GeoPackage divergiu"
 
-    assert mp.ufs_no_escopo(tmp_path) == {"sp"}
+    caminho_manifesto_beluga(tmp_path).write_text(json.dumps({"ufs": {"sp": {}, "rj": {}}}))
+    assert mp.ufs_no_escopo(tmp_path) == {"sp", "rj"}, "nome do manifest divergiu"
+
+
+def test_escopo_vem_do_manifest_e_nao_do_que_foi_baixado(tmp_path):
+    # O caso que para a atualização de todo mundo: RJ falha no sha256, não
+    # ganha GeoPackage, e pelo escopo antigo (os gpkg baixados) sairia do
+    # escopo, não seria preservada, e a guarda recusaria a publicação das duas
+    # por regressão. Falha de uma UF não pode parar as outras.
+    escopo = tmp_path / "escopo"
+    escopo.mkdir()
+    (escopo / "beluga_sp.gpkg").write_bytes(b"")
+    (escopo / mp.MANIFESTO_BELUGA).write_text(json.dumps({"ufs": {"sp": {}, "rj": {}}}))
+
+    assert mp.ufs_no_escopo(escopo) == {"sp", "rj"}
+
+    pub, atual = _montar(tmp_path, ["sp", "rj"], ["sp"])
+    preservadas, fora = mp.mesclar(pub, atual, mp.ufs_no_escopo(escopo))
+    assert preservadas == ["rj"] and fora == []
+    assert json.loads((atual / mp.INDICE).read_text()) == ["rj", "sp"]
+
+
+def test_manifest_ilegivel_cai_para_os_geopackages(tmp_path):
+    escopo = tmp_path / "escopo"
+    escopo.mkdir()
+    (escopo / "beluga_sp.gpkg").write_bytes(b"")
+    (escopo / mp.MANIFESTO_BELUGA).write_text("{isto não é json")
+
+    assert mp.ufs_no_escopo(escopo) == {"sp"}
+
+
+def test_indice_nacional_e_preservado_quando_o_run_nao_o_gerou(tmp_path):
+    # `indexar-setores` é continue-on-error, a guarda conta UFs e não enxerga
+    # este arquivo, e o deploy apaga do gh-pages o que não está em
+    # docs/dashboard. Sem preservar, uma falha do índice tiraria a tela "Perto
+    # de mim" do ar para todo mundo com o run fechando verde.
+    pub, atual = _montar(tmp_path, ["sp"], ["sp"])
+    (pub / "setores_pontos.json").write_text(json.dumps({"versao": 2, "setores": []}))
+
+    mp.mesclar(pub, atual, {"sp"})
+
+    assert json.loads((atual / "setores_pontos.json").read_text())["versao"] == 2
+
+
+def test_indice_nacional_do_run_nao_e_sobrescrito_pelo_publicado(tmp_path):
+    pub, atual = _montar(tmp_path, ["sp"], ["sp"])
+    (pub / "setores_pontos.json").write_text(json.dumps({"marca": "velho"}))
+    (atual / "setores_pontos.json").write_text(json.dumps({"marca": "novo"}))
+
+    mp.mesclar(pub, atual, {"sp"})
+
+    assert json.loads((atual / "setores_pontos.json").read_text())["marca"] == "novo"
 
 
 def test_aviso_de_escopo_reduzido_orienta_o_operador(tmp_path, capsys):
@@ -312,7 +364,7 @@ def test_aviso_de_escopo_reduzido_orienta_o_operador(tmp_path, capsys):
     saida = capsys.readouterr().out
     assert "::warning::" in saida
     assert "rj" in saida
-    assert "download do BELUGA" in saida
+    assert "manifest do BELUGA" in saida
     assert "regressão" in saida
 
 
