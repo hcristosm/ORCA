@@ -10,7 +10,7 @@ O projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 Versões até a 1.0.0 usam o formato anterior, com seções
 `Added`/`Changed`/`Fixed` do [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
-## [Unreleased]
+## [3.0.1] - 2026-11-27
 
 ### CHORE
 - docs(readme): seção "Para quem é", com o uso por defesa civil, pesquisa e quem desenvolve, e seção "Como citar", nas versões em português e em inglês
